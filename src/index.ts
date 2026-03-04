@@ -22,6 +22,7 @@ import { InitCommand } from './cli/commands/init.js';
 import { StartCommand } from './cli/commands/start.js';
 import { ConfigCommand } from './cli/commands/config.js';
 import { ProjectCommand } from './cli/commands/project.js';
+import { AuthCommand } from './cli/commands/auth.js';
 import type { CliCommandHandler, CliResult } from './cli/types.js';
 import { ConsoleLogger } from './core/logger.js';
 
@@ -199,6 +200,34 @@ async function main(): Promise<void> {
       return { success: false, message: result.error.message, exitCode: 1 };
     },
     help: () => 'adev project <sub> - Manage projects (add/remove/list/switch/update)',
+  } satisfies CliCommandHandler);
+
+  const authCmd = new AuthCommand(logger);
+  const authHandler: CliCommandHandler = {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const result = await authCmd.execute([], parsed);
+      if (result.ok) {
+        return { success: true, exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => authCmd.help(),
+  };
+  app.registerCommand('auth', authHandler);
+  // WHY: 'setting'은 'config'의 별칭 — 직관적인 이름 제공
+  app.registerCommand('setting', {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const sub = parsed['sub'] as string | undefined;
+      const args = sub ? [sub] : [];
+      const result = await configCmd.execute(args, options);
+      if (result.ok) {
+        return { success: true, message: 'Config operation completed.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => 'adev setting <sub> - Manage configuration (alias: config)',
   } satisfies CliCommandHandler);
 
   // 4. CLI 실행 (process.argv 전달) / Execute CLI (pass process.argv)

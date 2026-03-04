@@ -121,7 +121,15 @@ export class CliApp implements ICliApp {
         .command('start [feature]', 'Start Layer1 conversation', (y) =>
           y.positional('feature', { type: 'string', describe: 'Feature description' }),
         )
+        .command('auth', 'Setup or renew authentication', (y) =>
+          y
+            .option('status', { type: 'boolean', describe: 'Show current auth status' })
+            .option('clear', { type: 'boolean', describe: 'Clear saved credentials' }),
+        )
         .command('config <sub>', 'Manage configuration', (y) =>
+          y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
+        )
+        .command('setting <sub>', 'Manage configuration (alias: config)', (y) =>
           y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
         )
         .command('project <sub>', 'Manage projects', (y) =>
@@ -239,7 +247,9 @@ adev - Claude Code Agent Development CLI
 명령어 / Commands:
   init              프로젝트 초기화 / Initialize project
   start             Layer1 대화 시작 / Start Layer1 conversation
+  auth              인증 설정 / Setup or renew authentication
   config <sub>      설정 관리 / Manage configuration (get/set/list/reset)
+  setting <sub>     설정 관리 / Manage configuration (alias: config)
   project <sub>     프로젝트 관리 / Manage projects (add/remove/list/switch/update)
 
 전역 옵션 / Global Options:
@@ -254,7 +264,10 @@ adev - Claude Code Agent Development CLI
 예제 / Examples:
   adev init
   adev start
-  adev config get authMethod
+  adev auth               # 인증 설정
+  adev auth --status      # 인증 상태 확인
+  adev config get logLevel
+  adev setting set logLevel debug
   adev project list
 
 문서 / Documentation:
