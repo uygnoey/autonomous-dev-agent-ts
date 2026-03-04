@@ -13,14 +13,14 @@
  * adev auth --clear   # 인증 정보 삭제
  */
 
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import inquirer from 'inquirer';
+import { AuthError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { err, ok } from '../../core/types.js';
-import { AuthError } from '../../core/errors.js';
 import type { Result } from '../../core/types.js';
 
 const ADEV_DIR = join(homedir(), '.adev');
@@ -39,12 +39,12 @@ async function getAuthStatus(): Promise<{ method: string; masked: string } | nul
     const trimmed = line.trim();
     if (trimmed.startsWith('ANTHROPIC_API_KEY=')) {
       const key = trimmed.slice('ANTHROPIC_API_KEY='.length);
-      const masked = key.slice(0, 10) + '...' + key.slice(-4);
+      const masked = `${key.slice(0, 10)}...${key.slice(-4)}`;
       return { method: 'API Key', masked };
     }
     if (trimmed.startsWith('CLAUDE_CODE_OAUTH_TOKEN=')) {
       const token = trimmed.slice('CLAUDE_CODE_OAUTH_TOKEN='.length);
-      const masked = token.slice(0, 14) + '...' + token.slice(-4);
+      const masked = `${token.slice(0, 14)}...${token.slice(-4)}`;
       return { method: 'OAuth Token', masked };
     }
   }
@@ -60,7 +60,9 @@ async function clearAuthFromEnv(): Promise<void> {
   const content = await readFile(ENV_FILE, 'utf-8');
   const filtered = content
     .split('\n')
-    .filter((l) => !l.startsWith('ANTHROPIC_API_KEY=') && !l.startsWith('CLAUDE_CODE_OAUTH_TOKEN='))
+    .filter(
+      (l) => !(l.startsWith('ANTHROPIC_API_KEY=') || l.startsWith('CLAUDE_CODE_OAUTH_TOKEN=')),
+    )
     .join('\n');
 
   await writeFile(ENV_FILE, filtered, { mode: 0o600 });
@@ -74,7 +76,7 @@ async function saveToEnv(key: string, value: string): Promise<void> {
   await clearAuthFromEnv();
 
   const existing = existsSync(ENV_FILE) ? await readFile(ENV_FILE, 'utf-8') : '';
-  const newContent = existing.trimEnd() + (existing.trim() ? '\n' : '') + `${key}=${value}\n`;
+  const newContent = `${existing.trimEnd() + (existing.trim() ? '\n' : '')}${key}=${value}\n`;
   await writeFile(ENV_FILE, newContent, { mode: 0o600 });
 }
 
@@ -100,12 +102,12 @@ export class AuthCommand {
   ): Promise<Result<void, AuthError>> {
     try {
       // --status: 현재 인증 상태 확인
-      if (options['status']) {
+      if (options.status) {
         return this.showStatus();
       }
 
       // --clear: 인증 정보 삭제
-      if (options['clear']) {
+      if (options.clear) {
         return this.clearAuth();
       }
 
@@ -122,7 +124,7 @@ export class AuthCommand {
   private async showStatus(): Promise<Result<void, AuthError>> {
     const status = await getAuthStatus();
     if (status) {
-      console.log(`\n✅ 인증 상태 / Auth Status`);
+      console.log('\n✅ 인증 상태 / Auth Status');
       console.log(`   방법 / Method: ${status.method}`);
       console.log(`   키 / Key:    ${status.masked}`);
       console.log(`   파일 / File: ${ENV_FILE}\n`);

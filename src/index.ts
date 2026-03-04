@@ -17,12 +17,12 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { CliApp } from './cli/index.js';
-import { InitCommand } from './cli/commands/init.js';
-import { StartCommand } from './cli/commands/start.js';
-import { ConfigCommand } from './cli/commands/config.js';
-import { ProjectCommand } from './cli/commands/project.js';
 import { AuthCommand } from './cli/commands/auth.js';
+import { ConfigCommand } from './cli/commands/config.js';
+import { InitCommand } from './cli/commands/init.js';
+import { ProjectCommand } from './cli/commands/project.js';
+import { StartCommand } from './cli/commands/start.js';
+import { CliApp } from './cli/index.js';
 import type { CliCommandHandler, CliResult } from './cli/types.js';
 import { ConsoleLogger } from './core/logger.js';
 
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   app.registerCommand('config', {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
-      const sub = parsed['sub'] as string | undefined;
+      const sub = parsed.sub as string | undefined;
       const args = sub ? [sub] : [];
       const result = await configCmd.execute(args, options);
       if (result.ok) {
@@ -191,9 +191,12 @@ async function main(): Promise<void> {
   app.registerCommand('project', {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
-      const sub = parsed['sub'] as string | undefined;
+      const sub = parsed.sub as string | undefined;
       const args = sub ? [sub] : [];
-      const result = await projectCmd.execute(args, options as Parameters<typeof projectCmd.execute>[1]);
+      const result = await projectCmd.execute(
+        args,
+        options as Parameters<typeof projectCmd.execute>[1],
+      );
       if (result.ok) {
         return { success: true, message: 'Project operation completed.', exitCode: 0 };
       }
@@ -208,7 +211,7 @@ async function main(): Promise<void> {
       const parsed = options as Record<string, unknown>;
       const result = await authCmd.execute([], parsed);
       if (result.ok) {
-        return { success: true, exitCode: 0 };
+        return { success: true, message: '', exitCode: 0 };
       }
       return { success: false, message: result.error.message, exitCode: 1 };
     },
@@ -219,7 +222,7 @@ async function main(): Promise<void> {
   app.registerCommand('setting', {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
-      const sub = parsed['sub'] as string | undefined;
+      const sub = parsed.sub as string | undefined;
       const args = sub ? [sub] : [];
       const result = await configCmd.execute(args, options);
       if (result.ok) {

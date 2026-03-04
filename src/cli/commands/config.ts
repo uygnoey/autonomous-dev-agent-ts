@@ -20,7 +20,7 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { DEFAULT_CONFIG, validateConfig } from '../../core/config.js';
-import type { DeepPartial, ConfigSchema } from '../../core/config.js';
+import type { ConfigSchema, DeepPartial } from '../../core/config.js';
 import { AdevError, type ConfigError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { err, ok } from '../../core/types.js';
@@ -96,9 +96,10 @@ export class ConfigCommand {
     // WHY: --global 플래그 확인
     const isGlobal = 'global' in options && options.global === true;
     // WHY: projectPath가 있으면 해당 경로 기반, 없으면 현재 디렉토리 기반
-    const projectPath = 'projectPath' in options && typeof options.projectPath === 'string'
-      ? options.projectPath
-      : '.';
+    const projectPath =
+      'projectPath' in options && typeof options.projectPath === 'string'
+        ? options.projectPath
+        : '.';
 
     switch (subcommand) {
       case 'list':

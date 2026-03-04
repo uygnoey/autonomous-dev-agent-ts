@@ -133,7 +133,10 @@ export class CliApp implements ICliApp {
           y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
         )
         .command('project <sub>', 'Manage projects', (y) =>
-          y.positional('sub', { type: 'string', describe: 'Subcommand (add/remove/list/switch/update)' }),
+          y.positional('sub', {
+            type: 'string',
+            describe: 'Subcommand (add/remove/list/switch/update)',
+          }),
         )
         .option('verbose', {
           alias: 'v',

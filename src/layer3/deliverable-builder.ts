@@ -155,7 +155,11 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     docs?: readonly IntegratedDocument[],
   ): Result<Deliverable, AgentError> | Promise<Result<BusinessDeliverable>> {
     if (typeof projectIdOrOptions === 'string') {
-      return this.buildSync(projectIdOrOptions, type as string, docs as readonly IntegratedDocument[]);
+      return this.buildSync(
+        projectIdOrOptions,
+        type as string,
+        docs as readonly IntegratedDocument[],
+      );
     }
     return this.buildAsync(projectIdOrOptions);
   }
@@ -179,7 +183,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     this.logger.info('산출물 생성 시작 (동기)', { projectId, type });
 
     const content = this.generateDeliverableContent(type, docs);
-    const format = type === 'portfolio' ? 'html' as const : 'markdown' as const;
+    const format = type === 'portfolio' ? ('html' as const) : ('markdown' as const);
     const title = this.generateDeliverableTitle(type, projectId);
 
     this.deliverableCounter += 1;
@@ -345,7 +349,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
         return [
           `# ${metadata.projectName} 포트폴리오`,
           '',
-          `## 프로젝트 소개`,
+          '## 프로젝트 소개',
           metadata.projectDescription,
           '',
           metadata.targetAudience ? `대상: ${metadata.targetAudience}` : '',
@@ -359,7 +363,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
         return [
           `# 사업 계획서 — ${metadata.projectName}`,
           '',
-          `## 개요`,
+          '## 개요',
           metadata.projectDescription,
           '',
           metadata.targetAudience ? `대상 시장: ${metadata.targetAudience}` : '',
@@ -373,7 +377,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
         return [
           `# 투자 제안서 — ${metadata.projectName}`,
           '',
-          `## 프로젝트 개요`,
+          '## 프로젝트 개요',
           metadata.projectDescription,
           '',
           metadata.targetAudience ? `대상 투자자: ${metadata.targetAudience}` : '',

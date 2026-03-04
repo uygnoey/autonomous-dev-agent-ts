@@ -404,9 +404,10 @@ export class InitCommand implements IInitCommand {
       }
 
       const envVar = authMethod === 'api-key' ? 'ANTHROPIC_API_KEY' : 'CLAUDE_CODE_OAUTH_TOKEN';
-      const exists = authMethod === 'api-key'
-        ? envResult.value.anthropicApiKey !== undefined
-        : envResult.value.claudeCodeOauthToken !== undefined;
+      const exists =
+        authMethod === 'api-key'
+          ? envResult.value.anthropicApiKey !== undefined
+          : envResult.value.claudeCodeOauthToken !== undefined;
 
       this.logger.debug('환경변수 확인', { envVar, exists });
 
