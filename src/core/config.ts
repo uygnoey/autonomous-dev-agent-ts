@@ -62,6 +62,11 @@ export interface ConfigSchema {
   readonly log: LogConfig;
 }
 
+/** 깊은 Partial 타입 / Deep partial type */
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
 // ── 기본값 ───────────────────────────────────────────────────
 
 /** 기본 설정 / Default configuration */
@@ -211,8 +216,9 @@ export function deepMerge<T extends Record<string, unknown>>(
  * @param config - 검증할 설정 객체
  * @returns 성공 시 ok, 실패 시 ConfigError
  */
-export function validateConfig(config: ConfigSchema): Result<void, ConfigError> {
-  if (!VALID_LOG_LEVELS.has(config.log.level)) {
+export function validateConfig(config: DeepPartial<ConfigSchema>): Result<void, ConfigError> {
+  // WHY: partial config 지원 — 설정된 필드만 검증
+  if (config.log?.level !== undefined && !VALID_LOG_LEVELS.has(config.log.level)) {
     return err(
       new ConfigError(
         'config_invalid_value',
@@ -221,7 +227,10 @@ export function validateConfig(config: ConfigSchema): Result<void, ConfigError> 
     );
   }
 
-  if (!VALID_MODELS.has(config.verification.layer1Model)) {
+  if (
+    config.verification?.layer1Model !== undefined &&
+    !VALID_MODELS.has(config.verification.layer1Model)
+  ) {
     return err(
       new ConfigError(
         'config_invalid_value',
@@ -230,7 +239,10 @@ export function validateConfig(config: ConfigSchema): Result<void, ConfigError> 
     );
   }
 
-  if (!VALID_MODELS.has(config.verification.adevModel)) {
+  if (
+    config.verification?.adevModel !== undefined &&
+    !VALID_MODELS.has(config.verification.adevModel)
+  ) {
     return err(
       new ConfigError(
         'config_invalid_value',
@@ -239,11 +251,11 @@ export function validateConfig(config: ConfigSchema): Result<void, ConfigError> 
     );
   }
 
-  if (config.testing.unitCount <= 0) {
+  if (config.testing?.unitCount !== undefined && config.testing.unitCount <= 0) {
     return err(new ConfigError('config_invalid_value', 'testing.unitCount는 0보다 커야 합니다'));
   }
 
-  if (config.testing.e2eTimeoutSeconds <= 0) {
+  if (config.testing?.e2eTimeoutSeconds !== undefined && config.testing.e2eTimeoutSeconds <= 0) {
     return err(
       new ConfigError('config_invalid_value', 'testing.e2eTimeoutSeconds는 0보다 커야 합니다'),
     );

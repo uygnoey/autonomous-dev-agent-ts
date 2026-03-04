@@ -9,7 +9,12 @@
  *     Handles Agent Teams environment setup, session stream management, and event mapping.
  */
 
-// TODO: SDK 설치 후 실제 import 활성화
+// WHY: @anthropic-ai/claude-code (v0.2.x)는 CLI 전용 패키지로 programmatic API를 노출하지 않는다.
+//      package.json에 main/module/exports 필드가 없고 bin만 존재한다.
+//      향후 SDK가 programmatic API (unstable_v2_createSession 등)를 export하면
+//      아래 타입 스텁을 실제 import로 교체한다.
+//
+// 교체 시:
 // import {
 //   unstable_v2_createSession,
 //   unstable_v2_prompt,
@@ -18,11 +23,12 @@
 //   type V2PromptOptions,
 // } from '@anthropic-ai/claude-code';
 
-// WHY: SDK 미설치 시 타입 스텁 제공
+/** V2 Session 타입 스텁 — SDK가 programmatic API를 export할 때까지 사용 */
 type V2Session = {
   stream(prompt: string): AsyncIterable<V2SessionEvent>;
 };
 
+/** SDK 이벤트 타입 스텁 */
 type V2SessionEvent = {
   type: string;
   content?: string | unknown[];
@@ -35,6 +41,7 @@ type V2SessionEvent = {
   message?: string;
 };
 
+/** SDK 프롬프트 옵션 타입 스텁 */
 type V2PromptOptions = {
   systemPrompt: string;
   maxTurns?: number;
@@ -49,13 +56,23 @@ import type { Logger } from '../core/logger.js';
 import { type AgentName, type Result, err, ok } from '../core/types.js';
 import type { AgentConfig, AgentEvent, AgentEventType, AgentExecutor } from './types.js';
 
-// TODO: SDK 설치 후 실제 함수 활성화
-const unstable_v2_createSession = (options: V2PromptOptions): V2Session => {
-  throw new Error('SDK not installed: @anthropic-ai/claude-code');
+// WHY: SDK가 programmatic API를 export하지 않으므로 스텁 함수로 대체.
+//      SDK가 unstable_v2_createSession을 export하면 이 스텁을 제거하고 import로 교체한다.
+const unstable_v2_createSession = (_options: V2PromptOptions): V2Session => {
+  throw new Error(
+    '@anthropic-ai/claude-code does not export programmatic API. ' +
+      'V2 Session API requires a future SDK version with unstable_v2_createSession export.',
+  );
 };
 
-const unstable_v2_prompt = async (prompt: string, options: V2PromptOptions): Promise<V2Session> => {
-  throw new Error('SDK not installed: @anthropic-ai/claude-code');
+const unstable_v2_prompt = async (
+  _prompt: string,
+  _options: V2PromptOptions,
+): Promise<V2Session> => {
+  throw new Error(
+    '@anthropic-ai/claude-code does not export programmatic API. ' +
+      'V2 Session API requires a future SDK version with unstable_v2_prompt export.',
+  );
 };
 
 /**

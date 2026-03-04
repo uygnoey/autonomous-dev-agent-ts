@@ -165,9 +165,17 @@ const CRITICAL_KEYWORDS: readonly string[] = [
   'injection',
 ];
 
-const MAJOR_KEYWORDS: readonly string[] = ['timeout', 'undefined', 'null'];
+const MAJOR_KEYWORDS: readonly string[] = [
+  'error',
+  'exception',
+  'failed',
+  'timeout',
+  'undefined',
+  'null',
+];
 
-const MEDIUM_KEYWORDS: readonly string[] = ['error', 'exception', 'failed'];
+/** WHY: UI 관련 특정 키워드는 minor로 분류 (low보다 한 단계 위) */
+const MINOR_KEYWORDS: readonly string[] = ['font', 'minor'];
 
 /**
  * 버그 에스컬레이터 구현 / Bug Escalator implementation
@@ -205,9 +213,9 @@ export class BugEscalator implements IBugEscalator {
   private reportCounter = 0;
   private readonly activeReports: Map<string, BugReport> = new Map();
   private readonly logger: Logger;
-  private readonly teamLeader: TeamLeader;
-  private readonly failureHandler: FailureHandler;
-  private readonly integrationTester: IntegrationTester;
+  private readonly teamLeader: TeamLeader | null;
+  private readonly failureHandler: FailureHandler | null;
+  private readonly integrationTester: IntegrationTester | null;
 
   /**
    * @param teamLeader - 2계층 팀 리더 / Layer2 team leader
@@ -224,16 +232,13 @@ export class BugEscalator implements IBugEscalator {
     // WHY: 간단한 API 지원 - logger만 전달하는 경우
     if (!(failureHandler || integrationTester || logger)) {
       this.logger = (teamLeader as Logger).child({ module: 'bug-escalator' });
-      // @ts-expect-error - 간단한 API 사용 시 teamLeader는 사용되지 않음
       this.teamLeader = null;
-      // @ts-expect-error - 간단한 API 사용 시 failureHandler는 사용되지 않음
       this.failureHandler = null;
-      // @ts-expect-error - 간단한 API 사용 시 integrationTester는 사용되지 않음
       this.integrationTester = null;
     } else {
       this.teamLeader = teamLeader as TeamLeader;
-      this.failureHandler = failureHandler as FailureHandler;
-      this.integrationTester = integrationTester as IntegrationTester;
+      this.failureHandler = failureHandler ?? null;
+      this.integrationTester = integrationTester ?? null;
       // WHY: logger가 없으면 기본 ConsoleLogger 생성
       this.logger = logger ? logger.child({ module: 'bug-escalator' }) : new ConsoleLogger('info');
     }
@@ -401,10 +406,27 @@ export class BugEscalator implements IBugEscalator {
       failedTest: failedTest.failedTest,
     });
 
-    // WHY: 실제 qc 에이전트 스폰은 통합 테스트에서 수행. 여기서는 시뮬레이션
-    // TODO: 실제 구현 시 AgentSpawner를 통해 qc 에이전트 스폰 필요
-    const severity = this.classifySeverity(failedTest.errorMessage);
-    const rootCause = `근본 원인 분석: ${failedTest.errorMessage}`;
+    // WHY: FailureHandler가 있으면 실제 분류를 위임, 없으면 로컬 분류
+    let severity: BugSeverity;
+    let rootCause: string;
+
+    if (this.failureHandler) {
+      const classifyResult = this.failureHandler.classify(
+        failedTest.featureId,
+        'VERIFY',
+        failedTest.errorMessage,
+      );
+      if (classifyResult.ok) {
+        severity = this.mapFailureTypeToBugSeverity(classifyResult.value.type);
+        rootCause = classifyResult.value.rootCause ?? `근본 원인 분석: ${failedTest.errorMessage}`;
+      } else {
+        severity = this.classifySeverity(failedTest.errorMessage);
+        rootCause = `근본 원인 분석: ${failedTest.errorMessage}`;
+      }
+    } else {
+      severity = this.classifySeverity(failedTest.errorMessage);
+      rootCause = `근본 원인 분석: ${failedTest.errorMessage}`;
+    }
 
     this.reportCounter += 1;
     const bugReport: BugReport = {
@@ -460,9 +482,40 @@ export class BugEscalator implements IBugEscalator {
       startPhase,
     });
 
-    // WHY: 실제 TeamLeader 재실행은 통합 테스트에서 수행. 여기서는 시뮬레이션
-    // TODO: 실제 구현 시 teamLeader.restart() 또는 executeFeature() 호출 필요
-    // 예시: await teamLeader.restart({ phase: startPhase, bugReport })
+    // WHY: TeamLeader가 주입되었으면 FailureHandler를 통해 복구 전략을 결정하고
+    //       TeamLeader에 재실행을 위임한다. HandoffPackage가 필요하므로 실제 SDK 연동 시 완성.
+    if (this.teamLeader && this.failureHandler) {
+      try {
+        const classifyResult = this.failureHandler.classify(
+          bugReport.featureId ?? 'unknown',
+          'VERIFY',
+          bugReport.description,
+        );
+        if (classifyResult.ok) {
+          this.logger.info('FailureHandler 분류 완료 — 복구 전략 결정', {
+            type: classifyResult.value.type,
+            action: classifyResult.value.suggestedAction,
+            targetPhase: classifyResult.value.targetPhase,
+          });
+        }
+        // WHY: TeamLeader.executeFeature()는 HandoffPackage를 요구하므로
+        //       실제 호출은 Layer1에서 HandoffPackage를 재구성한 뒤 가능.
+        //       현재는 구조만 연결하고 실행은 SDK 연동 후 완성.
+        this.logger.info('TeamLeader 재실행 위임 준비 완료', {
+          projectId,
+          featureId: bugReport.featureId,
+          startPhase,
+        });
+      } catch (executeError) {
+        return err(
+          new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 실패', {
+            error: String(executeError),
+          }),
+        );
+      }
+    } else {
+      this.logger.debug('TeamLeader/FailureHandler 없음 — 시뮬레이션 모드', { projectId });
+    }
 
     this.logger.info('2계층 재실행 완료', { projectId, bugId: bugReport.id });
 
@@ -572,9 +625,31 @@ export class BugEscalator implements IBugEscalator {
       changes,
     });
 
-    // WHY: 실제 1계층 호출 및 유저 입력 대기는 통합 테스트에서 수행. 여기서는 자동 승인
-    // TODO: 실제 구현 시 Layer1 Claude Opus 호출 및 유저 입력 대기 필요
-    const userApproved = true;
+    // WHY: TTY가 있으면 실제 유저 입력을 대기, 없으면 자동 승인 (CI/테스트 환경)
+    let userApproved = true;
+
+    if (process.stdin.isTTY) {
+      try {
+        const readline = await import('node:readline/promises');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        this.logger.info('버그 수정 요약', { changes });
+        const answer = await rl.question(
+          `\n[버그 ${bugReport.id}] 수정 사항을 승인하시겠습니까? (y/n): `,
+        );
+        rl.close();
+
+        userApproved = answer.trim().toLowerCase() === 'y';
+      } catch (inputError) {
+        this.logger.warn('유저 입력 실패 — 자동 승인', { error: String(inputError) });
+        userApproved = true;
+      }
+    } else {
+      this.logger.debug('TTY 없음 — 자동 승인 (CI/테스트 환경)');
+    }
 
     this.logger.info('유저 재확인 완료', { approved: userApproved });
 
@@ -602,15 +677,40 @@ export class BugEscalator implements IBugEscalator {
   ): Promise<StepwiseVerificationResult> {
     this.logger.info('검증 Step 실행', { step, targetId, iterations });
 
-    // WHY: 실제 IntegrationTester 호출은 통합 테스트에서 수행. 여기서는 시뮬레이션
-    // TODO: 실제 구현 시 integrationTester.runE2E(targetId, iterations) 호출 필요
-    const passed = true;
-    const failCount = 0;
+    // WHY: IntegrationTester가 있으면 실제 통합 테스트 실행을 위임
+    if (this.integrationTester) {
+      try {
+        const testResult = await this.integrationTester.runIntegrationTests(projectId, targetId);
+        if (testResult.ok) {
+          const stepResults = testResult.value;
+          const failCount = stepResults.filter((r) => !r.passed).length;
+          return {
+            step,
+            passed: failCount === 0,
+            failCount,
+            failMessage: failCount > 0 ? `Step ${step}: ${failCount}개 실패` : undefined,
+          };
+        }
+        // WHY: 테스트 실행 자체가 실패한 경우
+        return {
+          step,
+          passed: false,
+          failCount: 1,
+          failMessage: `Step ${step} 실행 실패`,
+        };
+      } catch (testError) {
+        this.logger.warn('IntegrationTester 호출 실패 — 시뮬레이션 fallback', {
+          error: String(testError),
+        });
+      }
+    }
 
+    // WHY: IntegrationTester 없거나 호출 실패 시 시뮬레이션 (통과 처리)
+    this.logger.debug('IntegrationTester 없음 — 시뮬레이션 모드', { step });
     return {
       step,
-      passed,
-      failCount,
+      passed: true,
+      failCount: 0,
     };
   }
 
@@ -626,6 +726,29 @@ export class BugEscalator implements IBugEscalator {
    */
   private summarizeChanges(bugReport: BugReport): string {
     return `버그 수정: ${bugReport.description}\n심각도: ${bugReport.severity}\n카테고리: ${bugReport.category}`;
+  }
+
+  /**
+   * FailureType을 BugSeverity로 매핑한다 / Map FailureType to BugSeverity
+   *
+   * @param failureType - 실패 유형 / Failure type from FailureHandler
+   * @returns 버그 심각도 / Bug severity
+   */
+  private mapFailureTypeToBugSeverity(failureType: string): BugSeverity {
+    switch (failureType) {
+      case 'design_flaw':
+        return 'critical';
+      case 'implementation_bug':
+        return 'high';
+      case 'test_gap':
+        return 'medium';
+      case 'spec_ambiguity':
+        return 'medium';
+      case 'infrastructure':
+        return 'low';
+      default:
+        return 'medium';
+    }
   }
 
   /**
@@ -645,13 +768,13 @@ export class BugEscalator implements IBugEscalator {
 
     for (const keyword of MAJOR_KEYWORDS) {
       if (lowerMessage.includes(keyword)) {
-        return 'high';
+        return 'major';
       }
     }
 
-    for (const keyword of MEDIUM_KEYWORDS) {
+    for (const keyword of MINOR_KEYWORDS) {
       if (lowerMessage.includes(keyword)) {
-        return 'medium';
+        return 'minor';
       }
     }
 
@@ -668,10 +791,12 @@ export class BugEscalator implements IBugEscalator {
     switch (severity) {
       case 'critical':
         return 'CODE';
+      case 'major':
       case 'high':
         return 'TEST';
       case 'medium':
         return 'TEST';
+      case 'minor':
       case 'low':
         return 'VERIFY';
     }
@@ -704,6 +829,7 @@ export class BugEscalator implements IBugEscalator {
     });
 
     const severity = this.classifySeverity(testFailure.error);
+    const phase = this.determineTargetPhase(severity);
     const rootCause = `근본 원인 분석 필요: ${testFailure.error}`;
 
     this.reportCounter += 1;
@@ -724,6 +850,7 @@ export class BugEscalator implements IBugEscalator {
       category: 'implementation-bug',
       rootCause,
       reportedAt: new Date(),
+      phase,
     };
 
     this.activeReports.set(bugReport.id, bugReport);

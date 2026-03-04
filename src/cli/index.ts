@@ -10,6 +10,10 @@
 
 export { CliApp, type ICliApp } from './main.js';
 
+// ── 라우터 / Router ──────────────────────────────────────────
+
+export { CommandRouter, type ParsedArgs, type RoutableCommand } from './command-router.js';
+
 // ── 명령 / Commands ────────────────────────────────────────────
 
 export { ConfigCommand } from './commands/config.js';
@@ -22,6 +26,7 @@ export { StartCommand } from './commands/start.js';
 export type {
   CliCommand,
   CliCommandHandler,
+  CliCommandName,
   CliResult,
   ConfigOptions,
   GlobalCliOptions,

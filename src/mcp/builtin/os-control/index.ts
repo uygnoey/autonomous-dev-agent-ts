@@ -103,8 +103,7 @@ export class OsControlServer {
    */
   async executeTool(
     toolName: string,
-    // biome-ignore lint/suspicious/noExplicitAny: MCP input은 동적이므로 any 허용
-    input: any,
+    input: unknown,
   ): Promise<Result<FilesystemOutput | ProcessOutput | SystemInfoOutput>> {
     // WHY: 도구 이름 접두사로 실행기 선택
     if (toolName.startsWith('fs_')) {

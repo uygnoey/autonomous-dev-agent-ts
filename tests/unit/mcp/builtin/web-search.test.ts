@@ -90,10 +90,12 @@ describe('WebSearchServer - Error Cases', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('null input은 TypeError를 발생시킨다', async () => {
-    // WHY: 구현이 null 체크를 하지 않으므로 TypeError 발생
-    expect(async () => {
-      await server.executeTool('web_search', null);
-    }).toThrow();
+  it('null input은 유효성 검증 에러를 반환한다', async () => {
+    // WHY: input이 unknown 타입이므로 null은 타입 가드에서 걸려 graceful 에러 반환
+    const result = await server.executeTool('web_search', null);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.success).toBe(false);
+    }
   });
 });

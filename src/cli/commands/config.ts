@@ -20,12 +20,12 @@ import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { DEFAULT_CONFIG, validateConfig } from '../../core/config.js';
-import type { ConfigSchema } from '../../core/config.js';
-import { AdevError, ConfigError } from '../../core/errors.js';
+import type { DeepPartial, ConfigSchema } from '../../core/config.js';
+import { AdevError, type ConfigError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
-import type { GlobalCliOptions } from '../types.js';
+import type { CliOptions, GlobalCliOptions } from '../types.js';
 
 // ── ConfigCommand ──────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export class ConfigCommand {
    */
   async execute(
     args: readonly string[],
-    options: GlobalCliOptions,
+    options: GlobalCliOptions | CliOptions,
   ): Promise<Result<void, AdevError>> {
     const subcommand = args[0];
 
@@ -93,18 +93,22 @@ export class ConfigCommand {
       );
     }
 
-    // WHY: --global 플래그 확인 (options를 any로 캐스팅하여 flags 접근)
-    const isGlobal = (options as { global?: boolean }).global === true;
+    // WHY: --global 플래그 확인
+    const isGlobal = 'global' in options && options.global === true;
+    // WHY: projectPath가 있으면 해당 경로 기반, 없으면 현재 디렉토리 기반
+    const projectPath = 'projectPath' in options && typeof options.projectPath === 'string'
+      ? options.projectPath
+      : '.';
 
     switch (subcommand) {
       case 'list':
-        return this.handleList(isGlobal);
+        return this.handleList(isGlobal, projectPath);
       case 'get': {
         const key = args[1];
         if (!key) {
           return err(new AdevError('cli_config_missing_key', 'config get: 키를 지정하세요'));
         }
-        return this.handleGet(key, isGlobal);
+        return this.handleGet(key, isGlobal, projectPath);
       }
       case 'set': {
         const key = args[1];
@@ -114,10 +118,10 @@ export class ConfigCommand {
             new AdevError('cli_config_missing_args', 'config set: 키와 값을 모두 지정하세요'),
           );
         }
-        return this.handleSet(key, rawValue, isGlobal);
+        return this.handleSet(key, rawValue, isGlobal, projectPath);
       }
       case 'reset':
-        return this.handleReset(isGlobal);
+        return this.handleReset(isGlobal, projectPath);
       default:
         return err(
           new AdevError('cli_config_unknown_subcommand', `알 수 없는 서브커맨드: '${subcommand}'.`),
@@ -135,8 +139,10 @@ export class ConfigCommand {
    * @param isGlobal - 글로벌 설정 여부 / Whether to use global config
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  private async handleList(isGlobal: boolean): Promise<Result<void, AdevError>> {
-    const configPath = isGlobal ? this.getGlobalConfigPath() : resolve('.', '.adev', 'config.json');
+  private async handleList(isGlobal: boolean, projectPath = '.'): Promise<Result<void, AdevError>> {
+    const configPath = isGlobal
+      ? this.getGlobalConfigPath()
+      : resolve(projectPath, '.adev', 'config.json');
 
     // WHY: 설정 파일 읽기
     const configResult = await this.readConfigFile(configPath);
@@ -167,8 +173,14 @@ export class ConfigCommand {
    * @param isGlobal - 글로벌 설정 여부 / Whether to use global config
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  private async handleGet(key: string, isGlobal: boolean): Promise<Result<void, AdevError>> {
-    const configPath = isGlobal ? this.getGlobalConfigPath() : resolve('.', '.adev', 'config.json');
+  private async handleGet(
+    key: string,
+    isGlobal: boolean,
+    projectPath = '.',
+  ): Promise<Result<void, AdevError>> {
+    const configPath = isGlobal
+      ? this.getGlobalConfigPath()
+      : resolve(projectPath, '.adev', 'config.json');
 
     // WHY: 설정 파일 읽기
     const configResult = await this.readConfigFile(configPath);
@@ -205,8 +217,11 @@ export class ConfigCommand {
     key: string,
     rawValue: string,
     isGlobal: boolean,
+    projectPath = '.',
   ): Promise<Result<void, AdevError>> {
-    const configPath = isGlobal ? this.getGlobalConfigPath() : resolve('.', '.adev', 'config.json');
+    const configPath = isGlobal
+      ? this.getGlobalConfigPath()
+      : resolve(projectPath, '.adev', 'config.json');
 
     // WHY: 기존 설정 파일 읽기
     let existing: Record<string, unknown> = {};
@@ -232,7 +247,7 @@ export class ConfigCommand {
     setNestedValue(existing, key, parsed);
 
     // WHY: 변경된 설정 검증
-    const validationResult = validateConfig(existing as unknown as ConfigSchema);
+    const validationResult = validateConfig(existing as DeepPartial<ConfigSchema>);
     if (!validationResult.ok) {
       const errorResult = validationResult as { readonly ok: false; readonly error: ConfigError };
       return err(
@@ -277,8 +292,13 @@ export class ConfigCommand {
    * @param isGlobal - 글로벌 설정 여부 / Whether to use global config
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  private async handleReset(isGlobal: boolean): Promise<Result<void, AdevError>> {
-    const configPath = isGlobal ? this.getGlobalConfigPath() : resolve('.', '.adev', 'config.json');
+  private async handleReset(
+    isGlobal: boolean,
+    projectPath = '.',
+  ): Promise<Result<void, AdevError>> {
+    const configPath = isGlobal
+      ? this.getGlobalConfigPath()
+      : resolve(projectPath, '.adev', 'config.json');
 
     // WHY: 디렉토리 생성 (없을 경우 대비)
     try {

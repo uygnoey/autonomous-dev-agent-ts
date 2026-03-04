@@ -56,19 +56,25 @@ export type DocumentFormat = 'md' | 'html' | 'pdf' | 'docx' | 'pptx';
  */
 export interface DocumentTemplate {
   /** 템플릿 ID / Template ID */
-  readonly id: string;
+  readonly id?: string;
   /** 템플릿 이름 / Template name */
-  readonly name: string;
+  readonly name?: string;
   /** 문서 유형 / Document type */
-  readonly type: ProjectDocumentType | BusinessDeliverableType;
+  readonly type: ProjectDocumentType | BusinessDeliverableType | 'custom';
   /** 템플릿 파일 경로 / Template file path */
-  readonly templatePath: string;
+  readonly templatePath?: string;
   /** 출력 형식 / Output format */
-  readonly format: DocumentFormat;
+  readonly format?: DocumentFormat;
   /** 템플릿 설명 / Template description */
-  readonly description: string;
+  readonly description?: string;
   /** 커스텀 템플릿 여부 / Whether custom template */
-  readonly custom: boolean;
+  readonly custom?: boolean;
+  /** 템플릿 제목 / Template title */
+  readonly title?: string;
+  /** 템플릿 섹션 목록 / Template sections */
+  readonly sections?: readonly DocumentSection[];
+  /** 문서 언어 / Document language */
+  readonly language?: 'en' | 'ko' | 'bilingual';
 }
 
 /**
@@ -137,11 +143,15 @@ export interface IntegratedDocument {
   /** 문서 내용 / Document content */
   readonly content: string;
   /** 출력 파일 경로 / Output file path */
-  readonly outputPath: string;
+  readonly outputPath?: string;
   /** 사용된 조각 ID 목록 / Used fragment IDs */
-  readonly fragmentIds: readonly string[];
+  readonly fragmentIds?: readonly string[];
   /** 생성 시각 / Generated at */
   readonly generatedAt: Date;
+  /** 문서 버전 / Document version */
+  readonly version: number;
+  /** 원본 조각 문서 목록 / Source fragment documents */
+  readonly sourceFragments: readonly string[];
 }
 
 // ── 협업 문서 / Collaborative Document ──────────────────────────
@@ -274,7 +284,7 @@ export interface TestFailure {
 /**
  * 버그 심각도 / Bug severity
  */
-export type BugSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type BugSeverity = 'critical' | 'major' | 'high' | 'medium' | 'minor' | 'low';
 
 /**
  * 버그 카테고리 / Bug category
@@ -313,6 +323,8 @@ export interface BugReport {
   readonly rootCause?: string;
   /** 리포트 생성 시각 / Reported at */
   readonly reportedAt: Date;
+  /** 에스컬레이션 대상 Phase / Escalation target phase */
+  readonly phase?: Phase;
 }
 
 /**
@@ -462,7 +474,7 @@ export type DeliverableType = BusinessDeliverableType;
  */
 export interface Deliverable {
   readonly id: string;
-  readonly type: DeliverableType;
+  readonly type: DeliverableType | 'report';
   readonly title: string;
   readonly content: string;
   readonly format: 'markdown' | 'html' | 'json';

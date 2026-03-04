@@ -216,16 +216,29 @@ export class ProcessManager {
    * KR: MCP 프로토콜에 따라 도구를 실행하고 결과를 반환한다.
    * EN: Executes tool according to MCP protocol and returns result.
    */
-  async executeTool(
-    toolName: string,
-    // biome-ignore lint/suspicious/noExplicitAny: MCP input은 동적이므로 any 허용
-    input: any,
-  ): Promise<Result<ProcessOutput>> {
+  async executeTool(toolName: string, input: unknown): Promise<Result<ProcessOutput>> {
     this.logger.debug('MCP 도구 실행', { toolName, input });
+
+    // WHY: MCP input은 unknown이므로 객체 여부를 먼저 확인 후 안전 접근
+    if (typeof input !== 'object' || input === null) {
+      return err(new AdevError('invalid_input', '입력이 객체가 아닙니다'));
+    }
+    const inputObj = input as Record<string, unknown>;
 
     switch (toolName) {
       case 'proc_execute': {
-        const result = await this.executeCommand(input as ProcessInput);
+        const procInput: ProcessInput = {
+          command: typeof inputObj.command === 'string' ? inputObj.command : '',
+          args: Array.isArray(inputObj.args) ? (inputObj.args as string[]) : undefined,
+          cwd: typeof inputObj.cwd === 'string' ? inputObj.cwd : undefined,
+          env:
+            typeof inputObj.env === 'object' && inputObj.env !== null
+              ? (inputObj.env as Record<string, string>)
+              : undefined,
+          timeoutMs: typeof inputObj.timeoutMs === 'number' ? inputObj.timeoutMs : undefined,
+          stdin: typeof inputObj.stdin === 'string' ? inputObj.stdin : undefined,
+        };
+        const result = await this.executeCommand(procInput);
         if (!result.ok) {
           return ok({
             success: false,
@@ -240,7 +253,7 @@ export class ProcessManager {
       }
 
       case 'proc_list': {
-        const result = await this.listProcesses(input.filter);
+        const result = await this.listProcesses(inputObj.filter as string | undefined);
         if (!result.ok) {
           return ok({
             success: false,
@@ -255,13 +268,13 @@ export class ProcessManager {
       }
 
       case 'proc_kill': {
-        if (typeof input.pid !== 'number') {
+        if (typeof inputObj.pid !== 'number') {
           return ok({
             success: false,
             message: 'pid는 숫자여야 합니다',
           });
         }
-        const result = await this.killProcess(input.pid, input.signal);
+        const result = await this.killProcess(inputObj.pid, inputObj.signal as string | undefined);
         if (!result.ok) {
           return ok({
             success: false,

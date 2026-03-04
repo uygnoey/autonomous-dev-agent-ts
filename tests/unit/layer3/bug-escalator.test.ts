@@ -57,18 +57,18 @@ describe('BugEscalator', () => {
       }
     });
 
-    it('high severity 키워드를 high로 분류한다', () => {
+    it('major severity 키워드를 major로 분류한다', () => {
       const failure = createFailure({ error: 'timeout exception during API call' });
       const result = escalator.createReport('proj-1', failure);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.severity).toBe('high');
+        expect(result.value.severity).toBe('major');
       }
     });
 
     it('분류 불가 에러를 low로 분류한다', () => {
-      const failure = createFailure({ error: 'button color is slightly off' });
+      const failure = createFailure({ error: 'something unexpected happened' });
       const result = escalator.createReport('proj-1', failure);
 
       expect(result.ok).toBe(true);

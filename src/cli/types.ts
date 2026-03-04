@@ -6,6 +6,8 @@
  * EN: Type definitions for adev CLI commands and options.
  */
 
+import type { Result } from '../core/types.js';
+
 // ── CLI 명령어 / CLI Commands ──────────────────────────────────
 
 /**
@@ -15,7 +17,7 @@
  * KR: adev CLI에서 사용 가능한 명령어 타입.
  * EN: Available command types for adev CLI.
  */
-export type CliCommand = 'init' | 'start' | 'config' | 'project' | 'version' | 'help';
+export type CliCommandName = 'init' | 'start' | 'config' | 'project' | 'version' | 'help';
 
 /**
  * 프로젝트 서브 명령어 타입 / Project sub-command type
@@ -28,6 +30,40 @@ export type ProjectSubCommand = 'add' | 'remove' | 'list' | 'switch' | 'update';
 export type ConfigSubCommand = 'get' | 'set' | 'list' | 'reset';
 
 // ── CLI 옵션 / CLI Options ─────────────────────────────────────
+
+/**
+ * CLI 실행 옵션 / CLI execution options
+ *
+ * @description
+ * KR: 프로젝트 경로와 플래그를 포함하는 기본 CLI 옵션.
+ * EN: Base CLI options containing project path and flags.
+ */
+export interface CliOptions {
+  /** 프로젝트 경로 / Project path */
+  readonly projectPath?: string;
+  /** CLI 플래그 / CLI flags (원본 kebab-case 키 보존) */
+  readonly flags: Record<string, unknown>;
+  /** camelCase로 변환된 옵션 값에 직접 접근 가능 */
+  readonly [key: string]: unknown;
+}
+
+/**
+ * CLI 명령 인터페이스 / CLI command interface
+ *
+ * @description
+ * KR: CommandRouter에 등록 가능한 CLI 명령의 인터페이스.
+ * EN: Interface for CLI commands registrable with CommandRouter.
+ */
+export interface CliCommand {
+  /** 명령 이름 / Command name */
+  readonly name: string;
+  /** 명령 설명 / Command description */
+  readonly description: string;
+  /** 명령 별칭 / Command aliases */
+  readonly aliases?: readonly string[];
+  /** 명령 실행 / Execute command */
+  execute(args: readonly string[], options: CliOptions): Promise<Result<unknown>>;
+}
 
 /**
  * 전역 CLI 옵션 / Global CLI options
@@ -136,8 +172,8 @@ export interface ProjectInfo {
  * EN: Full structure of ~/.adev/projects.json.
  */
 export interface ProjectRegistry {
-  /** 활성 프로젝트 ID / Active project ID */
-  readonly activeProjectId?: string;
+  /** 활성 프로젝트 이름 / Active project name */
+  readonly activeProject: string | null;
   /** 프로젝트 목록 / Project list */
   readonly projects: readonly ProjectInfo[];
 }

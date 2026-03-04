@@ -6,7 +6,8 @@
  * EN: Manages project registry (~/.adev/projects.json) with add, remove, list, switch subcommands.
  */
 
-import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { AdevError } from '../../core/errors.js';
@@ -144,7 +145,7 @@ export class ProjectCommand {
     };
 
     const updatedRegistry: ProjectRegistry = {
-      activeProjectId: registry.activeProjectId ?? projectId,
+      activeProject: registry.activeProject ?? projectName,
       projects: [...registry.projects, newProject],
     };
 
@@ -194,27 +195,16 @@ export class ProjectCommand {
       );
     }
 
-    // WHY: --delete-data 플래그가 있으면 유저에게 확인을 요청한다
+    // WHY: --delete-data 플래그가 있으면 .adev/ 디렉토리도 삭제
     if (deleteData) {
-      this.logger.warn('⚠️  경고: .adev/ 디렉토리를 삭제합니다', {
+      this.logger.warn('경고: .adev/ 디렉토리를 삭제합니다', {
         projectPath: target.path,
       });
 
-      // TODO: 실제 유저 입력을 받는 프롬프트 구현 필요
-      // 현재는 시뮬레이션으로 자동 확인 처리
-      const confirmed = true;
-
-      if (!confirmed) {
-        this.logger.info('삭제 취소됨 / Deletion cancelled');
-        return ok(undefined);
-      }
-
-      // WHY: .adev/ 디렉토리 삭제
       try {
         const adevDir = resolve(target.path, '.adev');
-        const adevDirFile = Bun.file(adevDir);
-        if (await adevDirFile.exists()) {
-          // TODO: 디렉토리 재귀 삭제 구현 필요
+        if (existsSync(adevDir)) {
+          await rm(adevDir, { recursive: true, force: true });
           this.logger.info('.adev/ 디렉토리 삭제됨', { path: adevDir });
         }
       } catch (error: unknown) {
@@ -226,8 +216,10 @@ export class ProjectCommand {
     const filtered = registry.projects.filter((p) => p.name !== projectName);
 
     const updatedRegistry: ProjectRegistry = {
-      activeProjectId:
-        registry.activeProjectId === target.id ? filtered[0]?.id : registry.activeProjectId,
+      activeProject:
+        registry.activeProject === target.name
+          ? (filtered[0]?.name ?? null)
+          : registry.activeProject,
       projects: filtered,
     };
 
@@ -253,7 +245,7 @@ export class ProjectCommand {
     const registry = registryResult.value;
 
     this.logger.info('등록된 프로젝트 목록 / Registered projects', {
-      activeProjectId: registry.activeProjectId,
+      activeProject: registry.activeProject,
       count: registry.projects.length,
       projects: registry.projects.map((p) => ({
         id: p.id,
@@ -292,7 +284,7 @@ export class ProjectCommand {
     }
 
     const updatedRegistry: ProjectRegistry = {
-      activeProjectId: target.id,
+      activeProject: target.name,
       projects: registry.projects.map((p) =>
         p.name === projectName ? { ...p, lastAccessedAt: new Date() } : p,
       ),
@@ -381,7 +373,7 @@ export class ProjectCommand {
     };
 
     const updatedRegistry: ProjectRegistry = {
-      activeProjectId: registry.activeProjectId,
+      activeProject: registry.activeProject === projectName ? newName : registry.activeProject,
       projects: updatedProjects,
     };
 
@@ -414,12 +406,12 @@ export async function loadRegistry(
   try {
     const file = Bun.file(registryPath);
     if (!(await file.exists())) {
-      return ok({ projects: [] });
+      return ok({ activeProject: null, projects: [] });
     }
 
     const text = await file.text();
     if (text.trim() === '') {
-      return ok({ projects: [] });
+      return ok({ activeProject: null, projects: [] });
     }
 
     const parsed = JSON.parse(text) as ProjectRegistry;

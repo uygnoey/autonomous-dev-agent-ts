@@ -10,10 +10,14 @@
 
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import type { Logger } from '../core/logger.js';
 import { isAdevError } from '../core/errors.js';
+import type { Logger } from '../core/logger.js';
 import type { CliCommandHandler, CliResult } from './types.js';
 import { EXIT_CODES } from './types.js';
+
+// WHY: 테스트 및 외부에서 main.ts를 통해 CommandRouter에 접근할 수 있도록 re-export
+export { CommandRouter } from './command-router.js';
+export type { ParsedArgs, RoutableCommand } from './command-router.js';
 
 /**
  * CLI 애플리케이션 버전 / CLI application version

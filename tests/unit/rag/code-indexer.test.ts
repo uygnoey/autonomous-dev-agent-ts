@@ -3,18 +3,43 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConsoleLogger } from '../../../src/core/logger.js';
+import type { Result } from '../../../src/core/types.js';
+import { ok } from '../../../src/core/types.js';
 import { ChunkSplitter } from '../../../src/rag/chunk-splitter.js';
 import { CodeIndexer } from '../../../src/rag/code-indexer.js';
-import { LocalEmbeddingProvider } from '../../../src/rag/embeddings.js';
+import type { EmbeddingProvider } from '../../../src/rag/types.js';
 import { CodeVectorStore } from '../../../src/rag/vector-store.js';
 
 const logger = new ConsoleLogger('error');
+
+/** 테스트용 임베딩 프로바이더 — 랜덤 벡터 생성 */
+class MockEmbeddingProvider implements EmbeddingProvider {
+  readonly name = 'mock';
+  readonly tier = 'free' as const;
+  constructor(readonly dimensions: number) {}
+
+  async embed(texts: string[]): Promise<Result<Float32Array[]>> {
+    return ok(texts.map(() => {
+      const arr = new Float32Array(this.dimensions);
+      for (let i = 0; i < this.dimensions; i++) arr[i] = Math.random();
+      return arr;
+    }));
+  }
+
+  async embedQuery(query: string): Promise<Result<Float32Array>> {
+    const result = await this.embed([query]);
+    if (!result.ok) return result;
+    const first = result.value[0];
+    if (!first) return ok(new Float32Array(this.dimensions));
+    return ok(first);
+  }
+}
 
 describe('CodeIndexer', () => {
   let tempDir: string;
   let dbDir: string;
   let store: CodeVectorStore;
-  let provider: LocalEmbeddingProvider;
+  let provider: MockEmbeddingProvider;
   let splitter: ChunkSplitter;
   let indexer: CodeIndexer;
 
@@ -26,7 +51,7 @@ describe('CodeIndexer', () => {
     store = new CodeVectorStore(dbDir, logger);
     await store.initialize();
 
-    provider = new LocalEmbeddingProvider('test', 64, logger);
+    provider = new MockEmbeddingProvider(64);
     splitter = new ChunkSplitter();
     indexer = new CodeIndexer(store, provider, splitter, logger);
   });

@@ -8,27 +8,15 @@
 
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import inquirer from 'inquirer';
+import { loadEnvironment } from '../../core/config.js';
 import { ConfigError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import type { Result } from '../../core/types.js';
 import { err, ok } from '../../core/types.js';
-import type {
-  AuthMethod,
-  DEFAULT_CONFIG,
-  EXIT_CODES,
-  ProjectInfo,
-  ProjectRegistry,
-} from '../types.js';
-
-/**
- * CLI 옵션 / CLI options
- */
-export interface CliOptions {
-  readonly projectPath: string;
-  readonly flags: Record<string, unknown>;
-}
+import type { AuthMethod, CliOptions, ProjectInfo, ProjectRegistry } from '../types.js';
 
 /**
  * Init 명령어 핸들러 인터페이스 / Init command handler interface
@@ -66,7 +54,10 @@ export interface IInitCommand {
    * @param authMethod - 인증 방식 / Auth method
    * @returns 생성 성공 여부 / Success status
    */
-  createConfigFiles(projectPath: string, authMethod: AuthMethod): Promise<Result<void, ConfigError>>;
+  createConfigFiles(
+    projectPath: string,
+    authMethod: AuthMethod,
+  ): Promise<Result<void, ConfigError>>;
 
   /**
    * 프로젝트를 레지스트리에 등록한다 / Register project to registry
@@ -89,6 +80,9 @@ export interface IInitCommand {
  * Init 명령어 구현 / Init command implementation
  */
 export class InitCommand implements IInitCommand {
+  readonly name = 'init';
+  readonly description = 'Initialize project / 프로젝트 초기화';
+  readonly aliases = ['i'] as const;
   private readonly logger: Logger;
 
   constructor(logger: Logger) {
@@ -107,7 +101,7 @@ export class InitCommand implements IInitCommand {
       this.logger.info('프로젝트 초기화 시작', { projectPath: options.projectPath });
 
       // 1. 프로젝트 경로 설정
-      const projectPath = path.resolve(options.projectPath);
+      const projectPath = path.resolve(options.projectPath ?? '.');
       const adevPath = path.join(projectPath, '.adev');
 
       // 2. 이미 초기화되어 있는지 확인
@@ -250,11 +244,7 @@ export class InitCommand implements IInitCommand {
 
       return ok(undefined);
     } catch (cause) {
-      const error = new ConfigError(
-        'cli_init_mkdir_failed',
-        '디렉토리 생성 실패',
-        cause,
-      );
+      const error = new ConfigError('cli_init_mkdir_failed', '디렉토리 생성 실패', cause);
       this.logger.error('디렉토리 생성 실패', { error });
       return err(error);
     }
@@ -281,6 +271,9 @@ export class InitCommand implements IInitCommand {
         },
         embedding: {
           default: 'xenova-minilm',
+        },
+        testing: {
+          bail: true,
         },
         verification: {
           layer1Model: 'opus',
@@ -312,11 +305,7 @@ export class InitCommand implements IInitCommand {
 
       return ok(undefined);
     } catch (cause) {
-      const error = new ConfigError(
-        'cli_init_config_create_failed',
-        '설정 파일 생성 실패',
-        cause,
-      );
+      const error = new ConfigError('cli_init_config_create_failed', '설정 파일 생성 실패', cause);
       this.logger.error('설정 파일 생성 실패', { error });
       return err(error);
     }
@@ -330,8 +319,7 @@ export class InitCommand implements IInitCommand {
    */
   async registerProject(projectInfo: ProjectInfo): Promise<Result<void, ConfigError>> {
     try {
-      const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? '';
-      const globalAdevDir = path.join(homeDir, '.adev');
+      const globalAdevDir = path.join(homedir(), '.adev');
       const projectsFilePath = path.join(globalAdevDir, 'projects.json');
 
       // ~/.adev/ 디렉토리 생성
@@ -344,7 +332,7 @@ export class InitCommand implements IInitCommand {
         registry = JSON.parse(content) as ProjectRegistry;
       } catch {
         registry = {
-          activeProjectId: undefined,
+          activeProject: null,
           projects: [],
         };
       }
@@ -361,7 +349,7 @@ export class InitCommand implements IInitCommand {
 
       // 새 프로젝트 추가
       const newRegistry: ProjectRegistry = {
-        activeProjectId: projectInfo.id,
+        activeProject: projectInfo.name,
         projects: [...registry.projects, projectInfo],
       };
 
@@ -375,11 +363,7 @@ export class InitCommand implements IInitCommand {
 
       return ok(undefined);
     } catch (cause) {
-      const error = new ConfigError(
-        'cli_init_register_failed',
-        '프로젝트 등록 실패',
-        cause,
-      );
+      const error = new ConfigError('cli_init_register_failed', '프로젝트 등록 실패', cause);
       this.logger.error('프로젝트 등록 실패', { error });
       return err(error);
     }
@@ -393,8 +377,18 @@ export class InitCommand implements IInitCommand {
    */
   async checkEnvVar(authMethod: AuthMethod): Promise<Result<boolean, ConfigError>> {
     try {
+      // WHY: process.env 직접 접근 금지 → core/config.ts의 loadEnvironment() 경유
+      const envResult = loadEnvironment();
+      if (!envResult.ok) {
+        // WHY: 환경변수가 없으면 false 반환 (에러가 아닌 체크 목적)
+        this.logger.debug('환경변수 미설정', { authMethod });
+        return ok(false);
+      }
+
       const envVar = authMethod === 'api-key' ? 'ANTHROPIC_API_KEY' : 'CLAUDE_CODE_OAUTH_TOKEN';
-      const exists = !!process.env[envVar];
+      const exists = authMethod === 'api-key'
+        ? envResult.value.anthropicApiKey !== undefined
+        : envResult.value.claudeCodeOauthToken !== undefined;
 
       this.logger.debug('환경변수 확인', { envVar, exists });
 

@@ -8,6 +8,7 @@
  *     conducts planning/design conversation, and generates Contract.
  */
 
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
@@ -22,8 +23,7 @@ import { ClaudeApi } from '../../layer1/claude-api.js';
 import { ContractBuilder } from '../../layer1/contract-builder.js';
 import { ConversationManager } from '../../layer1/conversation.js';
 import type { ConversationMessage } from '../../layer1/types.js';
-import type { CliCommand, GlobalCliOptions, ProjectInfo } from '../types.js';
-import { randomUUID } from 'node:crypto';
+import type { GlobalCliOptions, ProjectInfo } from '../types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 
@@ -110,7 +110,10 @@ export class StartCommand {
    * @param options - CLI 옵션 / CLI options
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  async execute(_args: readonly string[], options: GlobalCliOptions): Promise<Result<void, AdevError>> {
+  async execute(
+    _args: readonly string[],
+    options: GlobalCliOptions,
+  ): Promise<Result<void, AdevError>> {
     this.logger.info('Layer1 대화 시작 / Starting Layer1 conversation');
 
     // 1. 활성 프로젝트 로드
@@ -150,7 +153,9 @@ export class StartCommand {
    * @param options - CLI 옵션 / CLI options
    * @returns 프로젝트 정보 / Project info
    */
-  private async loadActiveProject(options: GlobalCliOptions): Promise<Result<ProjectInfo, AdevError>> {
+  private async loadActiveProject(
+    options: GlobalCliOptions,
+  ): Promise<Result<ProjectInfo, AdevError>> {
     const projectPath = resolve((options as StartOptions).projectPath ?? '.');
 
     // .adev/ 디렉토리 존재 확인
@@ -321,7 +326,6 @@ export class StartCommand {
         const responseResult = await this.processUserInput(session, userInput);
         if (!responseResult.ok) {
           console.error(`❌ 응답 생성 실패: ${responseResult.error.message}`);
-          continue;
         }
       }
 

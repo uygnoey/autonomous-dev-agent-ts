@@ -25,6 +25,11 @@ export interface SearchInput {
   readonly limit?: number;
 }
 
+/** WHY: MCP input은 unknown이므로 타입 가드로 안전 변환 */
+function isSearchInput(input: unknown): input is SearchInput {
+  return typeof input === 'object' && input !== null && 'query' in input;
+}
+
 /**
  * 웹 검색 출력 / Web search output
  */
@@ -163,16 +168,18 @@ export class SearchExecutor {
   /**
    * MCP 도구 실행 (통합 인터페이스) / Execute MCP tool
    */
-  async executeTool(
-    toolName: string,
-    // biome-ignore lint/suspicious/noExplicitAny: MCP input은 동적이므로 any 허용
-    input: any,
-  ): Promise<Result<SearchOutput>> {
+  async executeTool(toolName: string, input: unknown): Promise<Result<SearchOutput>> {
     this.logger.debug('MCP 도구 실행', { toolName, input });
 
     switch (toolName) {
       case 'web_search': {
-        const searchInput = input as SearchInput;
+        if (!isSearchInput(input)) {
+          return ok({
+            success: false,
+            message: 'query 필드 필수',
+          });
+        }
+        const searchInput = input;
         if (!searchInput.query) {
           return ok({
             success: false,

@@ -198,11 +198,7 @@ export class SystemInfoExecutor {
    * KR: MCP 프로토콜에 따라 도구를 실행하고 결과를 반환한다.
    * EN: Executes tool according to MCP protocol and returns result.
    */
-  async executeTool(
-    toolName: string,
-    // biome-ignore lint/suspicious/noExplicitAny: MCP input은 동적이므로 any 허용
-    input: any,
-  ): Promise<Result<SystemInfoOutput>> {
+  async executeTool(toolName: string, input: unknown): Promise<Result<SystemInfoOutput>> {
     this.logger.debug('MCP 도구 실행', { toolName, input });
 
     switch (toolName) {
@@ -222,7 +218,11 @@ export class SystemInfoExecutor {
       }
 
       case 'sys_disk_usage': {
-        const result = await this.getDiskUsage(input.path);
+        const diskInput =
+          typeof input === 'object' && input !== null && 'path' in input
+            ? (input as { path: string })
+            : { path: '/' };
+        const result = await this.getDiskUsage(diskInput.path);
         if (!result.ok) {
           return ok({
             success: false,
