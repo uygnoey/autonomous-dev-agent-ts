@@ -173,22 +173,28 @@ ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 
 ### 認証
 
-1つの認証方法のみを選択してください:
+クイックインストール方法では、インストール中に認証を設定できます。手動で設定するか、後で変更する場合:
+
+`~/.adev/.env`ファイルを作成または編集してください:
 
 #### 方法1: APIキー
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
+
+APIキーの取得: https://console.anthropic.com/settings/keys
 
 #### 方法2: サブスクリプション (Pro/Max)
 
 ```bash
 claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+echo "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
 
-> **注意**: 1つの環境変数のみを設定してください。両方を同時に設定しないでください。
+> **注意**: `~/.adev/.env`に1つの認証方法のみを設定してください。両方を同時に設定しないでください。
 
 ---
 

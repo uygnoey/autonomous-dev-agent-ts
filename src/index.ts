@@ -6,15 +6,72 @@
  * KR: adev CLI 애플리케이션의 진입점. process.argv를 받아 CommandRouter에 전달하고,
  *     종료 코드를 process.exit()로 반환한다. 글로벌 에러 핸들러를 등록하여
  *     uncaught exception, unhandled rejection, SIGINT를 처리한다.
+ *     시작 시 ~/.adev/.env 파일을 로드하여 adev 전용 인증 정보를 사용한다.
  * EN: Entry point for adev CLI application. Receives process.argv, passes to CommandRouter,
  *     and returns exit code via process.exit(). Registers global error handlers for
  *     uncaught exceptions, unhandled rejections, and SIGINT.
+ *     Loads ~/.adev/.env file on startup for adev-specific authentication.
  *
  * @note process.exit()은 이 파일에서만 사용 / process.exit() is ONLY allowed in this file
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { CliApp } from './cli/index.js';
 import { ConsoleLogger } from './core/logger.js';
+
+// ── .env 파일 로드 / Load .env file ─────────────────────────────
+
+/**
+ * adev 전용 .env 파일 로드 / Load adev-specific .env file
+ *
+ * @description
+ * KR: ~/.adev/.env 파일을 읽어 환경변수로 설정한다.
+ *     파일이 없거나 읽기 실패 시 무시 (선택적 설정).
+ * EN: Reads ~/.adev/.env file and sets environment variables.
+ *     Ignores if file does not exist or fails to read (optional config).
+ */
+async function loadAdevEnv(): Promise<void> {
+  const envPath = join(homedir(), '.adev', '.env');
+
+  try {
+    const envFile = Bun.file(envPath);
+    const exists = await envFile.exists();
+
+    if (!exists) {
+      return; // .env 파일이 없으면 무시 (선택적)
+    }
+
+    const content = await envFile.text();
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // 빈 줄이나 주석 무시
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+
+      // KEY=VALUE 파싱
+      const equalIndex = trimmed.indexOf('=');
+      if (equalIndex === -1) {
+        continue;
+      }
+
+      const key = trimmed.slice(0, equalIndex).trim();
+      const value = trimmed.slice(equalIndex + 1).trim();
+
+      // 이미 환경변수가 설정되어 있으면 덮어쓰지 않음 (우선순위: 실제 환경변수 > .env)
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+  } catch (error: unknown) {
+    // .env 파일 로드 실패는 무시 (선택적 설정이므로)
+    // 에러가 있어도 계속 진행
+  }
+}
 
 // ── 글로벌 에러 핸들러 / Global error handlers ─────────────────
 
@@ -64,13 +121,17 @@ process.on('SIGINT', () => {
  *
  * @description
  * KR: CLI 애플리케이션을 초기화하고 실행한다.
- *     Logger 초기화 → CliApp 생성 → app.run() 실행 → 종료 코드 반환
+ *     .env 로드 → Logger 초기화 → CliApp 생성 → app.run() 실행 → 종료 코드 반환
  * EN: Initializes and runs the CLI application.
- *     Initialize Logger → Create CliApp → Execute app.run() → Return exit code
+ *     Load .env → Initialize Logger → Create CliApp → Execute app.run() → Return exit code
  *
  * @returns 정상 종료 시 0, 에러 시 종료 코드 / 0 on success, exit code on error
  */
 async function main(): Promise<void> {
+  // 0. adev 전용 .env 파일 로드 / Load adev-specific .env file
+  // WHY: ~/.adev/.env에서 ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN 읽기
+  await loadAdevEnv();
+
   // 1. Logger 초기화 / Initialize logger
   const logger = new ConsoleLogger('info');
 

@@ -173,22 +173,28 @@ ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 
 ### 인증
 
-하나의 인증 방법만 선택하세요:
+빠른 설치 방법을 사용하면 설치 중에 인증을 설정할 수 있습니다. 수동으로 설정하거나 나중에 변경하려면:
+
+`~/.adev/.env` 파일을 생성하거나 편집하세요:
 
 #### 방법 1: API 키
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
+
+API 키는 여기에서 발급: https://console.anthropic.com/settings/keys
 
 #### 방법 2: 구독 (Pro/Max)
 
 ```bash
 claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+echo "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
 
-> **참고**: 하나의 환경 변수만 설정하세요. 둘 다 동시에 설정하지 마세요.
+> **참고**: `~/.adev/.env`에 하나의 인증 방법만 설정하세요. 둘 다 동시에 설정하지 마세요.
 
 ---
 

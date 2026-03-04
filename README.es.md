@@ -173,22 +173,28 @@ ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 
 ### Autenticación
 
-Elija UN método de autenticación:
+El método de instalación rápida le solicita configurar la autenticación durante la instalación. Si necesita configurarla manualmente o cambiarla más tarde:
+
+Cree o edite el archivo `~/.adev/.env`:
 
 #### Método 1: Clave API
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
+
+Obtenga su clave API en: https://console.anthropic.com/settings/keys
 
 #### Método 2: Suscripción (Pro/Max)
 
 ```bash
 claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+echo "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
 
-> **Nota**: Solo configure UNA variable de entorno. No configure ambas simultáneamente.
+> **Nota**: Solo configure UN método de autenticación en `~/.adev/.env`. No configure ambos simultáneamente.
 
 ---
 

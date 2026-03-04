@@ -173,22 +173,28 @@ ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 
 ### Authentication
 
-Choose ONE authentication method:
+The Quick Install method prompts you to configure authentication during installation. If you need to set it up manually or change it later:
+
+Create or edit `~/.adev/.env` file:
 
 #### Method 1: API Key
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
+
+Get your API key from: https://console.anthropic.com/settings/keys
 
 #### Method 2: Subscription (Pro/Max)
 
 ```bash
 claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+echo "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..." > ~/.adev/.env
+chmod 600 ~/.adev/.env
 ```
 
-> **Note**: Only set ONE environment variable. Do not set both simultaneously.
+> **Note**: Only set ONE authentication method in `~/.adev/.env`. Do not set both simultaneously.
 
 ---
 

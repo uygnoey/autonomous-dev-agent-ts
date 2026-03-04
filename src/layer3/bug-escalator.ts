@@ -13,7 +13,7 @@
  */
 
 import { type AdevError, AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
+import { ConsoleLogger, type Logger } from '../core/logger.js';
 import type { Phase, Result } from '../core/types.js';
 import { err, ok } from '../core/types.js';
 import type { FailureHandler } from '../layer2/failure-handler.js';
@@ -234,7 +234,8 @@ export class BugEscalator implements IBugEscalator {
       this.teamLeader = teamLeader as TeamLeader;
       this.failureHandler = failureHandler as FailureHandler;
       this.integrationTester = integrationTester as IntegrationTester;
-      this.logger = logger?.child({ module: 'bug-escalator' });
+      // WHY: logger가 없으면 기본 ConsoleLogger 생성
+      this.logger = logger ? logger.child({ module: 'bug-escalator' }) : new ConsoleLogger('info');
     }
   }
 
