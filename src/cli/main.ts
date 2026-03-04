@@ -10,6 +10,8 @@
 
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+// WHY: package.json에서 버전을 동적으로 읽어 단일 소스 유지
+import packageJson from '../../package.json' with { type: 'json' };
 import { isAdevError } from '../core/errors.js';
 import type { Logger } from '../core/logger.js';
 import type { CliCommandHandler, CliResult } from './types.js';
@@ -22,7 +24,7 @@ export type { ParsedArgs, RoutableCommand } from './command-router.js';
 /**
  * CLI 애플리케이션 버전 / CLI application version
  */
-const CLI_VERSION = '0.1.0';
+const CLI_VERSION = packageJson.version;
 
 /**
  * CLI 애플리케이션 인터페이스 / CLI application interface

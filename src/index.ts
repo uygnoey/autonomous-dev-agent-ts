@@ -151,7 +151,14 @@ async function main(): Promise<void> {
   const initCmd = new InitCommand(logger);
   app.registerCommand('init', {
     execute: async (options) => {
-      const result = await initCmd.execute([], options as Parameters<typeof initCmd.execute>[1]);
+      const parsed = options as Record<string, unknown>;
+      // WHY: yargs positional 이름 'path'를 CliOptions의 'projectPath'로 매핑
+      const projectPath = parsed.path as string | undefined;
+      const mergedOptions = { ...parsed, projectPath };
+      const result = await initCmd.execute(
+        [],
+        mergedOptions as Parameters<typeof initCmd.execute>[1],
+      );
       if (result.ok) {
         return { success: true, message: 'Project initialized successfully.', exitCode: 0 };
       }
