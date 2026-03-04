@@ -60,11 +60,13 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/
+          path: artifacts/
 
-      - name: Flatten artifacts
+      - name: Prepare release files
         run: |
-          find dist/ -type f -name 'adev-*' -exec mv {} dist/ \;
+          mkdir -p dist/
+          find artifacts/ -type f -name 'adev-*' -exec cp {} dist/ \;
+          ls -la dist/
 
       - name: Parse version info
         id: version
