@@ -1,0 +1,24 @@
+# Development
+src/
+tests/
+.claude/
+claudedocs/
+
+# Config
+.adev/
+.vscode/
+tsconfig.json
+biome.json
+
+# Docs (keep only README in package)
+docs/
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+node_modules/
+*.log

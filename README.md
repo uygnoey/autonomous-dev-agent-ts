@@ -115,34 +115,61 @@ Built on the Claude Agent SDK with a three-layer architecture, it manages the en
 
 ## 3. Installation
 
-### Prerequisites
+### Quick Install (Recommended)
+
+**One-line install** (automatically installs Bun if needed):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/uygnoey/autonomous-dev-agent-ts/main/install.sh | bash
+```
+
+After installation:
+```bash
+# Restart your shell or reload PATH
+source ~/.zshrc  # or ~/.bashrc
+
+# Run adev
+adev
+```
+
+### Alternative: Manual Installation
+
+<details>
+<summary>Click to expand manual installation steps</summary>
+
+#### Prerequisites
 
 - **Bun runtime** (≥1.1.0) - Fast JavaScript/TypeScript runtime
 - **Anthropic API key** OR **Claude Pro/Max Subscription**
 
-### Install Bun
+#### Install Bun
 
 ```bash
 # macOS / Linux
-curl -fsSL https://bun.sh/install | bash
-
-# Windows (WSL)
 curl -fsSL https://bun.sh/install | bash
 
 # Verify installation
 bun --version
 ```
 
-### Clone and Setup
+#### Clone and Setup
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/autonomous-dev-agent.git
-cd autonomous-dev-agent
+git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git
+cd autonomous-dev-agent-ts
 
 # Install dependencies
 bun install
+
+# Build
+bun run build
+
+# Optional: Add to PATH
+ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 ```
+
+</details>
 
 ### Authentication
 

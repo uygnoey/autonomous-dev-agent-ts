@@ -6,6 +6,35 @@
   "bin": {
     "adev": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uygnoey/autonomous-dev-agent-ts.git"
+  },
+  "homepage": "https://github.com/uygnoey/autonomous-dev-agent-ts#readme",
+  "bugs": {
+    "url": "https://github.com/uygnoey/autonomous-dev-agent-ts/issues"
+  },
+  "author": "uygnoey",
+  "license": "MIT",
+  "keywords": [
+    "autonomous",
+    "agent",
+    "claude",
+    "anthropic",
+    "rag",
+    "vector-db",
+    "lancedb",
+    "development",
+    "automation",
+    "ai",
+    "typescript",
+    "bun"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir ./dist --target bun",
