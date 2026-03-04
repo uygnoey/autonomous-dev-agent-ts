@@ -115,34 +115,61 @@ Claude Agent SDKを基盤とした3層アーキテクチャで構築され、要
 
 ## 3. インストール
 
-### 前提条件
+### クイックインストール（推奨）
+
+**ワンラインインストール** (Bunがない場合は自動インストール):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/uygnoey/autonomous-dev-agent-ts/main/install.sh | bash
+```
+
+インストール後:
+```bash
+# シェル再起動またはPATHリロード
+source ~/.zshrc  # または ~/.bashrc
+
+# adev実行
+adev
+```
+
+### 代替: 手動インストール
+
+<details>
+<summary>手動インストール手順を表示</summary>
+
+#### 前提条件
 
 - **Bunランタイム** (≥1.1.0) - 高速JavaScript/TypeScriptランタイム
 - **Anthropic APIキー** または **Claude Pro/Maxサブスクリプション**
 
-### Bunのインストール
+#### Bunのインストール
 
 ```bash
 # macOS / Linux
-curl -fsSL https://bun.sh/install | bash
-
-# Windows (WSL)
 curl -fsSL https://bun.sh/install | bash
 
 # インストール確認
 bun --version
 ```
 
-### クローンとセットアップ
+#### クローンとセットアップ
 
 ```bash
 # リポジトリクローン
-git clone https://github.com/yourusername/autonomous-dev-agent.git
-cd autonomous-dev-agent
+git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git
+cd autonomous-dev-agent-ts
 
 # 依存関係インストール
 bun install
+
+# ビルド
+bun run build
+
+# オプション: PATHに追加
+ln -s $(pwd)/dist/index.js /usr/local/bin/adev
 ```
+
+</details>
 
 ### 認証
 
