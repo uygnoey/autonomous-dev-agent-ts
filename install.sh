@@ -43,7 +43,7 @@ else
         echo "  2) Keep settings — preserve existing data, only install/update code"
         echo "  3) Cancel"
         echo ""
-        read -p "Enter choice [1-3]: " install_choice
+        printf "Enter choice [1-3]: "; read install_choice </dev/tty
 
         case $install_choice in
             1)
@@ -128,7 +128,7 @@ echo "  1) Anthropic API Key"
 echo "  2) Claude Code OAuth Token (Pro/Max subscription)"
 echo "  3) Skip (configure later)"
 echo ""
-read -p "Enter choice [1-3]: " auth_choice
+printf "Enter choice [1-3]: "; read auth_choice </dev/tty
 
 ENV_FILE="$INSTALL_DIR/.env"
 
@@ -137,7 +137,7 @@ case $auth_choice in
         echo ""
         echo "📘 Get your API key from: https://console.anthropic.com/settings/keys"
         echo ""
-        read -p "Enter your Anthropic API Key (sk-ant-...): " api_key
+        printf "Enter your Anthropic API Key (sk-ant-...): "; read api_key </dev/tty
         if [ -n "$api_key" ]; then
             # Create or update .env file
             if [ -f "$ENV_FILE" ]; then
@@ -162,7 +162,7 @@ case $auth_choice in
         echo "   3. Follow the browser authentication flow"
         echo "   4. Copy the token (sk-ant-oat01-...)"
         echo ""
-        read -p "Enter your Claude Code OAuth Token (sk-ant-oat01-...): " oauth_token
+        printf "Enter your Claude Code OAuth Token (sk-ant-oat01-...): "; read oauth_token </dev/tty
         if [ -n "$oauth_token" ]; then
             # Create or update .env file
             if [ -f "$ENV_FILE" ]; then
