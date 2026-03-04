@@ -16,7 +16,7 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             bun-target: bun-darwin-arm64
-          - os: macos-13
+          - os: macos-latest
             target: darwin-x64
             bun-target: bun-darwin-x64
           - os: ubuntu-latest
@@ -53,6 +53,7 @@ jobs:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
+    if: always() && !cancelled()
     permissions:
       contents: write
 
