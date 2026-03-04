@@ -1,0 +1,34 @@
+{
+  "name": "autonomous-dev-agent",
+  "version": "0.1.0",
+  "description": "Claude Code Skills + RAG autonomous development agent",
+  "type": "module",
+  "bin": {
+    "adev": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "test:unit": "bun test tests/unit/",
+    "test:module": "bun test tests/module/",
+    "test:e2e": "bun test tests/e2e/",
+    "typecheck": "bunx tsc --noEmit",
+    "lint": "bunx biome check src/",
+    "format": "bunx biome format src/ --write",
+    "check": "bun run typecheck && bun run lint && bun run test"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^0.2.63",
+    "@lancedb/lancedb": "^0.15.0",
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "typescript": "^5.7.0",
+    "@types/bun": "latest"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+*.lock
+.DS_Store
+*.log
+coverage/
+.adev/data/
+.idea/
