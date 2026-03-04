@@ -82,6 +82,16 @@ const unstable_v2_prompt = async (
  * KR: 세션 생성에 필요한 의존성과 옵션을 담는다.
  * EN: Holds dependencies and options needed for session creation.
  */
+/** V2 Session 생성 팩토리 타입 / Session factory type for dependency injection */
+export type V2SessionFactory = (options: {
+  readonly systemPrompt: string;
+  readonly maxTurns?: number;
+  readonly temperature?: number;
+  readonly model?: string;
+  readonly tools?: string[];
+  readonly environment?: Record<string, string>;
+}) => V2Session;
+
 export interface V2SessionExecutorOptions {
   /** 인증 공급자 / Authentication provider */
   readonly authProvider: AuthProvider;
@@ -93,6 +103,8 @@ export interface V2SessionExecutorOptions {
     readonly temperature?: number;
     readonly model?: string;
   };
+  /** 세션 팩토리 (선택, 테스트 시 주입) / Session factory (optional, for testing) */
+  readonly sessionFactory?: V2SessionFactory;
 }
 
 /**
@@ -125,12 +137,15 @@ export class V2SessionExecutor implements AgentExecutor {
   private readonly logger: Logger;
   private readonly defaultOptions: V2SessionExecutorOptions['defaultOptions'];
   private readonly activeSessions: Map<string, V2Session>;
+  private readonly sessionFactory: V2SessionFactory;
 
   constructor(options: V2SessionExecutorOptions) {
     this.authProvider = options.authProvider;
     this.logger = options.logger.child({ module: 'V2SessionExecutor' });
     this.defaultOptions = options.defaultOptions;
     this.activeSessions = new Map();
+    // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 SDK 스텁 사용
+    this.sessionFactory = options.sessionFactory ?? unstable_v2_createSession;
   }
 
   /**
@@ -332,7 +347,7 @@ export class V2SessionExecutor implements AgentExecutor {
         environment: env,
       };
 
-      const session = unstable_v2_createSession(sessionOptions);
+      const session = this.sessionFactory(sessionOptions);
       this.logger.debug('Session created', {
         agentName: config.name,
         phase: config.phase,

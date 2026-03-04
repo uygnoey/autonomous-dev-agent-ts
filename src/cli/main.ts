@@ -137,11 +137,8 @@ export class CliApp implements ICliApp {
           type: 'boolean',
           description: 'Show help',
         })
-        .option('version', {
-          alias: 'V',
-          type: 'boolean',
-          description: 'Show version',
-        })
+        .version(CLI_VERSION)
+        .alias('V', 'version')
         .option('no-color', {
           type: 'boolean',
           description: 'Disable colors',

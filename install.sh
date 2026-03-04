@@ -28,8 +28,63 @@ if [ -d ".git" ]; then
     echo "🔄 Updating existing installation..."
     git pull origin main
 else
-    echo "📦 Cloning repository..."
-    git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git .
+    # Check if adev was previously installed (has data files)
+    HAS_EXISTING_DATA=false
+    if [ "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+        HAS_EXISTING_DATA=true
+    fi
+
+    if [ "$HAS_EXISTING_DATA" = true ]; then
+        echo ""
+        echo "⚠️  Existing adev data found in $INSTALL_DIR"
+        echo ""
+        echo "Choose installation mode:"
+        echo "  1) Fresh install — overwrite everything (your projects.json will be backed up)"
+        echo "  2) Keep settings — preserve existing data, only install/update code"
+        echo "  3) Cancel"
+        echo ""
+        read -p "Enter choice [1-3]: " install_choice
+
+        case $install_choice in
+            1)
+                echo "🗑️  Backing up existing data..."
+                BACKUP_DIR="${INSTALL_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+                mv "$INSTALL_DIR" "$BACKUP_DIR"
+                mkdir -p "$INSTALL_DIR"
+                cd "$INSTALL_DIR"
+                echo "📦 Cloning repository..."
+                git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git .
+                # Restore only projects.json (user data)
+                if [ -f "$BACKUP_DIR/projects.json" ]; then
+                    cp "$BACKUP_DIR/projects.json" "$INSTALL_DIR/projects.json"
+                    echo "✅ projects.json restored from backup"
+                fi
+                echo "📁 Backup saved at: $BACKUP_DIR"
+                ;;
+            2)
+                echo "🔒 Keeping existing settings..."
+                # Use a temp dir, then copy only code files
+                TEMP_DIR=$(mktemp -d)
+                git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git "$TEMP_DIR"
+                # Copy code files, skip user data files
+                rsync -a --exclude='.env' --exclude='projects.json' --exclude='.adev/' \
+                    "$TEMP_DIR/" "$INSTALL_DIR/"
+                rm -rf "$TEMP_DIR"
+                echo "✅ Code updated, settings preserved"
+                ;;
+            3)
+                echo "❌ Installation cancelled."
+                exit 0
+                ;;
+            *)
+                echo "⚠️  Invalid choice, cancelling installation."
+                exit 1
+                ;;
+        esac
+    else
+        echo "📦 Cloning repository..."
+        git clone https://github.com/uygnoey/autonomous-dev-agent-ts.git .
+    fi
 fi
 
 echo "📦 Installing dependencies..."

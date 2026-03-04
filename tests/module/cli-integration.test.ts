@@ -30,12 +30,15 @@ import {
 
 const logger: Logger = new ConsoleLogger('error');
 let tmpDir: string;
+let registryDir: string;
 
 // ── 테스트 ────────────────────────────────────────────────────────
 
 describe('CLI 통합 / CLI integration', () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'adev-cli-test-'));
+    registryDir = join(tmpDir, '.adev-registry');
+    await import('node:fs/promises').then((fs) => fs.mkdir(registryDir, { recursive: true }));
   });
 
   afterEach(async () => {
@@ -45,7 +48,7 @@ describe('CLI 통합 / CLI integration', () => {
   it('CommandRouter에 4개 명령 등록 후 각각 라우팅 확인', () => {
     const router = new CommandRouter(logger);
 
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
     router.register(new ConfigCommand(logger));
     router.register(new ProjectCommand(logger));
     router.register(new StartCommand(logger));
@@ -91,7 +94,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('CommandRouter 빈 인자 시 에러', () => {
     const router = new CommandRouter(logger);
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
 
     const result = router.parse([]);
     expect(result.ok).toBe(false);
@@ -101,7 +104,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('CommandRouter 미등록 명령 시 에러', async () => {
     const router = new CommandRouter(logger);
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
 
     const result = await router.execute(['unknown-cmd']);
     expect(result.ok).toBe(false);
@@ -111,7 +114,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('CommandRouter parse가 플래그와 위치 인자를 올바르게 분리', () => {
     const router = new CommandRouter(logger);
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
 
     const parsed = router.parse(['init', '--verbose', '--project-path=/tmp/test', 'extra-arg']);
     expect(parsed.ok).toBe(true);
@@ -124,7 +127,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('CommandRouter getHelp가 등록된 명령 목록 포함', () => {
     const router = new CommandRouter(logger);
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
     router.register(new ConfigCommand(logger));
 
     const help = router.getHelp();
@@ -134,7 +137,7 @@ describe('CLI 통합 / CLI integration', () => {
   });
 
   it('InitCommand가 .adev/ 디렉토리 구조를 생성', async () => {
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
 
     const result = await initCmd.execute([], {
       projectPath: tmpDir,
@@ -166,7 +169,7 @@ describe('CLI 통합 / CLI integration', () => {
   });
 
   it('InitCommand 중복 초기화 시 에러', async () => {
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
 
     // 첫 번째 초기화 / First init
     const first = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
@@ -181,7 +184,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand list가 설정 로드 연동', async () => {
     // WHY: 먼저 init으로 config.json 생성
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     await initCmd.execute([], { projectPath: tmpDir, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
@@ -190,7 +193,7 @@ describe('CLI 통합 / CLI integration', () => {
   });
 
   it('ConfigCommand get/set으로 설정 값 읽기/쓰기', async () => {
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     await initCmd.execute([], { projectPath: tmpDir, flags: {} });
 
     const configCmd = new ConfigCommand(logger);

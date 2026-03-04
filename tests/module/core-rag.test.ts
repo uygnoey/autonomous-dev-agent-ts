@@ -8,7 +8,7 @@
  *     and validates EmbeddingProvider → VectorStore → search pipeline.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -31,11 +31,13 @@ let tmpDir: string;
 // ── 테스트 ────────────────────────────────────────────────────────
 
 describe('core ↔ rag 통합 / core ↔ rag integration', () => {
-  beforeEach(async () => {
+  beforeAll(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'adev-rag-test-'));
   });
 
-  afterEach(async () => {
+  // WHY: afterAll로 변경 — LanceDB native 모듈이 JS GC 전에 파일을 닫을 시간을 확보
+  // (afterEach에서 즉시 삭제하면 아직 열린 LanceDB 연결이 Bun C++ exception 유발)
+  afterAll(async () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 

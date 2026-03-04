@@ -39,7 +39,7 @@ afterEach(async () => {
 describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
   it('init → .adev/ 디렉토리와 config.json 생성', async () => {
     const projectPath = join(tmpDir, 'proj-init');
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
 
     const result = await initCmd.execute([], {
       ...DEFAULT_OPTIONS,
@@ -64,7 +64,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('init 중복 실행 시 에러 반환', async () => {
     const projectPath = join(tmpDir, 'proj-dup');
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
 
     await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
     const result = await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
@@ -77,7 +77,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('config list → 기본 설정 확인', async () => {
     const projectPath = join(tmpDir, 'proj-cfg');
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     const configCmd = new ConfigCommand(logger);
 
     await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
@@ -92,7 +92,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('config set / get → 값 수정 후 조회', async () => {
     const projectPath = join(tmpDir, 'proj-set');
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     const configCmd = new ConfigCommand(logger);
 
     await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
@@ -117,7 +117,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('config get → 존재하지 않는 키 에러', async () => {
     const projectPath = join(tmpDir, 'proj-nokey');
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     const configCmd = new ConfigCommand(logger);
 
     await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
@@ -211,7 +211,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('CommandRouter → 명령 라우팅 및 별칭 처리', async () => {
     const router = new CommandRouter(logger);
-    const initCmd = new InitCommand(logger);
+    const initCmd = new InitCommand(logger, registryDir);
     router.register(initCmd);
 
     const projectPath = join(tmpDir, 'proj-router');
@@ -226,7 +226,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
 
   it('CommandRouter → 알 수 없는 명령 에러', async () => {
     const router = new CommandRouter(logger);
-    router.register(new InitCommand(logger));
+    router.register(new InitCommand(logger, registryDir));
 
     const result = await router.execute(['unknown-cmd']);
     expect(result.ok).toBe(false);

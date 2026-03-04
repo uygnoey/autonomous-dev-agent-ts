@@ -84,9 +84,11 @@ export class InitCommand implements IInitCommand {
   readonly description = 'Initialize project / 프로젝트 초기화';
   readonly aliases = ['i'] as const;
   private readonly logger: Logger;
+  private readonly registryDir: string | undefined;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, registryDir?: string) {
     this.logger = logger.child({ module: 'cli-init' });
+    this.registryDir = registryDir;
   }
 
   /**
@@ -335,7 +337,7 @@ export class InitCommand implements IInitCommand {
    */
   async registerProject(projectInfo: ProjectInfo): Promise<Result<void, ConfigError>> {
     try {
-      const globalAdevDir = path.join(homedir(), '.adev');
+      const globalAdevDir = this.registryDir ?? path.join(homedir(), '.adev');
       const projectsFilePath = path.join(globalAdevDir, 'projects.json');
 
       // ~/.adev/ 디렉토리 생성

@@ -18,12 +18,15 @@ function makeOptions(projectPath: string): CliOptions {
 
 describe('InitCommand', () => {
   let tempDir: string;
+  let registryDir: string;
   let originalApiKey: string | undefined;
   let originalOauthToken: string | undefined;
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `adev-init-test-${crypto.randomUUID()}`);
+    registryDir = join(tempDir, '.adev-registry');
     await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
 
     // WHY: loadEnvironment가 에러를 반환하지 않도록 최소 인증 환경 설정
     originalApiKey = process.env['ANTHROPIC_API_KEY'];
@@ -48,7 +51,7 @@ describe('InitCommand', () => {
   });
 
   it('.adev/ 디렉토리 구조를 생성한다', async () => {
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
     const result = await cmd.execute([], makeOptions(tempDir));
 
     expect(result.ok).toBe(true);
@@ -71,7 +74,7 @@ describe('InitCommand', () => {
   });
 
   it('config.json에 기본 설정을 작성한다', async () => {
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
     await cmd.execute([], makeOptions(tempDir));
 
     const configPath = resolve(tempDir, '.adev', 'config.json');
@@ -84,7 +87,7 @@ describe('InitCommand', () => {
   });
 
   it('이미 초기화된 디렉토리에서는 에러를 반환한다', async () => {
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
 
     // 첫 번째 초기화
     const firstResult = await cmd.execute([], makeOptions(tempDir));
@@ -99,7 +102,7 @@ describe('InitCommand', () => {
   });
 
   it('읽기 전용 경로에서 디렉토리 생성 실패 시 에러를 반환한다', async () => {
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
     // WHY: 존재하지 않는 중첩 경로에 쓰기 시도하면 OS에서 거부한다
     const badPath = '/nonexistent_root_dir/deep/nested/path';
     const result = await cmd.execute([], makeOptions(badPath));
@@ -111,7 +114,7 @@ describe('InitCommand', () => {
   });
 
   it('projectPath가 없으면 현재 디렉토리(.)를 사용한다', async () => {
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
     // WHY: projectPath를 명시적으로 지정하여 현재 디렉토리 대신 tempDir 사용
     //      실제로 '.'가 resolve되는지는 parse 레벨에서 테스트
     const result = await cmd.execute([], makeOptions(tempDir));
@@ -122,7 +125,7 @@ describe('InitCommand', () => {
     delete process.env['ANTHROPIC_API_KEY'];
     delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
 
-    const cmd = new InitCommand(logger);
+    const cmd = new InitCommand(logger, registryDir);
     const result = await cmd.execute([], makeOptions(tempDir));
 
     // WHY: 인증 미설정은 경고만 출력하고 초기화 자체는 성공해야 한다

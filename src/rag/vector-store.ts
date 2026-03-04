@@ -105,6 +105,14 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
   ) {}
 
   /**
+   * LanceDB 연결 해제 / Close LanceDB connection
+   */
+  async close(): Promise<void> {
+    this.table = null;
+    this.db = null;
+  }
+
+  /**
    * LanceDB 연결 및 테이블 초기화 / Initialize LanceDB connection and table
    *
    * @returns 성공 시 ok(void), 실패 시 err(RagError)
