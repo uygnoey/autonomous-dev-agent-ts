@@ -101,7 +101,23 @@ export class InitCommand implements IInitCommand {
       this.logger.info('프로젝트 초기화 시작', { projectPath: options.projectPath });
 
       // 1. 프로젝트 경로 설정
-      const projectPath = path.resolve(options.projectPath ?? '.');
+      // WHY: 기본 경로를 ~/adevProjects로 설정하여 홈 디렉토리에 프로젝트를 모아 관리
+      const defaultProjectPath = path.join(homedir(), 'adevProjects');
+      const projectPath = path.resolve(options.projectPath ?? defaultProjectPath);
+
+      // WHY: 프로젝트 경로가 존재하지 않으면 자동 생성
+      try {
+        await fs.mkdir(projectPath, { recursive: true });
+      } catch (mkdirCause) {
+        const mkdirError = new ConfigError(
+          'cli_init_mkdir_failed',
+          `프로젝트 디렉토리 생성 실패: ${projectPath}`,
+          mkdirCause,
+        );
+        this.logger.error('프로젝트 디렉토리 생성 실패', { projectPath });
+        return err(mkdirError);
+      }
+
       const adevPath = path.join(projectPath, '.adev');
 
       // 2. 이미 초기화되어 있는지 확인

@@ -101,8 +101,9 @@ export class CliApp implements ICliApp {
         return EXIT_CODES.SUCCESS;
       }
 
-      // WHY: 전역 옵션 먼저 확인
-      if (args.includes('--help') || args.includes('-h')) {
+      // WHY: 전역 옵션 먼저 확인 (인자가 --help / -h만 있을 때만 전역 도움말 표시)
+      // WHY: `adev init --help` 등은 yargs가 명령어별 도움말을 처리하도록 통과시킨다.
+      if (args.length === 1 && (args[0] === '--help' || args[0] === '-h')) {
         this.showHelp();
         return EXIT_CODES.SUCCESS;
       }
@@ -114,10 +115,18 @@ export class CliApp implements ICliApp {
 
       // WHY: yargs로 명령어 파싱
       const parsed = await yargs(args)
-        .command('init', 'Initialize project', {})
-        .command('start', 'Start Layer1 conversation', {})
-        .command('config <sub>', 'Manage configuration', {})
-        .command('project <sub>', 'Manage projects', {})
+        .command('init [path]', 'Initialize project', (y) =>
+          y.positional('path', { type: 'string', describe: 'Project path' }),
+        )
+        .command('start [feature]', 'Start Layer1 conversation', (y) =>
+          y.positional('feature', { type: 'string', describe: 'Feature description' }),
+        )
+        .command('config <sub>', 'Manage configuration', (y) =>
+          y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
+        )
+        .command('project <sub>', 'Manage projects', (y) =>
+          y.positional('sub', { type: 'string', describe: 'Subcommand (add/remove/list/switch/update)' }),
+        )
         .option('verbose', {
           alias: 'v',
           type: 'boolean',
@@ -252,7 +261,7 @@ adev - Claude Code Agent Development CLI
   adev project list
 
 문서 / Documentation:
-  https://github.com/your-repo/autonomous-dev-agent
+  https://github.com/uygnoey/autonomous-dev-agent-ts
 `;
 
     console.log(help.trim());

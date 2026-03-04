@@ -18,6 +18,11 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CliApp } from './cli/index.js';
+import { InitCommand } from './cli/commands/init.js';
+import { StartCommand } from './cli/commands/start.js';
+import { ConfigCommand } from './cli/commands/config.js';
+import { ProjectCommand } from './cli/commands/project.js';
+import type { CliCommandHandler, CliResult } from './cli/types.js';
 import { ConsoleLogger } from './core/logger.js';
 
 // ── .env 파일 로드 / Load .env file ─────────────────────────────
@@ -138,11 +143,69 @@ async function main(): Promise<void> {
   // 2. CliApp 생성 / Create CliApp
   const app = new CliApp(logger);
 
-  // 3. CLI 실행 (process.argv 전달) / Execute CLI (pass process.argv)
+  // 3. 명령어 핸들러 등록 / Register command handlers
+  // WHY: CliApp은 명령어 핸들러가 등록되어야 명령어를 실행할 수 있다.
+  //       각 Command 클래스의 execute(args, options) 시그니처를
+  //       CliCommandHandler의 execute(options) 시그니처로 어댑팅한다.
+  const initCmd = new InitCommand(logger);
+  app.registerCommand('init', {
+    execute: async (options) => {
+      const result = await initCmd.execute([], options as Parameters<typeof initCmd.execute>[1]);
+      if (result.ok) {
+        return { success: true, message: 'Project initialized successfully.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => initCmd.help(),
+  } satisfies CliCommandHandler);
+
+  const startCmd = new StartCommand(logger);
+  app.registerCommand('start', {
+    execute: async (options) => {
+      const result = await startCmd.execute([], options);
+      if (result.ok) {
+        return { success: true, message: 'Session completed.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => 'adev start - Start Layer1 conversation',
+  } satisfies CliCommandHandler);
+
+  const configCmd = new ConfigCommand(logger);
+  app.registerCommand('config', {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const sub = parsed['sub'] as string | undefined;
+      const args = sub ? [sub] : [];
+      const result = await configCmd.execute(args, options);
+      if (result.ok) {
+        return { success: true, message: 'Config operation completed.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => 'adev config <sub> - Manage configuration (get/set/list/reset)',
+  } satisfies CliCommandHandler);
+
+  const projectCmd = new ProjectCommand(logger);
+  app.registerCommand('project', {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const sub = parsed['sub'] as string | undefined;
+      const args = sub ? [sub] : [];
+      const result = await projectCmd.execute(args, options as Parameters<typeof projectCmd.execute>[1]);
+      if (result.ok) {
+        return { success: true, message: 'Project operation completed.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => 'adev project <sub> - Manage projects (add/remove/list/switch/update)',
+  } satisfies CliCommandHandler);
+
+  // 4. CLI 실행 (process.argv 전달) / Execute CLI (pass process.argv)
   // WHY: process.argv를 그대로 전달 (CliApp 내부에서 hideBin 처리)
   const exitCode = await app.run(process.argv);
 
-  // 4. 종료 코드로 프로세스 종료 / Exit process with exit code
+  // 5. 종료 코드로 프로세스 종료 / Exit process with exit code
   process.exit(exitCode);
 }
 
