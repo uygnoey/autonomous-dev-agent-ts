@@ -39,9 +39,10 @@ case "$OS" in
 esac
 
 # ── 최신 버전 조회 / Get latest version ───────────────────────────
+# WHY: /releases/latest는 prerelease를 반환 안 함 → /releases 리스트에서 첫 번째 사용
 echo "🔍 Checking latest version..."
-LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-    | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
 
 if [ -z "$LATEST" ]; then
     echo "❌ Failed to fetch latest version. Check your internet connection."
