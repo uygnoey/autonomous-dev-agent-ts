@@ -69,66 +69,70 @@ echo ""
 echo "🔑 Setting up authentication..."
 echo ""
 echo "Choose authentication method:"
-echo "  1) Anthropic API Key (recommended for API users)"
-echo "  2) Claude Code OAuth Token (for Pro/Max subscription)"
+echo "  1) Anthropic API Key"
+echo "  2) Claude Code OAuth Token (Pro/Max subscription)"
 echo "  3) Skip (configure later)"
 echo ""
 read -p "Enter choice [1-3]: " auth_choice
 
+ENV_FILE="$INSTALL_DIR/.env"
+
 case $auth_choice in
     1)
         echo ""
+        echo "📘 Get your API key from: https://console.anthropic.com/settings/keys"
+        echo ""
         read -p "Enter your Anthropic API Key (sk-ant-...): " api_key
         if [ -n "$api_key" ]; then
-            if [ -n "$SHELL_RC" ]; then
-                if ! grep -q "ANTHROPIC_API_KEY" "$SHELL_RC" 2>/dev/null; then
-                    echo "export ANTHROPIC_API_KEY=\"$api_key\"" >> "$SHELL_RC"
-                    echo "✅ API Key saved to $SHELL_RC"
-                else
-                    echo "⚠️  ANTHROPIC_API_KEY already exists in $SHELL_RC"
-                    read -p "Overwrite? [y/N]: " overwrite
-                    if [ "$overwrite" = "y" ] || [ "$overwrite" = "Y" ]; then
-                        sed -i.bak "/ANTHROPIC_API_KEY/d" "$SHELL_RC"
-                        echo "export ANTHROPIC_API_KEY=\"$api_key\"" >> "$SHELL_RC"
-                        echo "✅ API Key updated in $SHELL_RC"
-                    fi
-                fi
+            # Create or update .env file
+            if [ -f "$ENV_FILE" ]; then
+                # Remove old ANTHROPIC_API_KEY if exists
+                sed -i.bak '/^ANTHROPIC_API_KEY=/d' "$ENV_FILE"
+                # Remove CLAUDE_CODE_OAUTH_TOKEN to avoid conflicts
+                sed -i.bak '/^CLAUDE_CODE_OAUTH_TOKEN=/d' "$ENV_FILE"
             fi
-            export ANTHROPIC_API_KEY="$api_key"
-            echo "✅ API Key configured for current session"
+            echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
+            chmod 600 "$ENV_FILE"  # Secure the .env file
+            echo "✅ API Key saved to $ENV_FILE"
+            echo "⚠️  Security: .env file is set to 600 (owner read/write only)"
         else
             echo "⚠️  No API key provided, skipping..."
         fi
         ;;
     2)
         echo ""
+        echo "📘 How to get OAuth Token:"
+        echo "   1. Install Claude Code CLI: https://docs.anthropic.com/claude/docs/claude-code"
+        echo "   2. Run: claude setup-token"
+        echo "   3. Follow the browser authentication flow"
+        echo "   4. Copy the token (sk-ant-oat01-...)"
+        echo ""
         read -p "Enter your Claude Code OAuth Token (sk-ant-oat01-...): " oauth_token
         if [ -n "$oauth_token" ]; then
-            if [ -n "$SHELL_RC" ]; then
-                if ! grep -q "CLAUDE_CODE_OAUTH_TOKEN" "$SHELL_RC" 2>/dev/null; then
-                    echo "export CLAUDE_CODE_OAUTH_TOKEN=\"$oauth_token\"" >> "$SHELL_RC"
-                    echo "✅ OAuth Token saved to $SHELL_RC"
-                else
-                    echo "⚠️  CLAUDE_CODE_OAUTH_TOKEN already exists in $SHELL_RC"
-                    read -p "Overwrite? [y/N]: " overwrite
-                    if [ "$overwrite" = "y" ] || [ "$overwrite" = "Y" ]; then
-                        sed -i.bak "/CLAUDE_CODE_OAUTH_TOKEN/d" "$SHELL_RC"
-                        echo "export CLAUDE_CODE_OAUTH_TOKEN=\"$oauth_token\"" >> "$SHELL_RC"
-                        echo "✅ OAuth Token updated in $SHELL_RC"
-                    fi
-                fi
+            # Create or update .env file
+            if [ -f "$ENV_FILE" ]; then
+                # Remove old CLAUDE_CODE_OAUTH_TOKEN if exists
+                sed -i.bak '/^CLAUDE_CODE_OAUTH_TOKEN=/d' "$ENV_FILE"
+                # Remove ANTHROPIC_API_KEY to avoid conflicts
+                sed -i.bak '/^ANTHROPIC_API_KEY=/d' "$ENV_FILE"
             fi
-            export CLAUDE_CODE_OAUTH_TOKEN="$oauth_token"
-            echo "✅ OAuth Token configured for current session"
+            echo "CLAUDE_CODE_OAUTH_TOKEN=$oauth_token" >> "$ENV_FILE"
+            chmod 600 "$ENV_FILE"  # Secure the .env file
+            echo "✅ OAuth Token saved to $ENV_FILE"
+            echo "⚠️  Security: .env file is set to 600 (owner read/write only)"
         else
             echo "⚠️  No OAuth token provided, skipping..."
         fi
         ;;
     3)
         echo "⏭️  Skipping authentication setup"
-        echo "   You can configure it later by setting:"
-        echo "   • export ANTHROPIC_API_KEY=sk-ant-..."
-        echo "   • export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..."
+        echo ""
+        echo "   You can configure it later by editing: $ENV_FILE"
+        echo "   Add one of the following lines:"
+        echo "   • ANTHROPIC_API_KEY=sk-ant-..."
+        echo "   • CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-..."
+        echo ""
+        echo "   ⚠️  Only set ONE authentication method, not both!"
         ;;
     *)
         echo "⚠️  Invalid choice, skipping authentication setup"
