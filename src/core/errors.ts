@@ -48,6 +48,9 @@ export class ContractError extends AdevError {}
 /** MCP 서버 관련 에러 (접두사: mcp_) */
 export class McpError extends AdevError {}
 
+/** Layer3 관련 에러 (접두사: layer3_) */
+export class Layer3Error extends AdevError {}
+
 /**
  * AdevError 타입 가드 / Type guard for AdevError
  *

@@ -5,23 +5,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { ConsoleLogger } from '../../../src/core/logger.js';
 import { DocIntegrator } from '../../../src/layer3/doc-integrator.js';
-import type { DocumentTemplate, IntegratedDocument } from '../../../src/layer3/types.js';
+import type { IntegrateOptions } from '../../../src/layer3/doc-integrator.js';
 
 describe('DocIntegrator', () => {
   let integrator: DocIntegrator;
-
-  const createTemplate = (
-    overrides?: Partial<DocumentTemplate>,
-  ): DocumentTemplate => ({
-    type: 'api-reference',
-    title: 'Test Document',
-    sections: [
-      { heading: 'Overview', content: 'Project overview', order: 1, required: true },
-      { heading: 'Details', content: 'Project details', order: 2, required: false },
-    ],
-    language: 'bilingual',
-    ...overrides,
-  });
 
   beforeEach(() => {
     const logger = new ConsoleLogger('error');
@@ -29,139 +16,175 @@ describe('DocIntegrator', () => {
   });
 
   describe('integrate / 문서 통합', () => {
-    it('조각 문서를 통합 문서로 병합한다', () => {
-      const template = createTemplate();
-      const result = integrator.integrate(['frag-1', 'frag-2'], template, 'proj-1');
+    it('조각 문서를 통합 문서로 병합한다', async () => {
+      const options: IntegrateOptions = {
+        projectId: 'proj-1',
+        type: 'api-reference',
+        fragmentPattern: '.adev/docs/fragments/**/*.md',
+        outputPath: '.adev/docs/API.md',
+      };
+
+      const result = await integrator.integrate(options);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.projectId).toBe('proj-1');
-        expect(result.value.sourceFragments).toEqual(['frag-1', 'frag-2']);
-        expect(result.value.content).toContain('Test Document');
-        expect(result.value.version).toBe(1);
+        expect(result.value.type).toBe('api-reference');
+        expect(result.value.content).toBeTruthy();
+        expect(result.value.id).toBeTruthy();
       }
     });
 
-    it('섹션을 order 기준으로 정렬한다', () => {
-      const template = createTemplate({
-        sections: [
-          { heading: 'Second', content: 'B content', order: 2, required: false },
-          { heading: 'First', content: 'A content', order: 1, required: true },
-        ],
-      });
+    it('빈 프로젝트 ID는 에러를 반환한다', async () => {
+      const options: IntegrateOptions = {
+        projectId: '',
+        type: 'readme',
+        fragmentPattern: '**/*.md',
+        outputPath: 'README.md',
+      };
 
-      const result = integrator.integrate(['frag-1'], template, 'proj-1');
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        const firstIdx = result.value.content.indexOf('First');
-        const secondIdx = result.value.content.indexOf('Second');
-        expect(firstIdx).toBeLessThan(secondIdx);
-      }
-    });
-
-    it('필수 섹션 내용이 비면 플레이스홀더를 삽입한다', () => {
-      const template = createTemplate({
-        sections: [
-          { heading: 'Required Section', content: '', order: 1, required: true },
-        ],
-      });
-
-      const result = integrator.integrate(['frag-1'], template, 'proj-1');
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.content).toContain('내용 필요');
-      }
-    });
-
-    it('선택 섹션 내용이 비면 생략한다', () => {
-      const template = createTemplate({
-        sections: [
-          { heading: 'Optional Section', content: '', order: 1, required: false },
-        ],
-      });
-
-      const result = integrator.integrate(['frag-1'], template, 'proj-1');
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.content).not.toContain('Optional Section');
-      }
-    });
-
-    it('빈 조각 목록은 에러를 반환한다', () => {
-      const template = createTemplate();
-      const result = integrator.integrate([], template, 'proj-1');
+      const result = await integrator.integrate(options);
       expect(result.ok).toBe(false);
     });
 
-    it('빈 섹션 템플릿은 에러를 반환한다', () => {
-      const template = createTemplate({ sections: [] });
-      const result = integrator.integrate(['frag-1'], template, 'proj-1');
-      expect(result.ok).toBe(false);
-    });
+    it('고유한 문서 ID를 생성한다', async () => {
+      const opts1: IntegrateOptions = {
+        projectId: 'proj-1',
+        type: 'readme',
+        fragmentPattern: '**/*.md',
+        outputPath: 'README.md',
+      };
+      const opts2: IntegrateOptions = {
+        projectId: 'proj-1',
+        type: 'readme',
+        fragmentPattern: '**/*.md',
+        outputPath: 'README.md',
+      };
 
-    it('고유한 문서 ID를 생성한다', () => {
-      const template = createTemplate();
-      const r1 = integrator.integrate(['frag-1'], template, 'proj-1');
-      const r2 = integrator.integrate(['frag-2'], template, 'proj-1');
+      const r1 = await integrator.integrate(opts1);
+      const r2 = await integrator.integrate(opts2);
       if (r1.ok && r2.ok) {
         expect(r1.value.id).not.toBe(r2.value.id);
       }
     });
-  });
 
-  describe('updateDocument / 문서 업데이트', () => {
-    it('기존 문서에 새 조각을 추가한다', () => {
-      const template = createTemplate();
-      const intResult = integrator.integrate(['frag-1'], template, 'proj-1');
-      expect(intResult.ok).toBe(true);
-      if (!intResult.ok) return;
+    it('커스텀 템플릿 ID를 지정할 수 있다', async () => {
+      const options: IntegrateOptions = {
+        projectId: 'proj-1',
+        type: 'readme',
+        fragmentPattern: '**/*.md',
+        outputPath: 'README.md',
+        templateId: 'custom-template-1',
+      };
 
-      const updateResult = integrator.updateDocument(intResult.value, ['frag-2', 'frag-3']);
-      expect(updateResult.ok).toBe(true);
-      if (updateResult.ok) {
-        expect(updateResult.value.sourceFragments).toContain('frag-1');
-        expect(updateResult.value.sourceFragments).toContain('frag-2');
-        expect(updateResult.value.sourceFragments).toContain('frag-3');
-        expect(updateResult.value.version).toBe(2);
+      const result = await integrator.integrate(options);
+      // WHY: 커스텀 템플릿이 등록되지 않았으므로 에러 반환
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('템플릿을 찾을 수 없음');
       }
-    });
-
-    it('빈 새 조각 목록은 에러를 반환한다', () => {
-      const template = createTemplate();
-      const intResult = integrator.integrate(['frag-1'], template, 'proj-1');
-      if (!intResult.ok) return;
-
-      const updateResult = integrator.updateDocument(intResult.value, []);
-      expect(updateResult.ok).toBe(false);
-    });
-
-    it('버전이 증가한다', () => {
-      const template = createTemplate();
-      const intResult = integrator.integrate(['frag-1'], template, 'proj-1');
-      if (!intResult.ok) return;
-
-      const u1 = integrator.updateDocument(intResult.value, ['frag-2']);
-      if (!u1.ok) return;
-      expect(u1.value.version).toBe(2);
-
-      const u2 = integrator.updateDocument(u1.value, ['frag-3']);
-      if (!u2.ok) return;
-      expect(u2.value.version).toBe(3);
     });
   });
 
-  describe('exportAsMarkdown / 마크다운 내보내기', () => {
-    it('통합 문서를 마크다운으로 내보낸다', () => {
-      const template = createTemplate();
-      const intResult = integrator.integrate(['frag-1'], template, 'proj-1');
-      if (!intResult.ok) return;
+  describe('generateAll / 모든 프로젝트 문서 생성', () => {
+    it('모든 기본 문서 유형을 생성한다', async () => {
+      const result = await integrator.generateAll('proj-1', '.adev/docs');
 
-      const exportResult = integrator.exportAsMarkdown(intResult.value);
-      expect(exportResult.ok).toBe(true);
-      if (exportResult.ok) {
-        expect(exportResult.value).toContain('title: Test Document');
-        expect(exportResult.value).toContain('version: 1');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBe(8);
+        const types = result.value.map((doc) => doc.type);
+        expect(types).toContain('readme');
+        expect(types).toContain('api-reference');
+        expect(types).toContain('architecture');
       }
+    });
+
+    it('빈 프로젝트 ID는 에러를 반환한다', async () => {
+      const result = await integrator.generateAll('', '.adev/docs');
+      expect(result.ok).toBe(false);
+    });
+  });
+
+  describe('listTemplates / 템플릿 목록 조회', () => {
+    it('기본 템플릿 8개를 반환한다', async () => {
+      const result = await integrator.listTemplates(false);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBe(8);
+        const names = result.value.map((t) => t.name);
+        expect(names).toContain('readme');
+        expect(names).toContain('api-reference');
+      }
+    });
+
+    it('커스텀 템플릿 포함 옵션을 지원한다', async () => {
+      const result = await integrator.listTemplates(true);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(8);
+      }
+    });
+  });
+
+  describe('registerTemplate / 커스텀 템플릿 등록', () => {
+    it('새 커스텀 템플릿을 등록한다', async () => {
+      const customTemplate = {
+        id: 'custom-1',
+        name: 'custom',
+        type: 'readme' as const,
+        templatePath: 'templates/custom.hbs',
+        format: 'md' as const,
+        description: 'Custom template',
+        custom: true,
+      };
+
+      const result = await integrator.registerTemplate(customTemplate);
+      expect(result.ok).toBe(true);
+
+      // WHY: 등록 후 조회 가능 확인
+      const listResult = await integrator.listTemplates(true);
+      if (listResult.ok) {
+        const registered = listResult.value.find((t) => t.id === 'custom-1');
+        expect(registered).toBeTruthy();
+      }
+    });
+
+    it('중복 템플릿 ID는 에러를 반환한다', async () => {
+      const template = {
+        id: 'default-readme',
+        name: 'readme',
+        type: 'readme' as const,
+        templatePath: 'templates/readme.hbs',
+        format: 'md' as const,
+        description: 'Duplicate',
+        custom: false,
+      };
+
+      const result = await integrator.registerTemplate(template);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('이미 존재');
+      }
+    });
+  });
+
+  describe('collectFragments / 조각 문서 수집', () => {
+    it('패턴에 맞는 조각 문서를 수집한다', async () => {
+      const result = await integrator.collectFragments('proj-1', '**/*.md');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // WHY: 실제 파일이 없으므로 빈 배열 반환
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('빈 프로젝트 ID는 에러를 반환한다', async () => {
+      const result = await integrator.collectFragments('', '**/*.md');
+      expect(result.ok).toBe(false);
     });
   });
 });

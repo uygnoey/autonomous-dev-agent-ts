@@ -15,7 +15,7 @@ import { err, ok } from '../core/types.js';
 import type { CodeRecord, Result } from '../core/types.js';
 import { ChunkSplitter } from './chunk-splitter.js';
 import { CodeIndexer } from './code-indexer.js';
-import { createLocalEmbeddingProvider } from './embeddings.js';
+import { createTransformersEmbeddingProvider } from './embeddings.js';
 import { RagSearcher } from './search.js';
 import type { EmbeddingProvider, IndexDirectoryOptions, SearchResult } from './types.js';
 import { CodeVectorStore } from './vector-store.js';
@@ -163,20 +163,20 @@ export class Vectorizer {
  * 설정에 따라 임베딩 프로바이더를 생성 / Create an embedding provider based on config
  *
  * @description
- * KR: 현재는 로컬 플레이스홀더만 지원. 추후 Xenova/Jina/Voyage 프로바이더 추가 예정.
- * EN: Currently only supports local placeholder. Xenova/Jina/Voyage providers to be added later.
+ * KR: 현재는 Transformers 프로바이더만 지원. 추후 Voyage/OpenAI 등 API 프로바이더 추가 예정.
+ * EN: Currently only supports Transformers provider. Voyage/OpenAI API providers to be added later.
  *
  * @param config - 임베딩 설정 / Embedding configuration
  * @param logger - 로거 인스턴스 / Logger instance
  * @returns EmbeddingProvider 인스턴스 / EmbeddingProvider instance
  */
 function createEmbeddingProvider(config: EmbeddingConfig, logger: Logger): EmbeddingProvider {
-  // WHY: 현재는 로컬 플레이스홀더만 구현. provider 이름으로 분기 구조 준비.
+  // WHY: 현재는 Transformers만 구현. provider 이름으로 분기 구조 준비.
   const providerName = config.default;
 
   switch (providerName) {
-    // WHY: 향후 실제 프로바이더 추가 시 case 'xenova-minilm': return new XenovaProvider(...);
+    // WHY: 향후 실제 API 프로바이더 추가 시 case 'voyage': return new VoyageProvider(...);
     default:
-      return createLocalEmbeddingProvider(logger, providerName);
+      return createTransformersEmbeddingProvider(logger, providerName);
   }
 }

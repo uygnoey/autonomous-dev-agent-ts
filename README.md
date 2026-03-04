@@ -1,7 +1,8 @@
-# adev — Autonomous Development Agent
+# autonomous-dev-agent (adev)
 
-> Claude Agent SDK + RAG 기반의 자율 개발 에이전트 시스템.
-> 7개 전문 에이전트가 설계부터 검증까지 전체 개발 사이클을 자율적으로 수행합니다.
+> **Languages:** [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [Español](README.es.md)
+
+**Claude Code Skills + RAG-powered autonomous development agent system**
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESNext-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.1-f9f1e1?logo=bun&logoColor=000)](https://bun.sh/)
@@ -11,318 +12,475 @@
 
 ---
 
-## Overview
+## 1. Project Overview
 
-**adev**는 Claude Code Skills과 RAG(Retrieval-Augmented Generation)를 연동하여, 일관된 코드 품질로 자율 개발을 수행하는 상위 에이전트 시스템입니다.
+**adev (autonomous-dev-agent)** is an intelligent agent orchestration system that combines Claude's advanced capabilities with RAG (Retrieval-Augmented Generation) to deliver consistent, high-quality autonomous software development.
 
-유저와의 대화를 통해 아이디어를 기획·설계한 뒤, 7개 전문 에이전트가 4-Phase(DESIGN → CODE → TEST → VERIFY) 파이프라인을 자율적으로 실행하며, 4중 검증과 Fail-Fast 원칙을 통해 프로덕션 수준의 코드를 산출합니다.
+Built on the Claude Agent SDK with a three-layer architecture, it manages the entire development lifecycle from requirements gathering to production-ready code with seven specialized agents working in coordinated phases.
 
-### 핵심 특징
+### Key Features
 
-- **3계층 아키텍처**: 유저 대화(1계층) → 자율 개발(2계층) → 산출물/지속 검증(3계층)
-- **7개 전문 에이전트**: architect, qa, coder, tester, qc, reviewer, documenter
-- **4-Phase 상태 머신**: DESIGN → CODE → TEST → VERIFY (FSM 기반 전환)
-- **4중 검증**: qa/qc → reviewer → 1계층(의도 검증) → adev(종합 판정)
-- **Fail-Fast 테스트**: 1개 실패 → 즉시 중단 → 수정 → 재실행
-- **LanceDB 벡터 메모리**: 대화, 설계 결정, 실패 이력을 영구 저장하여 경험 학습
-- **4-Provider 임베딩**: 무료(Xenova/Jina) + 유료(Voyage) 자동 선택
-- **MCP 서버 확장**: builtin 4개 + 유저 커스텀 MCP 지원
-
----
-
-## Architecture
-
-```
-┌───────────────────────────────────────────────────┐
-│  1계층: Claude API (Opus 4.6)                      │
-│  유저 대화 · 기획 · 설계 · Contract 생성 · 검증 참여 │
-├───────────────────────────────────────────────────┤
-│            유저 "확정" → Contract → 2계층 전환       │
-├───────────────────────────────────────────────────┤
-│  2계층: Claude Agent SDK (V2 Session API)           │
-│  ┌─────────────────────────────────────────────┐   │
-│  │ 2계층-A: 기능 단위 개발                       │   │
-│  │  adev (Team Leader)                         │   │
-│  │  ├─ architect  — 기술 설계, 아키텍처 결정      │   │
-│  │  ├─ qa         — 예방 Gate (코딩 전 검증)     │   │
-│  │  ├─ coder ×N   — 코드 구현 (Git branch 병렬)  │   │
-│  │  ├─ tester     — 테스트 생성 + Fail-Fast 실행  │   │
-│  │  ├─ qc         — 사후 검출, 근본 원인 분석     │   │
-│  │  ├─ reviewer   — 코드 리뷰, 품질 판정         │   │
-│  │  └─ documenter — Phase 완료 시 문서 생성       │   │
-│  ├─────────────────────────────────────────────┤   │
-│  │ 2계층-B: 통합 검증 (계단식 Fail-Fast E2E)     │   │
-│  ├─────────────────────────────────────────────┤   │
-│  │ 2계층-C: 유저 확인                            │   │
-│  └─────────────────────────────────────────────┘   │
-├───────────────────────────────────────────────────┤
-│  3계층: 산출물 + 지속 검증                          │
-│  통합 문서 · 비즈니스 산출물 · 지속 E2E              │
-└───────────────────────────────────────────────────┘
-```
-
-### 모듈 의존성 (단방향만 허용)
-
-```
-cli ──→ core, auth, layer1
-layer1 ──→ core, rag
-layer2 ──→ core, rag, layer1
-layer3 ──→ core, rag, layer2
-rag ──→ core
-mcp ──→ core
-auth ──→ core
-```
-
-> 역방향/순환 의존 절대 금지. `core`는 어떤 모듈도 import하지 않습니다.
+- **3-Layer Architecture**: Clear separation between user dialogue (Layer1), autonomous development (Layer2), and artifact generation (Layer3)
+- **7 Specialized Agents**: architect, qa, coder, tester, qc, reviewer, and documenter working in coordinated phases
+- **4-Phase State Machine**: DESIGN → CODE → TEST → VERIFY workflow with FSM-based transitions
+- **4-Layer Validation**: qa/qc → reviewer → Layer1 (intent validation) → adev (final judgment)
+- **Fail-Fast Testing**: Stop immediately on first failure → fix → re-run from that step
+- **RAG-Enhanced Memory**: LanceDB vector database for persistent context, design decisions, and failure history
+- **4-Provider Embedding Tier**: Free (Xenova/Jina) + Paid (Voyage) automatic selection
+- **Built-in MCP Servers**: filesystem, lancedb, memory, web-search with custom MCP support
+- **Multilingual Documentation**: Automatic generation in English, Korean, Japanese, and Spanish
 
 ---
 
-## 4-Phase Engine
+## 2. Architecture Overview
 
-에이전트들이 각 Phase를 거치며 기능을 완성합니다.
+### 3-Layer Structure
 
 ```
-DESIGN ──(qa Gate + 전원 합의)──→ CODE
-CODE   ──(구현 완료 + 승인)────→ TEST
-TEST   ──(전체 0 실패 + qc)───→ VERIFY
-VERIFY ──(4중 검증 통과)──────→ 완료
-VERIFY ──(실패)───────────────→ 실패 유형에 따라 DESIGN/CODE/TEST 복귀
+┌───────────────────────────────────────────────┐
+│ Layer 1: Claude API (Opus 4.6)               │
+│ User dialogue, planning, design, validation   │
+│ Modules: src/layer1/                          │
+├───────────────────────────────────────────────┤
+│         User "Confirm" → Contract → Layer2    │
+├───────────────────────────────────────────────┤
+│ Layer 2: Claude Agent SDK (V2 Session API)   │
+│ ┌─────────────────────────────────────────┐   │
+│ │ Layer2-A: Feature Development           │   │
+│ │   adev (Team Leader)                    │   │
+│ │   ├─ architect  — Design & architecture │   │
+│ │   ├─ qa         — Prevention gate       │   │
+│ │   ├─ coder ×N   — Code implementation   │   │
+│ │   ├─ tester     — Test + Fail-fast      │   │
+│ │   ├─ qc         — Detection & RCA       │   │
+│ │   ├─ reviewer   — Code review           │   │
+│ │   └─ documenter — Documentation         │   │
+│ ├─────────────────────────────────────────┤   │
+│ │ Layer2-B: Integration Verification      │   │
+│ │   Cascading Fail-Fast E2E testing       │   │
+│ ├─────────────────────────────────────────┤   │
+│ │ Layer2-C: User Confirmation              │   │
+│ └─────────────────────────────────────────┘   │
+├───────────────────────────────────────────────┤
+│ Layer 3: Artifacts + Continuous Verification │
+│ Integrated docs, business outputs, E2E        │
+│ Modules: src/layer3/                          │
+└───────────────────────────────────────────────┘
 ```
 
-| Phase | 실행 방식 | 주도 에이전트 | 비고 |
-|-------|----------|-------------|------|
-| **DESIGN** | Agent Teams (팀 토론) | architect | qa Gate 필수 통과 |
-| **CODE** | query() ×N 동시 | coder ×N | 모듈별 Git branch 병렬 |
-| **TEST** | query() 순차 | tester | Fail-Fast (1실패 → 즉시 중단) |
-| **VERIFY** | query() 순차 | adev | 4중 검증 종합 판정 |
+### Module Dependency Graph
+
+```
+┌─────┐
+│ cli │ ─────→ core, auth, layer1
+└──┬──┘
+   ↓
+┌────────┐
+│ layer1 │ ─→ core, rag
+└────┬───┘
+     ↓
+┌────────┐
+│ layer2 │ ─→ core, rag, layer1
+└────┬───┘
+     ↓
+┌────────┐
+│ layer3 │ ─→ core, rag, layer2
+└────────┘
+
+┌─────┐     ┌──────┐     ┌─────┐
+│ rag │ ─→  │ core │  ←─ │ mcp │
+└─────┘     └──────┘     └─────┘
+            ↑
+┌──────┐    │
+│ auth │ ───┘
+└──────┘
+```
+
+**Rule**: Dependencies flow in arrow direction only. No circular dependencies allowed. `core` module imports nothing.
+
+### Key Modules
+
+| Module | Files | Core Responsibility |
+|--------|-------|---------------------|
+| `core/` | 5 | config, errors, logger, memory, plugin-loader |
+| `auth/` | 4 | API key / Subscription authentication |
+| `cli/` | 5 | CLI commands (init, start, config, project) |
+| `layer1/` | 8 | User dialogue, planning, design, contract creation |
+| `layer2/` | 16 | Autonomous development orchestration |
+| `layer3/` | 5 | Integrated docs, continuous E2E, business artifacts |
+| `rag/` | 7 | LanceDB, embeddings, code indexing, search |
+| `mcp/` | 12 | MCP server management, 4 built-in servers |
 
 ---
 
-## 7 Agents
-
-| Agent | 유형 | 역할 | 코드 수정 |
-|-------|------|------|----------|
-| **architect** | 루프 | 기술 설계, 구조 결정, 의존성 분석 | ✗ |
-| **qa** | 루프 | 예방 Gate — 코딩 전 스펙/설계 검증 | ✗ |
-| **coder** | 루프 | 코드 구현 (유일한 코드 수정 권한) | ✓ |
-| **tester** | 루프 | 테스트 생성 + Fail-Fast 실행 | 테스트만 |
-| **qc** | 루프 | 사후 검출, 근본 원인 1개 특정 | ✗ |
-| **reviewer** | 루프 | 코드 리뷰, 컨벤션/품질 판정 | ✗ |
-| **documenter** | 이벤트 | Phase 완료 시 spawn → 문서 생성 → 종료 | ✗ |
-
-> qa는 **예방**(코딩 전), qc는 **검출**(코딩 후). 역할이 명확히 분리되어 있습니다.
-> coder는 ×N 병렬 실행되며, 모듈별로 `feature/{기능명}-{모듈명}-coderN` Git branch에서 작업합니다.
-
----
-
-## Tech Stack
-
-| 분류 | 기술 | 용도 |
-|------|------|------|
-| **Runtime** | [Bun](https://bun.sh/) ≥1.1 | 패키지 매니저, 번들러, 테스트 러너 |
-| **Language** | TypeScript (ESNext, strict) | 전체 코드베이스 |
-| **Agent SDK** | [@anthropic-ai/claude-code](https://www.npmjs.com/package/@anthropic-ai/claude-code) | V2 Session API 기반 에이전트 실행 |
-| **Vector DB** | [LanceDB](https://lancedb.com/) | 임베디드, 서버리스, 파일 기반 벡터 DB |
-| **Embedding** | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) | 로컬 임베딩 (Xenova/Jina) |
-| **Linter** | [Biome](https://biomejs.dev/) | 린트 + 포맷팅 |
-
-### 4-Provider Embedding Tier
-
-```
-VOYAGE_API_KEY 존재?
-  ├─ YES → 코드: voyage-code-3, 텍스트: voyage-4-lite  (Tier 2, 유료)
-  └─ NO  → 코드: jina-v3,       텍스트: xenova-minilm  (Tier 1, 무료)
-```
-
----
-
-## Project Structure
-
-```
-autonomous-dev-agent/
-├── src/
-│   ├── index.ts              # CLI 엔트리포인트
-│   ├── core/                 # 설정, 에러, 로거, 메모리, 플러그인 (의존성 없음)
-│   ├── auth/                 # API key / Subscription(OAuth) 인증 분기
-│   ├── rag/                  # LanceDB, 임베딩, 코드 인덱싱, 하이브리드 검색
-│   ├── mcp/                  # MCP 서버 관리 (builtin 4개 + 커스텀)
-│   │   └── builtin/          # os-control, browser, web-search, git
-│   ├── cli/                  # CLI 명령어 (init, start, config, project)
-│   ├── layer1/               # 1계층: 유저 대화, 기획, 설계, Contract
-│   ├── layer2/               # 2계층: 자율 개발 오케스트레이션 (16개 모듈)
-│   └── layer3/               # 3계층: 통합 문서, 비즈니스 산출물, 지속 E2E
-├── tests/
-│   ├── unit/                 # 단위 테스트
-│   ├── module/               # 모듈 간 통합 테스트
-│   └── e2e/                  # E2E 테스트
-├── docs/
-│   └── references/           # 에이전트, Phase, 임베딩, 세션 API 등 상세 문서
-├── scripts/                  # 설치/삭제 스크립트
-├── ARCHITECTURE.md           # 3계층 구조, 모듈 의존성
-├── SPEC.md                   # v2.4 전체 스펙
-├── IMPLEMENTATION-GUIDE.md   # 구현 순서 가이드
-├── package.json
-├── tsconfig.json
-└── biome.json
-```
-
-### LanceDB Tables
-
-| 테이블 | 용도 |
-|--------|------|
-| `memory` | 대화 이력, 결정, 피드백, 에러 |
-| `code_index` | 코드베이스 청크 벡터 인덱스 |
-| `design_decisions` | 설계 결정 이력 |
-| `failures` | 실패 이력 + 해결책 |
-
----
-
-## Getting Started
+## 3. Installation
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) ≥ 1.1
-- Claude API Key 또는 Claude Pro/Max Subscription
+- **Bun runtime** (≥1.1.0) - Fast JavaScript/TypeScript runtime
+- **Anthropic API key** OR **Claude Pro/Max Subscription**
 
-### Installation
+### Install Bun
 
 ```bash
-# 저장소 클론
-git clone https://github.com/yeongyu-yang/autonomous-dev-agent-ts.git
-cd autonomous-dev-agent-ts
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
 
-# 의존성 설치
+# Windows (WSL)
+curl -fsSL https://bun.sh/install | bash
+
+# Verify installation
+bun --version
+```
+
+### Clone and Setup
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/autonomous-dev-agent.git
+cd autonomous-dev-agent
+
+# Install dependencies
 bun install
 ```
 
 ### Authentication
 
-```bash
-# 방법 1: API Key
-export ANTHROPIC_API_KEY=sk-ant-...
+Choose ONE authentication method:
 
-# 방법 2: Subscription (Pro/Max)
+#### Method 1: API Key
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+#### Method 2: Subscription (Pro/Max)
+
+```bash
 claude setup-token
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
-> 두 환경변수는 동시에 설정할 수 없습니다. 하나만 선택하세요.
+> **Note**: Only set ONE environment variable. Do not set both simultaneously.
 
-### Usage
+---
+
+## 4. Usage
+
+### Interactive Development Session
+
+Start an interactive development session:
 
 ```bash
-# 개발 모드 실행
+# Development mode
 bun run dev
 
-# 빌드
-bun run build
-
-# 전체 검증 (타입체크 + 린트 + 테스트)
-bun run check
+# Built binary (after build)
+./dist/index.js
 ```
+
+In interactive mode, you can:
+- Discuss project requirements and ideas
+- Generate design documents and contracts
+- Trigger autonomous development with 7 agents
+- Review and validate outputs at each phase
+- Make iterative improvements based on feedback
 
 ### CLI Commands
 
 ```bash
-adev init                    # 프로젝트 초기화 + 인증 선택
-adev start                   # 1계층 대화 시작
-adev config                  # 설정 조회/변경
-adev project add <path>      # 프로젝트 등록
-adev project list             # 등록된 프로젝트 목록
-adev project switch <id>     # 활성 프로젝트 전환
+# Initialize project + authentication
+adev init
+
+# Start Layer1 dialogue
+adev start
+
+# View/modify configuration
+adev config
+
+# Register new project
+adev project add <path>
+
+# List registered projects
+adev project list
+
+# Switch active project
+adev project switch <id>
+```
+
+### Build for Production
+
+```bash
+# Build
+bun run build
+
+# Run built binary
+./dist/index.js
 ```
 
 ---
 
-## Development
+## 5. Testing
 
-### Scripts
+### Run All Tests
 
-| 명령어 | 설명 |
-|--------|------|
-| `bun run dev` | 개발 모드 실행 |
-| `bun run build` | 프로덕션 빌드 |
-| `bun run test` | 전체 테스트 |
-| `bun run test:unit` | 단위 테스트 |
-| `bun run test:module` | 모듈 통합 테스트 |
-| `bun run test:e2e` | E2E 테스트 |
-| `bun run typecheck` | TypeScript 타입 체크 |
-| `bun run lint` | Biome 린트 |
-| `bun run format` | Biome 자동 포맷팅 |
-| `bun run check` | typecheck + lint + test 통합 |
+```bash
+# Full test suite
+bun test
+
+# With coverage report
+bun test --coverage
+```
+
+### Test by Category
+
+```bash
+# Unit tests only
+bun run test:unit
+
+# Module integration tests
+bun run test:module
+
+# End-to-end tests
+bun run test:e2e
+```
+
+### Fail-Fast Testing Strategy
+
+The system follows a **Fail-Fast** testing philosophy:
+
+```
+Feature Mode (Layer2-A):
+  Unit 10,000 → Module 10,000 → E2E 100,000+
+
+Integration Mode (Layer2-B) — Cascading:
+  Step 1: Modified feature E2E 100,000+
+  Step 2: Related features E2E 10,000 (regression)
+  Step 3: Unrelated features E2E 1,000 (smoke)
+  Step 4: Full integration E2E 1,000,000
+
+Ratio: random/edge cases 80%+ · normal cases 20% max
+```
+
+**Principle**: 1 failure → immediate stop → fix → restart from that step. Never continue with failing tests.
+
+---
+
+## 6. API Documentation
+
+Comprehensive documentation available in multiple languages:
+
+- 📘 [English Documentation](docs/api/en/) - Full API reference
+- 📗 [한국어 문서](docs/api/ko/) - 전체 API 레퍼런스
+- 📙 [日本語ドキュメント](docs/api/ja/) - 完全なAPIリファレンス
+- 📕 [Documentación en Español](docs/api/es/) - Referencia completa de API
+
+### Key Technical Documents
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 3-layer structure, module dependencies, V2 Session API patterns |
+| [SPEC.md](SPEC.md) | Complete technical specification v2.4 |
+| [IMPLEMENTATION-GUIDE.md](IMPLEMENTATION-GUIDE.md) | Phase-by-phase implementation guide |
+| [AGENT-ROLES.md](docs/references/AGENT-ROLES.md) | Details of 7 specialized agents |
+| [PHASE-ENGINE.md](docs/references/PHASE-ENGINE.md) | 4-Phase FSM transition rules |
+| [EMBEDDING-STRATEGY.md](docs/references/EMBEDDING-STRATEGY.md) | 4-Provider tier embedding strategy |
+| [V2-SESSION-API.md](docs/references/V2-SESSION-API.md) | SDK V2 Session API runtime patterns |
+| [CONTRACT-SCHEMA.md](docs/references/CONTRACT-SCHEMA.md) | Contract-based HandoffPackage schema |
+| [TESTING-STRATEGY.md](docs/references/TESTING-STRATEGY.md) | Fail-Fast + cascading integration verification |
+
+---
+
+## 7. Contributing
+
+We welcome contributions! Please follow these guidelines:
 
 ### Code Conventions
 
-- **ES Modules only** — CommonJS 사용 금지
-- **TypeScript strict** — `any` 금지, `unknown` + 타입 가드 사용
-- **Result\<T, E\> 패턴** — throw 최소화, 경계에서만 catch
-- **파일명**: `kebab-case.ts` / 300줄 초과 시 분할
-- **로깅**: `console.log` 금지 → `src/core/logger.ts` 사용
-- **환경변수**: `process.env` 직접 접근 금지 → `src/core/config.ts` 경유
+- **ES Modules Only**: No CommonJS (`require`)
+- **TypeScript Strict Mode**: No `any` types, use `unknown` + type guards
+- **Result Pattern**: Use `Result<T, E>` for error handling, minimize `throw`
+- **Naming Conventions**:
+  - Variables/Functions: `camelCase`
+  - Types/Classes/Interfaces: `PascalCase`
+  - Constants: `UPPER_SNAKE_CASE`
+  - Files: `kebab-case.ts`
+- **File Size**: Split files exceeding 300 lines
+- **Logging**: Use `src/core/logger.ts`, never `console.log`
+- **Environment**: Use `src/core/config.ts`, never direct `process.env` access
 
-### Testing Strategy
+### Development Workflow
 
-```
-Fail-Fast 원칙:
-  1개 실패 → 즉시 중단 → 수정 → 해당 단계 처음부터 재실행
+1. Fork the repository
+2. Create a feature branch: `feature/{feature-name}`
+3. Make your changes following code conventions
+4. Run quality checks: `bun run check`
+5. Commit with Conventional Commits:
+   - `feat:` - New feature
+   - `fix:` - Bug fix
+   - `docs:` - Documentation changes
+   - `refactor:` - Code refactoring
+   - `test:` - Test changes
+   - `chore:` - Maintenance tasks
+6. Push and open a Pull Request
 
-기능 모드 (2계층-A):
-  Unit 10,000 → Module 10,000 → E2E 100,000+
+### Quality Gates (All Must Pass)
 
-통합 모드 (2계층-B) — 계단식:
-  Step 1: 수정 기능 E2E 100,000+
-  Step 2: 연관 기능 E2E 10,000 (회귀)
-  Step 3: 비연관 기능 E2E 1,000 (스모크)
-  Step 4: 전체 통합 E2E 1,000,000
+- [ ] TypeScript type check: `bun run typecheck`
+- [ ] Linting: `bun run lint`
+- [ ] All tests passing: `bun run test`
+- [ ] Test coverage ≥80%
+- [ ] No circular dependencies
+- [ ] Documentation updated
 
-비율: random/edge case 80%+ · normal case 20% 이내
-```
+### Pull Request Process
+
+1. Ensure all tests pass (`bun test`)
+2. Update documentation if needed
+3. Follow the PR template
+4. Request review from maintainers
+5. Address review feedback
+6. Merge after approval
+
+### Issue Reporting
+
+- Use issue templates for bugs and feature requests
+- Include reproduction steps for bugs
+- Provide context for feature requests
+- Search existing issues first
 
 ---
 
-## Documentation
+## 8. License
 
-| 문서 | 설명 |
-|------|------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 3계층 구조, 모듈 의존성, V2 Session API 패턴 |
-| [SPEC.md](SPEC.md) | v2.4 전체 스펙 (인증, 설치, 에이전트, Phase, 검증 등) |
-| [IMPLEMENTATION-GUIDE.md](IMPLEMENTATION-GUIDE.md) | Phase별 구현 순서 가이드 |
-| [docs/references/AGENT-ROLES.md](docs/references/AGENT-ROLES.md) | 7개 에이전트 역할 상세 |
-| [docs/references/PHASE-ENGINE.md](docs/references/PHASE-ENGINE.md) | 4-Phase FSM 전환 규칙 |
-| [docs/references/EMBEDDING-STRATEGY.md](docs/references/EMBEDDING-STRATEGY.md) | 4-Provider Tier 임베딩 전략 |
-| [docs/references/V2-SESSION-API.md](docs/references/V2-SESSION-API.md) | SDK V2 Session API 런타임 패턴 |
-| [docs/references/CONTRACT-SCHEMA.md](docs/references/CONTRACT-SCHEMA.md) | Contract 기반 HandoffPackage 스키마 |
-| [docs/references/TESTING-STRATEGY.md](docs/references/TESTING-STRATEGY.md) | Fail-Fast + 계단식 통합 검증 전략 |
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Workflow
+## Additional Resources
+
+### Tech Stack
+
+| Category | Technology | Purpose |
+|----------|-----------|---------|
+| **Runtime** | [Bun](https://bun.sh/) ≥1.1 | Package manager, bundler, test runner |
+| **Language** | TypeScript (ESNext, strict) | Entire codebase |
+| **Agent SDK** | [@anthropic-ai/claude-code](https://www.npmjs.com/package/@anthropic-ai/claude-code) | V2 Session API based agent execution |
+| **Vector DB** | [LanceDB](https://lancedb.com/) | Embedded, serverless, file-based vector DB |
+| **Embedding** | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) | Local embeddings (Xenova/Jina) |
+| **Linter** | [Biome](https://biomejs.dev/) | Linting + formatting |
+
+### 4-Phase Engine
+
+Agents progress through each phase to complete features:
 
 ```
-유저                          adev (1계층)                    에이전트 (2계층)
+DESIGN ──(qa Gate + consensus)────→ CODE
+CODE   ──(implementation done)────→ TEST
+TEST   ──(0 failures + qc)────────→ VERIFY
+VERIFY ──(4-layer validation)─────→ Complete
+VERIFY ──(failure)────────────────→ Return to DESIGN/CODE/TEST
+```
+
+| Phase | Execution | Lead Agent | Notes |
+|-------|-----------|------------|-------|
+| **DESIGN** | Agent Teams (discussion) | architect | qa Gate mandatory |
+| **CODE** | query() ×N parallel | coder ×N | Git branches per module |
+| **TEST** | query() sequential | tester | Fail-Fast (stop on 1st failure) |
+| **VERIFY** | query() sequential | adev | 4-layer validation |
+
+### 7 Specialized Agents
+
+| Agent | Type | Role | Code Modification |
+|-------|------|------|-------------------|
+| **architect** | Loop | Technical design, architecture decisions | ✗ |
+| **qa** | Loop | Prevention gate — validate specs/design before coding | ✗ |
+| **coder** | Loop | Code implementation (only agent with write access) | ✓ |
+| **tester** | Loop | Test generation + Fail-Fast execution | Tests only |
+| **qc** | Loop | Detection — root cause analysis (identify 1 cause) | ✗ |
+| **reviewer** | Loop | Code review, convention/quality judgment | ✗ |
+| **documenter** | Event | Spawned on phase completion → generate docs → exit | ✗ |
+
+> **qa** is **prevention** (before coding), **qc** is **detection** (after coding). Roles are clearly separated.
+> **coder** can run ×N in parallel, working on `feature/{name}-{module}-coderN` Git branches per module.
+
+### LanceDB Tables
+
+| Table | Purpose |
+|-------|---------|
+| `memory` | Conversation history, decisions, feedback, errors |
+| `code_index` | Codebase chunk vector index |
+| `design_decisions` | Design decision history |
+| `failures` | Failure history + solutions |
+
+### 4-Provider Embedding Tier
+
+```
+VOYAGE_API_KEY exists?
+  ├─ YES → Code: voyage-code-3, Text: voyage-4-lite  (Tier 2, Paid)
+  └─ NO  → Code: jina-v3,       Text: xenova-minilm  (Tier 1, Free)
+```
+
+### Development Scripts
+
+| Command | Description |
+|---------|-------------|
+| `bun run dev` | Run in development mode |
+| `bun run build` | Build for production |
+| `bun run test` | Run all tests |
+| `bun run test:unit` | Unit tests only |
+| `bun run test:module` | Module integration tests |
+| `bun run test:e2e` | E2E tests |
+| `bun run typecheck` | TypeScript type checking |
+| `bun run lint` | Biome linting |
+| `bun run format` | Biome auto-formatting |
+| `bun run check` | typecheck + lint + test |
+
+---
+
+## Workflow Example
+
+```
+User                          adev (Layer1)                  Agents (Layer2)
  │                               │                               │
- │── "REST API 만들고 싶어" ──→  │                               │
- │                               │── 아이디어 제안 + 질문 ──→    │
- │←── 피드백/수정 ──             │                               │
- │                               │   (무한 반복)                  │
- │── "확정" ──────────────→      │                               │
- │                               │── Contract 생성 ──→           │
- │←── Contract 확인 ──           │                               │
- │── "컨펌" ──────────────→      │                               │
+ │── "I want to build REST API" →│                               │
+ │                               │── Ideas + questions ──→       │
+ │←── Feedback/revisions ──      │                               │
+ │                               │   (infinite loop)             │
+ │── "Confirm" ──────────────→   │                               │
+ │                               │── Contract creation ──→       │
+ │←── Contract review ──         │                               │
+ │── "Accept" ────────────────→  │                               │
  │                               │── HandoffPackage ─────────→   │
- │                               │                               │── DESIGN (팀 토론)
- │                               │                               │── CODE (coder ×N 병렬)
+ │                               │                               │── DESIGN (team discussion)
+ │                               │                               │── CODE (coder ×N parallel)
  │                               │                               │── TEST (Fail-Fast)
- │                               │                               │── VERIFY (4중 검증)
- │                               │←── 검증 결과 ────────────     │
- │←── 결과 리포트 ──             │                               │
+ │                               │                               │── VERIFY (4-layer validation)
+ │                               │←── Validation results ──────  │
+ │←── Results report ──          │                               │
  │                               │                               │
- │── "확정" ──────────────→      │── 3계층 전환 ──→              │
- │                               │   통합 문서 + 지속 E2E         │
+ │── "Confirm" ──────────────→   │── Layer3 transition ──→       │
+ │                               │   Integrated docs + continuous E2E │
 ```
 
 ---
 
-## License
+## Support
 
-[MIT](LICENSE)
+- 📧 Email: support@adev.example.com
+- 💬 Discord: [Join our community](https://discord.gg/adev)
+- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/autonomous-dev-agent/issues)
+- 📖 Docs: [Full Documentation](https://docs.adev.example.com)
+
+---
+
+## Acknowledgments
+
+- **Anthropic** - Claude API and Agent SDK
+- **LanceDB** - Embedded vector database
+- **Bun** - Fast JavaScript runtime
+- **Community contributors** - Thank you for your contributions!
+
+---
+
+**Built with care by the adev team**

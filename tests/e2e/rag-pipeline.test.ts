@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { ConsoleLogger } from '../../src/core/logger.js';
 import { Vectorizer } from '../../src/rag/vectorizer.js';
 import { ChunkSplitter, detectLanguage, extractModule } from '../../src/rag/chunk-splitter.js';
-import { createLocalEmbeddingProvider, normalizeVector } from '../../src/rag/embeddings.js';
+import { createTransformersEmbeddingProvider, normalizeVector } from '../../src/rag/embeddings.js';
 import type { EmbeddingConfig } from '../../src/core/config.js';
 
 const logger = new ConsoleLogger('error');
@@ -95,10 +95,10 @@ export const add = (a: number, b: number) => a + b;
   });
 
   it('LocalEmbeddingProvider: 결정론적 벡터 생성', async () => {
-    const provider = createLocalEmbeddingProvider(logger, 'test-provider', 128);
+    const provider = createTransformersEmbeddingProvider(logger, 'test-provider', 'Xenova/all-MiniLM-L6-v2', 384);
 
     expect(provider.name).toBe('test-provider');
-    expect(provider.dimensions).toBe(128);
+    expect(provider.dimensions).toBe(384);
     expect(provider.tier).toBe('free');
 
     // WHY: 동일 텍스트에 대해 동일 벡터를 반환해야 한다 (결정론적)
@@ -108,17 +108,17 @@ export const add = (a: number, b: number) => a + b;
     expect(result2.ok).toBe(true);
 
     if (result1.ok && result2.ok) {
-      expect(result1.value.length).toBe(128);
-      expect(result2.value.length).toBe(128);
+      expect(result1.value.length).toBe(384);
+      expect(result2.value.length).toBe(384);
 
-      for (let i = 0; i < 128; i++) {
+      for (let i = 0; i < 384; i++) {
         expect(result1.value[i]).toBe(result2.value[i]);
       }
     }
   });
 
   it('LocalEmbeddingProvider: 배치 임베딩', async () => {
-    const provider = createLocalEmbeddingProvider(logger);
+    const provider = createTransformersEmbeddingProvider(logger);
     const texts = ['function hello() {}', 'class Greeter {}', 'const x = 1'];
 
     const result = await provider.embed(texts);
@@ -133,7 +133,7 @@ export const add = (a: number, b: number) => a + b;
   });
 
   it('LocalEmbeddingProvider: 서로 다른 텍스트는 다른 벡터 반환', async () => {
-    const provider = createLocalEmbeddingProvider(logger, 'test', 64);
+    const provider = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 384);
 
     const r1 = await provider.embedQuery('error handling code');
     const r2 = await provider.embedQuery('database connection pool');
@@ -143,7 +143,7 @@ export const add = (a: number, b: number) => a + b;
     if (r1.ok && r2.ok) {
       // WHY: 다른 텍스트는 반드시 다른 벡터를 반환해야 한다
       let allSame = true;
-      for (let i = 0; i < 64; i++) {
+      for (let i = 0; i < 384; i++) {
         if (r1.value[i] !== r2.value[i]) {
           allSame = false;
           break;

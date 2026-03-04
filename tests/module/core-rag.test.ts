@@ -20,7 +20,7 @@ import {
   CodeIndexer,
   CodeVectorStore,
   RagSearcher,
-  createLocalEmbeddingProvider,
+  createTransformersEmbeddingProvider,
 } from '../../src/rag/index.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
@@ -144,7 +144,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider로 벡터 생성 → VectorStore에 insert → search로 조회', async () => {
-    const provider = createLocalEmbeddingProvider(logger);
+    const provider = createTransformersEmbeddingProvider(logger);
     const store = new CodeVectorStore(join(tmpDir, 'embed-test-db'), logger);
     await store.initialize();
 
@@ -186,7 +186,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('ChunkSplitter → CodeIndexer → RagSearcher 전체 파이프라인', async () => {
-    const provider = createLocalEmbeddingProvider(logger);
+    const provider = createTransformersEmbeddingProvider(logger);
     const store = new CodeVectorStore(join(tmpDir, 'pipeline-db'), logger);
     await store.initialize();
 
@@ -334,7 +334,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('LocalEmbeddingProvider가 동일 텍스트에 동일 벡터를 반환 (결정론적)', async () => {
-    const provider = createLocalEmbeddingProvider(logger);
+    const provider = createTransformersEmbeddingProvider(logger);
 
     const result1 = await provider.embed(['hello world']);
     const result2 = await provider.embed(['hello world']);

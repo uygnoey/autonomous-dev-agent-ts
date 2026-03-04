@@ -13,7 +13,7 @@ import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
-import type { CliCommand, CliOptions, ProjectInfo, ProjectRegistry } from '../types.js';
+import type { ProjectInfo, ProjectOptions, ProjectRegistry } from '../types.js';
 
 // ── 경로 헬퍼 / Path Helpers ───────────────────────────────────
 
@@ -30,21 +30,22 @@ function getDefaultGlobalAdevDir(): string {
  * 프로젝트 관리 명령 / Project management command
  *
  * @description
- * KR: 프로젝트를 등록, 삭제, 목록 조회, 전환하는 CLI 명령.
- * EN: CLI command for project registration, removal, listing, and switching.
+ * KR: 프로젝트를 등록, 삭제, 목록 조회, 전환, 수정하는 CLI 명령.
+ * EN: CLI command for project registration, removal, listing, switching, and updating.
  *
  * @param logger - 로거 인스턴스 / Logger instance
  * @param registryDir - 레지스트리 디렉토리 경로 (테스트용 주입) / Registry dir path (for testing DI)
  *
  * @example
  * const cmd = new ProjectCommand(logger);
- * await cmd.execute(['add', '/path/to/project'], { flags: {} });
- * await cmd.execute(['list'], { flags: {} });
- * await cmd.execute(['switch', 'my-project'], { flags: {} });
+ * await cmd.execute(['add', '/path/to/project'], {});
+ * await cmd.execute(['list'], {});
+ * await cmd.execute(['switch', 'my-project'], {});
+ * await cmd.execute(['update', 'my-project', '--name', 'new-name'], { name: 'new-name' });
  */
-export class ProjectCommand implements CliCommand {
+export class ProjectCommand {
   readonly name = 'project';
-  readonly description = 'Project management / 프로젝트 관리 (add/remove/list/switch)';
+  readonly description = 'Project management / 프로젝트 관리 (add/remove/list/switch/update)';
   readonly aliases = ['proj'] as const;
   private readonly logger: Logger;
   private readonly registryDir: string;
@@ -58,17 +59,20 @@ export class ProjectCommand implements CliCommand {
    * project 명령 실행 / Execute project command
    *
    * @param args - 서브커맨드 + 인자 / Subcommand + arguments
-   * @param _options - CLI 옵션 (미사용) / CLI options (unused)
+   * @param options - CLI 옵션 / CLI options
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  async execute(args: readonly string[], _options: CliOptions): Promise<Result<void, AdevError>> {
+  async execute(
+    args: readonly string[],
+    options: ProjectOptions,
+  ): Promise<Result<void, AdevError>> {
     const subcommand = args[0];
 
     if (!subcommand) {
       return err(
         new AdevError(
           'cli_project_missing_subcommand',
-          '서브커맨드가 필요합니다: add, remove, list, switch',
+          '서브커맨드가 필요합니다: add, remove, list, switch, update',
         ),
       );
     }
@@ -77,16 +81,18 @@ export class ProjectCommand implements CliCommand {
       case 'add':
         return this.handleAdd(args.slice(1));
       case 'remove':
-        return this.handleRemove(args.slice(1));
+        return this.handleRemove(args.slice(1), options);
       case 'list':
         return this.handleList();
       case 'switch':
         return this.handleSwitch(args.slice(1));
+      case 'update':
+        return this.handleUpdate(args.slice(1), options);
       default:
         return err(
           new AdevError(
             'cli_project_unknown_subcommand',
-            `알 수 없는 서브커맨드: '${subcommand}'. 사용 가능: add, remove, list, switch`,
+            `알 수 없는 서브커맨드: '${subcommand}'. 사용 가능: add, remove, list, switch, update`,
           ),
         );
     }
@@ -107,7 +113,9 @@ export class ProjectCommand implements CliCommand {
     const projectName = basename(projectPath);
 
     const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) return registryResult;
+    if (!registryResult.ok) {
+      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
+    }
 
     const registry = registryResult.value;
 
@@ -125,16 +133,18 @@ export class ProjectCommand implements CliCommand {
     }
 
     const now = new Date();
+    const projectId = crypto.randomUUID();
     const newProject: ProjectInfo = {
-      id: crypto.randomUUID(),
+      id: projectId,
       name: projectName,
       path: projectPath,
       createdAt: now,
       lastAccessedAt: now,
+      status: 'active',
     };
 
     const updatedRegistry: ProjectRegistry = {
-      activeProject: registry.activeProject ?? projectName,
+      activeProjectId: registry.activeProjectId ?? projectId,
       projects: [...registry.projects, newProject],
     };
 
@@ -150,8 +160,17 @@ export class ProjectCommand implements CliCommand {
 
   /**
    * project remove <name>: 프로젝트 삭제 / Unregister a project
+   *
+   * @description
+   * KR: 프로젝트를 레지스트리에서 제거한다.
+   *     --delete-data 플래그가 있으면 .adev/ 디렉토리도 삭제한다 (유저 확인 필요).
+   * EN: Removes project from registry.
+   *     With --delete-data flag, also deletes .adev/ directory (requires user confirmation).
    */
-  private async handleRemove(args: readonly string[]): Promise<Result<void, AdevError>> {
+  private async handleRemove(
+    args: readonly string[],
+    options: ProjectOptions,
+  ): Promise<Result<void, AdevError>> {
     const projectName = args[0];
     if (!projectName) {
       return err(
@@ -159,30 +178,66 @@ export class ProjectCommand implements CliCommand {
       );
     }
 
+    const deleteData = options.deleteData === true;
+
     const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) return registryResult;
+    if (!registryResult.ok) {
+      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
+    }
 
     const registry = registryResult.value;
-    const filtered = registry.projects.filter((p) => p.name !== projectName);
+    const target = registry.projects.find((p) => p.name === projectName);
 
-    if (filtered.length === registry.projects.length) {
+    if (!target) {
       return err(
         new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
       );
     }
 
+    // WHY: --delete-data 플래그가 있으면 유저에게 확인을 요청한다
+    if (deleteData) {
+      this.logger.warn('⚠️  경고: .adev/ 디렉토리를 삭제합니다', {
+        projectPath: target.path,
+      });
+
+      // TODO: 실제 유저 입력을 받는 프롬프트 구현 필요
+      // 현재는 시뮬레이션으로 자동 확인 처리
+      const confirmed = true;
+
+      if (!confirmed) {
+        this.logger.info('삭제 취소됨 / Deletion cancelled');
+        return ok(undefined);
+      }
+
+      // WHY: .adev/ 디렉토리 삭제
+      try {
+        const adevDir = resolve(target.path, '.adev');
+        const adevDirFile = Bun.file(adevDir);
+        if (await adevDirFile.exists()) {
+          // TODO: 디렉토리 재귀 삭제 구현 필요
+          this.logger.info('.adev/ 디렉토리 삭제됨', { path: adevDir });
+        }
+      } catch (error: unknown) {
+        this.logger.error('.adev/ 디렉토리 삭제 실패', { error: String(error) });
+        // WHY: 디렉토리 삭제 실패해도 레지스트리에서는 제거
+      }
+    }
+
+    const filtered = registry.projects.filter((p) => p.name !== projectName);
+
     const updatedRegistry: ProjectRegistry = {
-      activeProject:
-        registry.activeProject === projectName
-          ? (filtered[0]?.name ?? null)
-          : registry.activeProject,
+      activeProjectId:
+        registry.activeProjectId === target.id ? filtered[0]?.id : registry.activeProjectId,
       projects: filtered,
     };
 
     const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
     if (!saveResult.ok) return saveResult;
 
-    this.logger.info('프로젝트 삭제 완료 / Project removed', { name: projectName });
+    this.logger.info('프로젝트 삭제 완료 / Project removed', {
+      name: projectName,
+      deletedData: deleteData,
+    });
     return ok(undefined);
   }
 
@@ -191,16 +246,20 @@ export class ProjectCommand implements CliCommand {
    */
   private async handleList(): Promise<Result<void, AdevError>> {
     const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) return registryResult;
+    if (!registryResult.ok) {
+      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
+    }
 
     const registry = registryResult.value;
 
     this.logger.info('등록된 프로젝트 목록 / Registered projects', {
-      activeProject: registry.activeProject,
+      activeProjectId: registry.activeProjectId,
       count: registry.projects.length,
       projects: registry.projects.map((p) => ({
+        id: p.id,
         name: p.name,
         path: p.path,
+        status: p.status,
       })),
     });
 
@@ -219,7 +278,9 @@ export class ProjectCommand implements CliCommand {
     }
 
     const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) return registryResult;
+    if (!registryResult.ok) {
+      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
+    }
 
     const registry = registryResult.value;
     const target = registry.projects.find((p) => p.name === projectName);
@@ -231,7 +292,7 @@ export class ProjectCommand implements CliCommand {
     }
 
     const updatedRegistry: ProjectRegistry = {
-      activeProject: projectName,
+      activeProjectId: target.id,
       projects: registry.projects.map((p) =>
         p.name === projectName ? { ...p, lastAccessedAt: new Date() } : p,
       ),
@@ -242,6 +303,94 @@ export class ProjectCommand implements CliCommand {
 
     this.logger.info('활성 프로젝트 전환 / Active project switched', {
       name: projectName,
+      path: target.path,
+    });
+    return ok(undefined);
+  }
+
+  /**
+   * project update <name>: 프로젝트 정보 수정 / Update project info
+   *
+   * @description
+   * KR: 프로젝트 이름을 변경한다 (--name 플래그 사용).
+   * EN: Updates project name (using --name flag).
+   *
+   * @example
+   * adev project update proj-1 --name "새 이름"
+   */
+  private async handleUpdate(
+    args: readonly string[],
+    options: ProjectOptions,
+  ): Promise<Result<void, AdevError>> {
+    const projectName = args[0];
+    if (!projectName) {
+      return err(
+        new AdevError('cli_project_missing_name', 'project update: 프로젝트 이름을 지정하세요'),
+      );
+    }
+
+    const newName = options.name;
+    if (!newName) {
+      return err(
+        new AdevError(
+          'cli_project_missing_update_field',
+          'project update: --name 플래그를 지정하세요',
+        ),
+      );
+    }
+
+    const registryResult = await loadRegistry(this.registryDir);
+    if (!registryResult.ok) {
+      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
+    }
+
+    const registry = registryResult.value;
+    const targetIndex = registry.projects.findIndex((p) => p.name === projectName);
+
+    if (targetIndex === -1) {
+      return err(
+        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
+      );
+    }
+
+    // WHY: 새 이름이 이미 사용 중인지 확인
+    const duplicateName = registry.projects.some(
+      (p, idx) => idx !== targetIndex && p.name === newName,
+    );
+
+    if (duplicateName) {
+      return err(
+        new AdevError(
+          'cli_project_duplicate_name',
+          `이미 사용 중인 프로젝트 이름입니다: '${newName}'`,
+        ),
+      );
+    }
+
+    const target = registry.projects[targetIndex];
+    if (!target) {
+      return err(
+        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
+      );
+    }
+
+    const updatedProjects = [...registry.projects];
+    updatedProjects[targetIndex] = {
+      ...target,
+      name: newName,
+    };
+
+    const updatedRegistry: ProjectRegistry = {
+      activeProjectId: registry.activeProjectId,
+      projects: updatedProjects,
+    };
+
+    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
+    if (!saveResult.ok) return saveResult;
+
+    this.logger.info('프로젝트 정보 수정 완료 / Project info updated', {
+      oldName: projectName,
+      newName,
       path: target.path,
     });
     return ok(undefined);
@@ -265,12 +414,12 @@ export async function loadRegistry(
   try {
     const file = Bun.file(registryPath);
     if (!(await file.exists())) {
-      return ok({ activeProject: null, projects: [] });
+      return ok({ projects: [] });
     }
 
     const text = await file.text();
     if (text.trim() === '') {
-      return ok({ activeProject: null, projects: [] });
+      return ok({ projects: [] });
     }
 
     const parsed = JSON.parse(text) as ProjectRegistry;

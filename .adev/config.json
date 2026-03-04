@@ -1,0 +1,23 @@
+{
+  "embedding": {
+    "default": "xenova-minilm",
+    "code": "xenova-minilm",
+    "voyageApiKey": null
+  },
+  "testing": {
+    "unitCount": 5000,
+    "moduleCount": 10000,
+    "e2eCount": 100000,
+    "integrationE2eCount": 1000000,
+    "parallelWorkers": "auto",
+    "e2eTimeoutSeconds": 300
+  },
+  "verification": {
+    "layer1Model": "opus",
+    "adevModel": "opus",
+    "opusEscalationOnFailure": false
+  },
+  "log": {
+    "level": "warn"
+  }
+}

@@ -23,6 +23,7 @@ export { StreamMonitor } from './stream-monitor.js';
 export { TeamLeader } from './team-leader.js';
 export { TokenMonitor } from './token-monitor.js';
 export { UserCheckpoint } from './user-checkpoint.js';
+export { V2SessionExecutor } from './v2-session-executor.js';
 export { VerificationGate } from './verification-gate.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
@@ -54,3 +55,4 @@ export type {
 
 export type { TeamLeaderDeps } from './team-leader.js';
 export type { CheckpointData, UserDecision } from './user-checkpoint.js';
+export type { V2SessionExecutorOptions } from './v2-session-executor.js';

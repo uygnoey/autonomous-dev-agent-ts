@@ -1,201 +1,263 @@
 /**
- * CLI 명령 라우터 / CLI command router
+ * CLI 애플리케이션 진입점 / CLI application entry point
  *
  * @description
- * KR: CLI 인자를 파싱하고 적절한 명령으로 라우팅한다.
- * EN: Parses CLI arguments and routes to the appropriate command.
+ * KR: CLI 명령어 파싱 및 라우팅을 담당하는 메인 애플리케이션.
+ *     yargs 기반 명령어 파싱, 전역 옵션 처리, 에러 처리를 수행한다.
+ * EN: Main application responsible for CLI command parsing and routing.
+ *     Performs yargs-based command parsing, global option handling, and error handling.
  */
 
-import { AdevError } from '../core/errors.js';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
 import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { CliCommand, CliOptions } from './types.js';
-
-// ── 파싱 결과 / Parse Result ───────────────────────────────────
+import { isAdevError } from '../core/errors.js';
+import type { CliCommandHandler, CliResult } from './types.js';
+import { EXIT_CODES } from './types.js';
 
 /**
- * CLI 인자 파싱 결과 / CLI argument parse result
+ * CLI 애플리케이션 버전 / CLI application version
  */
-export interface ParsedArgs {
-  /** 명령 이름 / Command name */
-  readonly command: string;
-  /** 위치 인자 / Positional arguments */
-  readonly args: readonly string[];
-  /** 파싱된 옵션 / Parsed options */
-  readonly options: CliOptions;
+const CLI_VERSION = '0.1.0';
+
+/**
+ * CLI 애플리케이션 인터페이스 / CLI application interface
+ */
+export interface ICliApp {
+  /**
+   * CLI 애플리케이션을 실행한다 / Run CLI application
+   *
+   * @param argv - 명령행 인자 / Command-line arguments
+   * @returns 종료 코드 / Exit code
+   */
+  run(argv: string[]): Promise<number>;
+
+  /**
+   * 명령어 핸들러를 등록한다 / Register command handler
+   *
+   * @param command - 명령어 이름 / Command name
+   * @param handler - 핸들러 / Handler
+   */
+  registerCommand(command: string, handler: CliCommandHandler): void;
+
+  /**
+   * 전역 도움말을 표시한다 / Show global help
+   */
+  showHelp(): void;
+
+  /**
+   * 버전을 표시한다 / Show version
+   */
+  showVersion(): void;
 }
 
-// ── CommandRouter ──────────────────────────────────────────────
-
 /**
- * CLI 명령 라우터 / CLI command router
+ * CLI 애플리케이션 구현 / CLI application implementation
  *
  * @description
- * KR: 명령을 등록하고, 인자를 파싱하여 적절한 명령을 실행한다.
- * EN: Registers commands, parses arguments, and executes the matching command.
- *
- * @param logger - 로거 인스턴스 / Logger instance
+ * KR: yargs 기반 CLI 애플리케이션. 명령어 파싱, 라우팅, 에러 처리를 수행한다.
+ * EN: yargs-based CLI application. Performs command parsing, routing, and error handling.
  *
  * @example
- * const router = new CommandRouter(logger);
- * router.register(new InitCommand(logger));
- * const result = await router.execute(['init', '--verbose']);
+ * const app = new CliApp(logger);
+ * app.registerCommand('init', initHandler);
+ * const exitCode = await app.run(process.argv);
+ * process.exit(exitCode);
  */
-export class CommandRouter {
-  private readonly commands = new Map<string, CliCommand>();
-  private readonly aliasMap = new Map<string, string>();
+export class CliApp implements ICliApp {
   private readonly logger: Logger;
+  private readonly commandHandlers: Map<string, CliCommandHandler>;
 
+  /**
+   * @param logger - 로거 인스턴스 / Logger instance
+   */
   constructor(logger: Logger) {
-    this.logger = logger.child({ module: 'cli:router' });
+    this.logger = logger.child({ module: 'cli-app' });
+    this.commandHandlers = new Map();
   }
 
   /**
-   * 명령을 등록한다 / Register a command
+   * CLI 애플리케이션을 실행한다 / Run CLI application
    *
-   * @param command - 등록할 CLI 명령 / CLI command to register
+   * @param argv - 명령행 인자 (process.argv 형식) / Command-line arguments (process.argv format)
+   * @returns 종료 코드 / Exit code
+   *
+   * @throws 절대 throw하지 않음, 모든 에러를 catch하여 종료 코드로 변환
    */
-  register(command: CliCommand): void {
-    this.commands.set(command.name, command);
+  async run(argv: string[]): Promise<number> {
+    try {
+      this.logger.debug('CLI 실행 시작', { argv });
 
-    if (command.aliases) {
-      for (const alias of command.aliases) {
-        this.aliasMap.set(alias, command.name);
+      // WHY: yargs는 process.argv 형식을 기대하므로 hideBin으로 전처리
+      const args = hideBin(argv);
+
+      // WHY: 빈 인자일 경우 도움말 표시
+      if (args.length === 0) {
+        this.showHelp();
+        return EXIT_CODES.SUCCESS;
       }
-    }
 
-    this.logger.debug('명령 등록 / Command registered', { name: command.name });
-  }
+      // WHY: 전역 옵션 먼저 확인
+      if (args.includes('--help') || args.includes('-h')) {
+        this.showHelp();
+        return EXIT_CODES.SUCCESS;
+      }
 
-  /**
-   * CLI 인자를 파싱한다 / Parse CLI arguments
-   *
-   * @description
-   * KR: process.argv 스타일의 인자 배열을 파싱한다.
-   *     첫 번째 인자를 명령으로, 나머지를 위치 인자와 플래그로 분리한다.
-   * EN: Parses process.argv-style argument arrays.
-   *     First argument is the command, rest are positional args and flags.
-   *
-   * @param args - 인자 배열 (process.argv[2:] 스타일) / Argument array
-   * @returns 파싱 결과 또는 에러 / Parse result or error
-   *
-   * @example
-   * router.parse(['init', '--verbose', '--project-path=/tmp/proj']);
-   */
-  parse(args: readonly string[]): Result<ParsedArgs, AdevError> {
-    if (args.length === 0) {
-      return err(
-        new AdevError(
-          'cli_no_command',
-          `명령이 필요합니다. 사용 가능한 명령: ${this.getCommandNames().join(', ')}`,
-        ),
-      );
-    }
+      if (args.includes('--version') || args.includes('-V')) {
+        this.showVersion();
+        return EXIT_CODES.SUCCESS;
+      }
 
-    // WHY: args.length > 0 은 위에서 검증됨 — 안전한 인덱스 접근
-    const commandName = args[0] as string;
-    const restArgs = args.slice(1);
+      // WHY: yargs로 명령어 파싱
+      const parsed = await yargs(args)
+        .command('init', 'Initialize project', {})
+        .command('start', 'Start Layer1 conversation', {})
+        .command('config <sub>', 'Manage configuration', {})
+        .command('project <sub>', 'Manage projects', {})
+        .option('verbose', {
+          alias: 'v',
+          type: 'boolean',
+          description: 'Enable verbose logging',
+        })
+        .option('help', {
+          alias: 'h',
+          type: 'boolean',
+          description: 'Show help',
+        })
+        .option('version', {
+          alias: 'V',
+          type: 'boolean',
+          description: 'Show version',
+        })
+        .option('no-color', {
+          type: 'boolean',
+          description: 'Disable colors',
+        })
+        .strict()
+        .fail(false)
+        .parse();
 
-    const positionalArgs: string[] = [];
-    const flags: Record<string, string | boolean> = {};
-    let projectPath: string | undefined;
-    let verbose = false;
-    let logLevel: CliOptions['logLevel'];
+      // WHY: verbose 플래그 처리
+      if (parsed.verbose) {
+        this.logger.debug('Verbose 모드 활성화');
+      }
 
-    for (const arg of restArgs) {
-      if (arg.startsWith('--')) {
-        const withoutDashes = arg.slice(2);
-        const eqIndex = withoutDashes.indexOf('=');
+      // WHY: 명령어 추출
+      const command = parsed._[0] as string | undefined;
 
-        if (eqIndex !== -1) {
-          // --key=value 형태 / --key=value form
-          const key = withoutDashes.slice(0, eqIndex);
-          const value = withoutDashes.slice(eqIndex + 1);
-          flags[key] = value;
+      if (!command) {
+        this.logger.error('명령어가 지정되지 않음');
+        console.error('Error: No command specified. Use --help for usage information.');
+        return EXIT_CODES.INVALID_USAGE;
+      }
 
-          if (key === 'project-path') projectPath = value;
-          if (key === 'log-level') logLevel = value as CliOptions['logLevel'];
-        } else {
-          // --flag 형태 / --flag form
-          flags[withoutDashes] = true;
-          if (withoutDashes === 'verbose') verbose = true;
+      // WHY: 명령어 핸들러 조회
+      const handler = this.commandHandlers.get(command);
+
+      if (!handler) {
+        this.logger.error('알 수 없는 명령어', { command });
+        console.error(`Error: Unknown command '${command}'. Use --help for available commands.`);
+        return EXIT_CODES.INVALID_USAGE;
+      }
+
+      // WHY: 핸들러 실행 (parsed를 옵션으로 전달)
+      this.logger.info('명령어 실행', { command });
+      const result: CliResult = await handler.execute(parsed);
+
+      // WHY: 결과 출력
+      if (result.success) {
+        if (result.message) {
+          console.log(result.message);
         }
+        this.logger.info('명령어 실행 완료', { command, exitCode: result.exitCode });
       } else {
-        positionalArgs.push(arg);
+        if (result.message) {
+          console.error(result.message);
+        }
+        this.logger.error('명령어 실행 실패', { command, exitCode: result.exitCode });
       }
-    }
 
-    return ok({
-      command: commandName,
-      args: positionalArgs,
-      options: {
-        projectPath,
-        verbose,
-        logLevel,
-        flags,
-      },
-    });
+      return result.exitCode;
+    } catch (error: unknown) {
+      // WHY: 모든 예외를 catch하여 적절한 종료 코드 반환
+      if (isAdevError(error)) {
+        this.logger.error('CLI 에러', {
+          code: error.code,
+          message: error.message,
+          cause: error.cause,
+        });
+        console.error(`Error: ${error.message}`);
+
+        // WHY: 에러 코드에 따라 적절한 종료 코드 매핑
+        if (error.code.startsWith('auth_')) {
+          return EXIT_CODES.AUTH_ERROR;
+        }
+        if (error.code.startsWith('config_')) {
+          return EXIT_CODES.GENERAL_ERROR;
+        }
+        return EXIT_CODES.GENERAL_ERROR;
+      }
+
+      // WHY: 예상치 못한 에러
+      this.logger.error('예상치 못한 에러', { error: String(error) });
+      console.error('An unexpected error occurred. Please check logs for details.');
+      return EXIT_CODES.GENERAL_ERROR;
+    }
   }
 
   /**
-   * 파싱 + 실행을 한 번에 수행한다 / Parse and execute in one step
+   * 명령어 핸들러를 등록한다 / Register command handler
    *
-   * @param args - CLI 인자 배열 / CLI argument array
-   * @returns 성공 시 ok(void), 실패 시 err(AdevError)
+   * @param command - 명령어 이름 / Command name
+   * @param handler - 핸들러 / Handler
    */
-  async execute(args: readonly string[]): Promise<Result<void, AdevError>> {
-    const parseResult = this.parse(args);
-    if (!parseResult.ok) return parseResult;
-
-    const { command: commandName, args: positionalArgs, options } = parseResult.value;
-
-    // 별칭을 실제 명령 이름으로 변환 / Resolve alias to actual command name
-    const resolvedName = this.aliasMap.get(commandName) ?? commandName;
-    const command = this.commands.get(resolvedName);
-
-    if (!command) {
-      return err(
-        new AdevError(
-          'cli_unknown_command',
-          `알 수 없는 명령: '${commandName}'. 사용 가능한 명령: ${this.getCommandNames().join(', ')}`,
-        ),
-      );
-    }
-
-    this.logger.info('명령 실행 / Executing command', {
-      command: resolvedName,
-      args: positionalArgs,
-    });
-
-    return command.execute(positionalArgs, options);
+  registerCommand(command: string, handler: CliCommandHandler): void {
+    this.commandHandlers.set(command, handler);
+    this.logger.debug('명령어 핸들러 등록', { command });
   }
 
   /**
-   * 도움말 텍스트를 생성한다 / Generate help text
-   *
-   * @returns 사용 가능한 명령 목록을 포함한 도움말 / Help text with available commands
+   * 전역 도움말을 표시한다 / Show global help
    */
-  getHelp(): string {
-    const lines = ['adev - Autonomous Dev Agent CLI', '', 'Commands:'];
+  showHelp(): void {
+    const help = `
+adev - Claude Code Agent Development CLI
 
-    for (const command of this.commands.values()) {
-      const aliasStr = command.aliases ? ` (${command.aliases.join(', ')})` : '';
-      lines.push(`  ${command.name}${aliasStr}  ${command.description}`);
-    }
+사용법 / Usage:
+  adev <command> [옵션 / options]
 
-    lines.push('', 'Options:');
-    lines.push('  --project-path=<path>  Project directory path');
-    lines.push('  --verbose              Enable verbose logging');
-    lines.push('  --log-level=<level>    Set log level (debug|info|warn|error)');
+명령어 / Commands:
+  init              프로젝트 초기화 / Initialize project
+  start             Layer1 대화 시작 / Start Layer1 conversation
+  config <sub>      설정 관리 / Manage configuration (get/set/list/reset)
+  project <sub>     프로젝트 관리 / Manage projects (add/remove/list/switch/update)
 
-    return lines.join('\n');
+전역 옵션 / Global Options:
+  -v, --verbose     상세 로그 출력 / Enable verbose logging
+  -h, --help        도움말 표시 / Show help
+  -V, --version     버전 표시 / Show version
+  --no-color        색상 비활성화 / Disable colors
+
+자세한 명령어 도움말 / Detailed command help:
+  adev <command> --help
+
+예제 / Examples:
+  adev init
+  adev start
+  adev config get authMethod
+  adev project list
+
+문서 / Documentation:
+  https://github.com/your-repo/autonomous-dev-agent
+`;
+
+    console.log(help.trim());
   }
 
   /**
-   * 등록된 명령 이름 목록을 반환한다 / Return registered command names
+   * 버전을 표시한다 / Show version
    */
-  private getCommandNames(): string[] {
-    return [...this.commands.keys()];
+  showVersion(): void {
+    console.log(`adev v${CLI_VERSION}`);
   }
 }

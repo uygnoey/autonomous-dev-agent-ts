@@ -71,3 +71,8 @@ export { MemoryRepository } from './memory.js';
 
 export { DefaultPluginLoader } from './plugin-loader.js';
 export type { Plugin, PluginLoader, PluginManifest } from './plugin-loader.js';
+
+// ── 프로세스 실행 ─────────────────────────────────────────────
+
+export { ProcessExecutor } from './process-executor.js';
+export type { ProcessOptions, ProcessResult } from './process-executor.js';

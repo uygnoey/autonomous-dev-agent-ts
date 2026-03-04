@@ -21,9 +21,9 @@ export type {
 // ── 임베딩 ──────────────────────────────────────────────────────
 
 export {
-  createLocalEmbeddingProvider,
-  LocalEmbeddingProvider,
+  createTransformersEmbeddingProvider,
   normalizeVector,
+  TransformersEmbeddingProvider,
 } from './embeddings.js';
 
 // ── 벡터 저장소 ────────────────────────────────────────────────

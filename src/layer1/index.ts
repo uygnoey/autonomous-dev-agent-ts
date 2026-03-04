@@ -52,3 +52,14 @@ export { ContractBuilder } from './contract-builder.js';
 // ── 검증기 ──────────────────────────────────────────────────────
 
 export { Layer1Verifier } from './verifier.js';
+
+// ── Claude API ──────────────────────────────────────────────────
+
+export {
+  ClaudeApi,
+  type ClaudeApiRequestOptions,
+  type ClaudeApiResponse,
+  type ClaudeApiResponseMetadata,
+  type ClaudeStreamEvent,
+  type StreamCallback,
+} from './claude-api.js';

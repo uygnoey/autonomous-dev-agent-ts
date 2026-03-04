@@ -33,7 +33,7 @@ describe('BugEscalator', () => {
         expect(result.value.featureId).toBe('feat-1');
         expect(result.value.description).toContain('test-login');
         expect(result.value.description).toContain('unexpected error in auth');
-        expect(result.value.reproducible).toBe(true);
+        expect(result.value.severity).toBeTruthy();
       }
     });
 
@@ -44,7 +44,6 @@ describe('BugEscalator', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.severity).toBe('critical');
-        expect(result.value.phase).toBe('CODE');
       }
     });
 
@@ -58,25 +57,23 @@ describe('BugEscalator', () => {
       }
     });
 
-    it('major 키워드를 major로 분류한다', () => {
+    it('high severity 키워드를 high로 분류한다', () => {
       const failure = createFailure({ error: 'timeout exception during API call' });
       const result = escalator.createReport('proj-1', failure);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.severity).toBe('major');
-        expect(result.value.phase).toBe('TEST');
+        expect(result.value.severity).toBe('high');
       }
     });
 
-    it('분류 불가 에러를 minor로 분류한다', () => {
+    it('분류 불가 에러를 low로 분류한다', () => {
       const failure = createFailure({ error: 'button color is slightly off' });
       const result = escalator.createReport('proj-1', failure);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.severity).toBe('minor');
-        expect(result.value.phase).toBe('VERIFY');
+        expect(result.value.severity).toBe('low');
       }
     });
 

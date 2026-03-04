@@ -6,10 +6,9 @@
  * EN: Re-exports CLI command router, command implementations, and types.
  */
 
-// ── 라우터 / Router ────────────────────────────────────────────
+// ── 메인 애플리케이션 / Main Application ──────────────────────
 
-export { CommandRouter } from './main.js';
-export type { ParsedArgs } from './main.js';
+export { CliApp, type ICliApp } from './main.js';
 
 // ── 명령 / Commands ────────────────────────────────────────────
 
@@ -22,8 +21,14 @@ export { StartCommand } from './commands/start.js';
 
 export type {
   CliCommand,
-  CliOptions,
+  CliCommandHandler,
+  CliResult,
+  ConfigOptions,
+  GlobalCliOptions,
   InitOptions,
   ProjectInfo,
+  ProjectOptions,
   ProjectRegistry,
+  StartOptions,
 } from './types.js';
+export { EXIT_CODES } from './types.js';
