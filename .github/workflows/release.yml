@@ -7,9 +7,10 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -21,7 +22,7 @@ jobs:
           - os: ubuntu-latest
             target: linux-x64
             bun-target: bun-linux-x64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-latest
             target: linux-arm64
             bun-target: bun-linux-arm64
 
@@ -63,8 +64,85 @@ jobs:
         with:
           path: dist/
 
+      - name: Flatten artifacts
+        run: |
+          find dist/ -type f -name 'adev-*' -exec mv {} dist/ \;
+
+      - name: Parse version info
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if [[ "$TAG" == *"-alpha" ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "stage=Alpha" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == *"-beta" ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "stage=Beta" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == *"-pre" ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "stage=Pre-release" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "stage=Release" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
-          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          files: |
+            dist/adev-darwin-arm64
+            dist/adev-darwin-x64
+            dist/adev-linux-x64
+            dist/adev-linux-arm64
+          body: |
+            ## adev ${{ steps.version.outputs.tag }} (${{ steps.version.outputs.stage }})
+
+            Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발을 수행하는 에이전트 시스템.
+
+            ---
+
+            ## 설치 / Install
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/uygnoey/autonomous-dev-agent-ts/main/install.sh | bash
+            ```
+
+            ## 수동 설치 / Manual Install
+
+            플랫폼에 맞는 바이너리를 다운로드 후:
+
+            | 플랫폼 | 파일 |
+            |--------|------|
+            | macOS (Apple Silicon) | `adev-darwin-arm64` |
+            | macOS (Intel) | `adev-darwin-x64` |
+            | Linux (x86_64) | `adev-linux-x64` |
+            | Linux (ARM64) | `adev-linux-arm64` |
+
+            ```bash
+            chmod +x adev-<platform>
+            mv adev-<platform> /usr/local/bin/adev
+            ```
+
+            ## 시작하기 / Getting Started
+
+            ```bash
+            adev auth        # 인증 설정 (API Key 또는 OAuth Token)
+            adev init        # 새 프로젝트 초기화
+            adev start       # Layer1 대화 시작
+            ```
+
+            ## 변경사항 / Changelog
+
+            - `adev auth` 커맨드 추가 — 인증 설정/재설정/상태확인
+            - `adev setting` 추가 — `adev config` 별칭
+            - 바이너리 직접 배포로 전환 (git clone 불필요)
+            - 설치 시 대화형 인증 설정 (`exec </dev/tty` 적용)
+            - projects.json 테스트 격리 수정
+            - layer2 V2SessionExecutor DI 패턴 적용
+            - yargs version 예약어 충돌 수정
+
+            ---
+
+            **버전 로드맵**: `0.0.1-alpha` → `0.0.1-beta` → `0.0.1-pre` → `0.0.1`
