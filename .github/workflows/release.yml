@@ -16,9 +16,6 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             bun-target: bun-darwin-arm64
-          - os: macos-latest
-            target: darwin-x64
-            bun-target: bun-darwin-x64
           - os: ubuntu-latest
             target: linux-x64
             bun-target: bun-linux-x64
@@ -94,7 +91,6 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease }}
           files: |
             dist/adev-darwin-arm64
-            dist/adev-darwin-x64
             dist/adev-linux-x64
             dist/adev-linux-arm64
           body: |
@@ -117,7 +113,6 @@ jobs:
             | 플랫폼 | 파일 |
             |--------|------|
             | macOS (Apple Silicon) | `adev-darwin-arm64` |
-            | macOS (Intel) | `adev-darwin-x64` |
             | Linux (x86_64) | `adev-linux-x64` |
             | Linux (ARM64) | `adev-linux-arm64` |
 

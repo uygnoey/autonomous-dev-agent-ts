@@ -22,8 +22,7 @@ case "$OS" in
     Darwin)
         case "$ARCH" in
             arm64)  BINARY="adev-darwin-arm64" ;;
-            x86_64) BINARY="adev-darwin-x64" ;;
-            *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
+            *) echo "❌ macOS는 Apple Silicon(arm64)만 지원합니다. arch: $ARCH"; exit 1 ;;
         esac
         ;;
     Linux)
