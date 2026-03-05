@@ -103,8 +103,8 @@ describe('InitCommand', () => {
 
   it('읽기 전용 경로에서 디렉토리 생성 실패 시 에러를 반환한다', async () => {
     const cmd = new InitCommand(logger, registryDir);
-    // WHY: 존재하지 않는 중첩 경로에 쓰기 시도하면 OS에서 거부한다
-    const badPath = '/nonexistent_root_dir/deep/nested/path';
+    // WHY: 파일 경로를 하위 디렉토리로 사용하면 모든 OS에서 mkdir이 실패한다
+    const badPath = import.meta.path + '/cannot/be/a/dir';
     const result = await cmd.execute([], makeOptions(badPath));
 
     expect(result.ok).toBe(false);
