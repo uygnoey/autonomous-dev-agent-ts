@@ -8,7 +8,9 @@ set -e
 TTY_OK=false
 if [ -t 0 ]; then
     TTY_OK=true
-elif [ -r /dev/tty ] && exec < /dev/tty 2>/dev/null; then
+elif [ -r /dev/tty ]; then
+    # WHY: exec는 현재 셸을 교체하므로 조건문에서 사용 불가
+    #      대신 /dev/tty를 read 명령어에서 직접 사용
     TTY_OK=true
 fi
 
@@ -98,14 +100,14 @@ else
     echo "  2) Claude Code OAuth Token (Pro/Max 구독자)"
     echo "  3) Skip                   (나중에 'adev auth'로 설정)"
     echo ""
-    read -p "Enter choice [1-3]: " auth_choice
+    read -p "Enter choice [1-3]: " auth_choice < /dev/tty
 
     case $auth_choice in
         1)
             echo ""
             echo "📘 API Key 발급: https://console.anthropic.com/settings/keys"
             echo ""
-            read -p "Anthropic API Key (sk-ant-...): " api_key
+            read -p "Anthropic API Key (sk-ant-...): " api_key < /dev/tty
             if [ -n "$api_key" ]; then
                 [ -f "$ENV_FILE" ] && sed -i.bak '/^ANTHROPIC_API_KEY=/d;/^CLAUDE_CODE_OAUTH_TOKEN=/d' "$ENV_FILE" && rm -f "${ENV_FILE}.bak"
                 echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
@@ -120,7 +122,7 @@ else
             echo "📘 OAuth Token 확인 방법:"
             echo "   cat ~/.claude/.credentials.json | grep oauthToken"
             echo ""
-            read -p "Claude Code OAuth Token (sk-ant-oat01-...): " oauth_token
+            read -p "Claude Code OAuth Token (sk-ant-oat01-...): " oauth_token < /dev/tty
             if [ -n "$oauth_token" ]; then
                 [ -f "$ENV_FILE" ] && sed -i.bak '/^ANTHROPIC_API_KEY=/d;/^CLAUDE_CODE_OAUTH_TOKEN=/d' "$ENV_FILE" && rm -f "${ENV_FILE}.bak"
                 echo "CLAUDE_CODE_OAUTH_TOKEN=$oauth_token" >> "$ENV_FILE"
