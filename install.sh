@@ -138,9 +138,12 @@ else
             ;;
         2)
             echo ""
-            echo "📘 OAuth Token 확인 방법:"
-            echo "   cat ~/.claude/.credentials.json | grep oauthToken"
+            echo "📘 Claude Code OAuth Token 사용법:"
+            echo "   1. 터미널에서 실행: claude setup-token"
+            echo "   2. 브라우저에서 인증 완료"
+            echo "   3. 토큰 자동 저장됨 → 여기서는 Skip(Enter) 권장"
             echo ""
+            echo "   (또는 직접 토큰 입력)"
             printf "Claude Code OAuth Token (sk-ant-oat01-...): "
             read oauth_token < /dev/tty
             if [ -n "$oauth_token" ]; then
