@@ -236,9 +236,11 @@ export class InitCommand implements IInitCommand {
   async createAdevDirectory(projectPath: string): Promise<Result<void, ConfigError>> {
     try {
       const adevPath = path.join(projectPath, '.adev');
+      const claudePath = path.join(projectPath, '.claude');
 
-      // 주요 디렉토리 구조 생성
+      // WHY: .adev (adev 내부 데이터) + .claude (Claude Code 호환) 둘 다 생성
       const directories = [
+        // .adev/ (adev specific)
         adevPath,
         path.join(adevPath, 'data'),
         path.join(adevPath, 'data', 'memory'),
@@ -248,6 +250,12 @@ export class InitCommand implements IInitCommand {
         path.join(adevPath, 'mcp'),
         path.join(adevPath, 'skills'),
         path.join(adevPath, 'templates'),
+        // .claude/ (Claude Code compatibility)
+        claudePath,
+        path.join(claudePath, 'agents'),
+        path.join(claudePath, 'skills'),
+        path.join(claudePath, 'mcp'),
+        path.join(claudePath, 'memory'),
       ];
 
       for (const dir of directories) {
@@ -255,8 +263,9 @@ export class InitCommand implements IInitCommand {
         this.logger.debug('디렉토리 생성됨', { dir });
       }
 
-      this.logger.info('.adev/ 디렉토리 구조 생성 완료', {
+      this.logger.info('.adev/ + .claude/ 디렉토리 구조 생성 완료', {
         adevPath,
+        claudePath,
         dirCount: directories.length,
       });
 
@@ -313,8 +322,9 @@ export class InitCommand implements IInitCommand {
         this.logger.debug('agent.md 생성됨', { agentName, agentFilePath });
       }
 
-      // 3. .gitignore에 .adev/data/ 추가
+      // 3. .gitignore에 .adev/data/ + .claude/memory/ 추가
       await this.addToGitignore(projectPath, '.adev/data/');
+      await this.addToGitignore(projectPath, '.claude/memory/');
 
       this.logger.info('설정 파일 생성 완료', {
         configPath,

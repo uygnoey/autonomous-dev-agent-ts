@@ -46,6 +46,20 @@ const CONTRACT_TRIGGERS = ['확정', '완료', 'confirm', 'finalize'];
 /** 종료 키워드 / Exit keywords */
 const EXIT_KEYWORDS = ['exit', 'quit', '종료', '나가기'];
 
+// ── ANSI 색상 코드 / ANSI color codes ───────────────────────────
+
+const COLORS = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  gray: '\x1b[90m',
+} as const;
+
 // ── 인터페이스 / Interfaces ─────────────────────────────────────
 
 /**
@@ -274,20 +288,25 @@ export class StartCommand {
     const rl = readline.createInterface({ input, output });
 
     try {
-      console.log('\n========================================');
-      console.log('🚀 Layer1 대화 시작 / Layer1 Conversation Started');
-      console.log('========================================\n');
-      console.log('프로젝트:', session.projectInfo.name);
-      console.log('경로:', session.projectInfo.path);
-      console.log('\n💡 팁:');
-      console.log('  - 프로젝트 요구사항을 자유롭게 설명하세요');
-      console.log('  - "확정" 또는 "완료" 입력 시 Contract 생성');
-      console.log('  - "exit" 또는 "종료" 입력 시 대화 종료\n');
+      // 시작 배너
+      console.log('');
+      console.log(`${COLORS.bright}${COLORS.cyan}╔════════════════════════════════════════════════╗${COLORS.reset}`);
+      console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}  ${COLORS.bright}🚀 adev - Autonomous Development Agent${COLORS.reset}  ${COLORS.cyan}║${COLORS.reset}`);
+      console.log(`${COLORS.bright}${COLORS.cyan}╚════════════════════════════════════════════════╝${COLORS.reset}`);
+      console.log('');
+      console.log(`${COLORS.dim}프로젝트:${COLORS.reset} ${COLORS.bright}${session.projectInfo.name}${COLORS.reset}`);
+      console.log(`${COLORS.dim}경로:${COLORS.reset}     ${session.projectInfo.path}`);
+      console.log('');
+      console.log(`${COLORS.yellow}💡 시작 가이드${COLORS.reset}`);
+      console.log(`   ${COLORS.dim}•${COLORS.reset} 프로젝트 요구사항을 자유롭게 설명하세요`);
+      console.log(`   ${COLORS.dim}•${COLORS.reset} ${COLORS.green}"확정"${COLORS.reset} 또는 ${COLORS.green}"완료"${COLORS.reset} → Contract 생성`);
+      console.log(`   ${COLORS.dim}•${COLORS.reset} ${COLORS.gray}"exit"${COLORS.reset} 또는 ${COLORS.gray}"종료"${COLORS.reset} → 대화 종료`);
+      console.log('');
 
       // 초기 기능 설명이 있으면 자동 입력
       const initialFeature = (options as StartOptions).feature;
       if (initialFeature) {
-        console.log(`\n사용자: ${initialFeature}\n`);
+        console.log(`${COLORS.blue}>${COLORS.reset} ${initialFeature}\n`);
         const responseResult = await this.processUserInput(session, initialFeature);
         if (!responseResult.ok) {
           return responseResult;
@@ -296,7 +315,7 @@ export class StartCommand {
 
       // REPL 루프
       while (true) {
-        const userInput = await rl.question('\n사용자: ');
+        const userInput = await rl.question(`${COLORS.blue}>${COLORS.reset} `);
 
         if (!userInput.trim()) {
           continue;
@@ -404,8 +423,12 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(assistantMessage);
 
-      // 응답 출력
-      console.log(`\n어시스턴트: ${assistantContent}\n`);
+      // 응답 출력 (Claude Code 스타일)
+      console.log('');
+      console.log(`${COLORS.dim}─────────────────────────────────────────────────${COLORS.reset}`);
+      console.log(`${assistantContent}`);
+      console.log(`${COLORS.dim}─────────────────────────────────────────────────${COLORS.reset}`);
+      console.log('');
 
       // 세션 메시지 업데이트
       session.messages.push(userMessage, assistantMessage);
