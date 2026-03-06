@@ -71,19 +71,36 @@ chmod +x "$INSTALL_DIR/adev"
 ln -sf "$INSTALL_DIR/adev" "$BIN_DIR/adev"
 
 # ── PATH 설정 / Setup PATH ─────────────────────────────────────────
+# WHY: macOS는 기본 셸이 zsh이지만 .zshrc가 없을 수 있음 → 자동 생성
 SHELL_RC=""
-if [ -f "$HOME/.zshrc" ]; then
+if [ -n "$ZSH_VERSION" ]; then
+    # 현재 zsh 실행 중
+    SHELL_RC="$HOME/.zshrc"
+elif [ -n "$BASH_VERSION" ]; then
+    # 현재 bash 실행 중
+    SHELL_RC="$HOME/.bashrc"
+elif [ -f "$HOME/.zshrc" ]; then
+    # zsh 설정 파일 존재
     SHELL_RC="$HOME/.zshrc"
 elif [ -f "$HOME/.bashrc" ]; then
+    # bash 설정 파일 존재
     SHELL_RC="$HOME/.bashrc"
+else
+    # 아무것도 없으면 macOS 기본 셸(zsh) 우선
+    SHELL_RC="$HOME/.zshrc"
 fi
 
-if [ -n "$SHELL_RC" ]; then
-    if ! grep -q "$BIN_DIR" "$SHELL_RC" 2>/dev/null; then
-        echo "" >> "$SHELL_RC"
-        echo "# adev (autonomous-dev-agent)" >> "$SHELL_RC"
-        echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
-    fi
+# 설정 파일 없으면 생성
+if [ ! -f "$SHELL_RC" ]; then
+    touch "$SHELL_RC"
+    echo "# Created by adev installer" >> "$SHELL_RC"
+fi
+
+# PATH 추가 (중복 방지)
+if ! grep -q "$BIN_DIR" "$SHELL_RC" 2>/dev/null; then
+    echo "" >> "$SHELL_RC"
+    echo "# adev (autonomous-dev-agent)" >> "$SHELL_RC"
+    echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$SHELL_RC"
 fi
 
 # ── 인증 설정 / Authentication setup ──────────────────────────────
@@ -146,13 +163,22 @@ echo ""
 echo "🎉 adev $LATEST 설치 완료!"
 echo ""
 echo "📝 다음 단계:"
+echo ""
+echo "   🔄 PATH 활성화 (둘 중 하나):"
 if [ -n "$SHELL_RC" ]; then
-    echo "   1. 셸 재시작 또는: source $SHELL_RC"
+    echo "      • 새 터미널 창 열기 (권장)"
+    echo "      • 또는 실행: source $SHELL_RC"
 else
-    echo "   1. $BIN_DIR 를 PATH에 추가"
+    echo "      • $BIN_DIR 를 PATH에 추가"
 fi
-echo "   2. adev init     — 새 프로젝트 시작"
-echo "   3. adev auth     — 인증 만료 시 재설정"
+echo ""
+echo "   🚀 사용 시작:"
+echo "      adev init ~/my-project  — 새 프로젝트 생성"
+echo "      cd ~/my-project"
+echo "      adev start              — 자율 개발 시작"
+echo ""
+echo "   🔑 인증 재설정 (필요 시):"
+echo "      adev auth"
 echo ""
 echo "📚 Docs: https://github.com/$REPO"
 echo ""
