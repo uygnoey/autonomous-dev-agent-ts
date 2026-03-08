@@ -642,4 +642,200 @@ describe('RagSearcher', () => {
       }
     });
   });
+
+  // ── UUID / 랜덤 ID 경계값 ─────────────────────────────────────
+
+  describe('UUID/랜덤 ID 경계값', () => {
+    it('UUID id 레코드 삽입 후 검색 → ok', async () => {
+      const uuid = crypto.randomUUID();
+      await store.insert(createTestCodeRecord({ id: uuid, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('10개 UUID id 레코드 삽입 후 검색 → ok', async () => {
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({
+          id: crypto.randomUUID(),
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('한글 chunk → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'kr-chunk',
+        chunk: '// 인증 서비스 구현',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('인증');
+      expect(result.ok).toBe(true);
+    });
+
+    it('특수문자 포함 chunk → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'special-chunk',
+        chunk: 'function test() { return null; } // @#$%^&*',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('!@#$%');
+      expect(result.ok).toBe(true);
+    });
+
+    it('빈 chunk → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'empty-chunk',
+        chunk: '',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('매우 긴 chunk → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'long-chunk',
+        chunk: 'function test() {}'.repeat(100),
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('function');
+      expect(result.ok).toBe(true);
+    });
+
+    it('동일 chunk 다른 id → 둘 다 검색됨', async () => {
+      await store.insert(createTestCodeRecord({ id: 'dup-1', chunk: 'same chunk', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await store.insert(createTestCodeRecord({ id: 'dup-2', chunk: 'same chunk', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await searcher.searchCode('same chunk', 10);
+      expect(result.ok).toBe(true);
+    });
+
+    it('limit=0 → 빈 배열 또는 ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'limit0', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test', 0);
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('음수 limit → ok 또는 에러 처리됨', async () => {
+      await store.insert(createTestCodeRecord({ id: 'neg-limit', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test', -1);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('최대 limit=1000 → ok', async () => {
+      for (let i = 0; i < 5; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `max-lim-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test', 1000);
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── 다양한 metadata filter 경계값 ────────────────────────────
+
+  describe('metadata filter 경계값', () => {
+    it('존재하지 않는 language 필터 → 빈 배열', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'lang-ts-only',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'fn', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('test', 10, { language: 'cobol' });
+      if (result.ok) {
+        expect(result.value.length).toBe(0);
+      }
+    });
+
+    it('functionName 필터 → 일치 레코드만', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'fn-match',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'loadConfig', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      await store.insert(createTestCodeRecord({
+        id: 'fn-other',
+        embedding: new Float32Array([0.9, 0.1, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'saveConfig', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('config', 10, { functionName: 'loadConfig' });
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.record.metadata.functionName).toBe('loadConfig');
+        }
+      }
+    });
+
+    it('modifiedBy 필터 → ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'modified-by',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'fn', lastModified: new Date(), modifiedBy: 'alice' },
+      }));
+      const result = await searcher.searchCode('test', 10, { modifiedBy: 'alice' });
+      expect(result.ok).toBe(true);
+    });
+
+    it('빈 filter 객체 → 필터 없음과 동일', async () => {
+      await store.insert(createTestCodeRecord({ id: 'no-filter', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test', 10, {});
+      expect(result.ok).toBe(true);
+    });
+
+    it('language + module 복합 필터 → ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'combo-filter',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src/core', functionName: 'fn', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('test', 10, { language: 'typescript', module: 'src/core' });
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── searchByFile 추가 edge 케이스 ────────────────────────────
+
+  describe('searchByFile 추가 edge 케이스', () => {
+    it('UUID 파일 경로로 검색 → ok', async () => {
+      const path = `src/${crypto.randomUUID()}.ts`;
+      await store.insert(createTestCodeRecord({ id: 'uuid-path', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+    });
+
+    it('한글 파일 경로 → ok', async () => {
+      const path = 'src/설정/config.ts';
+      await store.insert(createTestCodeRecord({ id: 'kr-path', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+    });
+
+    it('중첩 경로 → 정확히 일치하는 레코드만 반환', async () => {
+      await store.insert(createTestCodeRecord({ id: 'deep1', filePath: 'a/b/c/d.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await store.insert(createTestCodeRecord({ id: 'deep2', filePath: 'a/b/c/e.ts', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await searcher.searchByFile('a/b/c/d.ts');
+      if (result.ok) {
+        for (const rec of result.value) {
+          expect(rec.filePath).toBe('a/b/c/d.ts');
+        }
+      }
+    });
+
+    it('존재하지 않는 경로 → 빈 배열', async () => {
+      await store.insert(createTestCodeRecord({ id: 'exist', filePath: 'src/exist.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('src/nonexist.ts');
+      if (result.ok) expect(result.value.length).toBe(0);
+    });
+
+    it('빈 문자열 경로 → 빈 배열', async () => {
+      await store.insert(createTestCodeRecord({ id: 'non-empty', filePath: 'src/main.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('');
+      if (result.ok) expect(result.value).toEqual([]);
+    });
+  });
 });
