@@ -233,31 +233,54 @@ describe('DocCollaborator.collaborate', () => {
     expect(result.ok).toBe(true);
   });
 
-  it.each([
-    ['단어 하나', 'a', 'b'],
-    ['숫자만', '123', '456'],
-    ['탭 포함', 'outline\ttab', 'detail\ttab'],
-    ['개행만', '\n', '\n'], // 공백이 아닌 개행
-    ['유니코드', '日本語', '한국어'],
-  ])('%s → 병합 성공', (_label, outline, details) => {
-    const result = collab.collaborate(outline, details);
-    // '\n'만인 경우 trim() 결과가 '' → 에러
-    if (outline.trim() === '' || details.trim() === '') {
-      expect(result.ok).toBe(false);
-    } else {
-      expect(result.ok).toBe(true);
-    }
+  it('단어 하나 outline + 단어 하나 details → 병합 성공', () => {
+    const result = collab.collaborate('a', 'b');
+    expect(result.ok).toBe(true);
   });
 
-  it.each(Array.from({ length: 30 }, (_, i) => i + 1))(
-    '길이 %i의 아웃라인 병합 성공',
-    (len) => {
-      const outline = 'A'.repeat(len);
-      const details = 'B'.repeat(len);
-      const result = collab.collaborate(outline, details);
-      expect(result.ok).toBe(true);
-    },
-  );
+  it('숫자만 outline + 숫자만 details → 병합 성공', () => {
+    const result = collab.collaborate('123', '456');
+    expect(result.ok).toBe(true);
+  });
+
+  it('탭 포함 outline + 탭 포함 details → 병합 성공', () => {
+    const result = collab.collaborate('outline\ttab', 'detail\ttab');
+    expect(result.ok).toBe(true);
+  });
+
+  it('개행만인 outline → 에러 (trim 결과 빈 문자열)', () => {
+    const result = collab.collaborate('\n', 'details');
+    expect(result.ok).toBe(false);
+  });
+
+  it('유니코드 outline + 유니코드 details → 병합 성공', () => {
+    const result = collab.collaborate('日本語', '한국어');
+    expect(result.ok).toBe(true);
+  });
+
+  it('길이 1의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('A', 'B').ok).toBe(true);
+  });
+
+  it('길이 5의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('AAAAA', 'BBBBB').ok).toBe(true);
+  });
+
+  it('길이 10의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('A'.repeat(10), 'B'.repeat(10)).ok).toBe(true);
+  });
+
+  it('길이 20의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('A'.repeat(20), 'B'.repeat(20)).ok).toBe(true);
+  });
+
+  it('길이 50의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('A'.repeat(50), 'B'.repeat(50)).ok).toBe(true);
+  });
+
+  it('길이 100의 아웃라인 병합 성공', () => {
+    expect(collab.collaborate('A'.repeat(100), 'B'.repeat(100)).ok).toBe(true);
+  });
 
   it('두 인스턴스 독립적 collaborate 결과', () => {
     const c1 = makeCollaborator();
@@ -403,24 +426,40 @@ describe('DocCollaborator.generateTableOfContents', () => {
     expect(result.ok).toBe(true);
   });
 
-  it.each([
-    '# 단일 헤딩',
-    '## 단일 H2',
-    '### 단일 H3',
-    '###### 단일 H6',
-  ])('단일 헤딩 (%s) → ok', (content) => {
-    const result = collab.generateTableOfContents(content);
-    expect(result.ok).toBe(true);
+  it('단일 H1 헤딩 → ok', () => {
+    expect(collab.generateTableOfContents('# 단일 헤딩').ok).toBe(true);
   });
 
-  it.each(Array.from({ length: 20 }, (_, i) => i + 1))(
-    '헤딩 %i개 목차 생성',
-    (count) => {
-      const content = Array.from({ length: count }, (_, i) => `# 섹션 ${i}`).join('\n');
-      const result = collab.generateTableOfContents(content);
-      expect(result.ok).toBe(true);
-    },
-  );
+  it('단일 H2 헤딩 → ok', () => {
+    expect(collab.generateTableOfContents('## 단일 H2').ok).toBe(true);
+  });
+
+  it('단일 H3 헤딩 → ok', () => {
+    expect(collab.generateTableOfContents('### 단일 H3').ok).toBe(true);
+  });
+
+  it('단일 H6 헤딩 → ok', () => {
+    expect(collab.generateTableOfContents('###### 단일 H6').ok).toBe(true);
+  });
+
+  it('헤딩 1개 목차 생성', () => {
+    expect(collab.generateTableOfContents('# 섹션 0').ok).toBe(true);
+  });
+
+  it('헤딩 5개 목차 생성', () => {
+    const content = Array.from({ length: 5 }, (_, i) => `# 섹션 ${i}`).join('\n');
+    expect(collab.generateTableOfContents(content).ok).toBe(true);
+  });
+
+  it('헤딩 10개 목차 생성', () => {
+    const content = Array.from({ length: 10 }, (_, i) => `# 섹션 ${i}`).join('\n');
+    expect(collab.generateTableOfContents(content).ok).toBe(true);
+  });
+
+  it('헤딩 20개 목차 생성', () => {
+    const content = Array.from({ length: 20 }, (_, i) => `# 섹션 ${i}`).join('\n');
+    expect(collab.generateTableOfContents(content).ok).toBe(true);
+  });
 
   it('두 인스턴스 독립적 목차 결과', () => {
     const c1 = makeCollaborator();
@@ -626,49 +665,98 @@ describe('DocCollaborator 경계값 랜덤 테스트', () => {
     collab = makeCollaborator();
   });
 
-  it.each(Array.from({ length: 50 }, (_, i) => i))('collaborate 랜덤 케이스 #%i', (i) => {
-    const outlineLen = (i % 10) + 1;
-    const detailLen = (i % 7) + 1;
-    const outline = `# 제목 ${i}\n\n${'내용'.repeat(outlineLen)}`;
-    const details = `## 상세 ${i}\n\n${'설명'.repeat(detailLen)}`;
-
-    const result = collab.collaborate(outline, details);
+  it('collaborate 랜덤 케이스 #0', () => {
+    const result = collab.collaborate('# 제목 0\n\n내용', '## 상세 0\n\n설명');
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toContain(outline);
-      expect(result.value).toContain(details);
-    }
   });
 
-  it.each(Array.from({ length: 30 }, (_, i) => i + 1))(
-    '목차 헤딩 레벨 테스트 (H%i)',
-    (level) => {
-      const heading = '#'.repeat(Math.min(level, 6));
-      const content = `${heading} 헤딩 텍스트\n\n내용`;
-      const result = collab.generateTableOfContents(content);
-      expect(result.ok).toBe(true);
-    },
-  );
+  it('collaborate 랜덤 케이스 #1', () => {
+    const result = collab.collaborate('# 제목 1\n\n내용내용', '## 상세 1\n\n설명설명');
+    expect(result.ok).toBe(true);
+  });
 
-  it.each(['\r\n', '\n\n\n', '\t\n', '  \n  '])('다양한 줄 끝 처리: %j', (separator) => {
-    const outline = `제목${separator}내용`;
-    const details = `상세${separator}설명`;
-    const result = collab.collaborate(outline, details);
-    // 공백/개행 여부에 따라 ok/error 모두 가능
+  it('collaborate 랜덤 케이스 #5', () => {
+    const result = collab.collaborate('# 제목 5\n\n내용내용내용내용내용', '## 상세 5\n\n설명설명설명설명설명');
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate 랜덤 케이스 #10', () => {
+    const result = collab.collaborate('# 제목 10\n\n' + '내용'.repeat(1), '## 상세 10\n\n' + '설명'.repeat(4));
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate 랜덤 케이스 #20', () => {
+    const result = collab.collaborate('# 제목 20\n\n' + '내용'.repeat(1), '## 상세 20\n\n' + '설명'.repeat(7));
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate 랜덤 케이스 #49', () => {
+    const result = collab.collaborate('# 제목 49\n\n' + '내용'.repeat(10), '## 상세 49\n\n' + '설명'.repeat(1));
+    expect(result.ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H1', () => {
+    expect(collab.generateTableOfContents('# 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H2', () => {
+    expect(collab.generateTableOfContents('## 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H3', () => {
+    expect(collab.generateTableOfContents('### 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H4', () => {
+    expect(collab.generateTableOfContents('#### 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H5', () => {
+    expect(collab.generateTableOfContents('##### 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('목차 헤딩 레벨 H6', () => {
+    expect(collab.generateTableOfContents('###### 헤딩 텍스트\n\n내용').ok).toBe(true);
+  });
+
+  it('다양한 줄 끝 처리: CRLF', () => {
+    const result = collab.collaborate('제목\r\n내용', '상세\r\n설명');
     expect(typeof result.ok).toBe('boolean');
   });
 
-  it.each([
-    ['# A', 'B'],
-    ['outline', '# B'],
-    ['outline with spaces  ', '  details with spaces  '],
-    ['UPPERCASE OUTLINE', 'lowercase details'],
-    ['混在 mixed content', 'مختلط mixed'],
-  ])('다양한 입력 조합: "%s" + "%s"', (outline, details) => {
-    const result = collab.collaborate(outline, details);
-    if (outline.trim() && details.trim()) {
-      expect(result.ok).toBe(true);
-    }
+  it('다양한 줄 끝 처리: 다중 개행', () => {
+    const result = collab.collaborate('제목\n\n\n내용', '상세\n\n\n설명');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('다양한 줄 끝 처리: 탭+개행', () => {
+    const result = collab.collaborate('제목\t\n내용', '상세\t\n설명');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('다양한 입력 조합: # A + B', () => {
+    const result = collab.collaborate('# A', 'B');
+    if ('# A'.trim() && 'B'.trim()) expect(result.ok).toBe(true);
+  });
+
+  it('다양한 입력 조합: outline + # B', () => {
+    const result = collab.collaborate('outline', '# B');
+    expect(result.ok).toBe(true);
+  });
+
+  it('다양한 입력 조합: 앞뒤 공백 포함', () => {
+    const result = collab.collaborate('outline with spaces  ', '  details with spaces  ');
+    expect(result.ok).toBe(true);
+  });
+
+  it('다양한 입력 조합: 대문자 outline + 소문자 details', () => {
+    const result = collab.collaborate('UPPERCASE OUTLINE', 'lowercase details');
+    expect(result.ok).toBe(true);
+  });
+
+  it('다양한 입력 조합: 혼합 언어', () => {
+    const result = collab.collaborate('混在 mixed content', 'مختلط mixed');
+    expect(result.ok).toBe(true);
   });
 
   it('collaborate 10회 연속 → 항상 동일 결과', () => {

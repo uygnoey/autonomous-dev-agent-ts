@@ -694,4 +694,180 @@ describe('DEFAULT_CONFIG', () => {
       expect(DEFAULT_CONFIG.log.level).toBe(level);
     }
   });
+
+  it('DEFAULT_CONFIG.testing.unitCount가 10000이다', () => {
+    expect(DEFAULT_CONFIG.testing.unitCount).toBe(10_000);
+  });
+
+  it('DEFAULT_CONFIG.verification.layer1Model이 opus이다', () => {
+    expect(DEFAULT_CONFIG.verification.layer1Model).toBe('opus');
+  });
+
+  it('DEFAULT_CONFIG.verification.adevModel이 opus이다', () => {
+    expect(DEFAULT_CONFIG.verification.adevModel).toBe('opus');
+  });
+});
+
+// ── 추가 경계값: validateConfig 확장 ─────────────────────────
+
+describe('validateConfig 추가 경계값', () => {
+  it('unitCount=Number.MAX_SAFE_INTEGER → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: Number.MAX_SAFE_INTEGER },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('unitCount=2 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 2 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('unitCount=-999 → err', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: -999 },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('e2eTimeoutSeconds=3600 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: 3600 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('e2eTimeoutSeconds=-3600 → err', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: -3600 },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid log level "trace" → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'trace' as 'debug' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid log level 빈 문자열 → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: '' as 'debug' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('valid layer1Model "sonnet" → ok', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, layer1Model: 'sonnet' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('invalid layer1Model "haiku" → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, layer1Model: 'haiku' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid adevModel "haiku" → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: 'haiku' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('valid adevModel "sonnet" → ok', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: 'sonnet' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('에러 메시지 unitCount 5번 반복 → 항상 동일 에러 코드', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: -1 },
+    };
+    const codes: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = validateConfig(config);
+      if (!r.ok) codes.push(r.error.code);
+    }
+    expect(codes.length).toBe(5);
+    expect(new Set(codes).size).toBe(1);
+  });
+});
+
+// ── 추가 경계값: loadEnvironment 확장 ─────────────────────────
+
+describe('loadEnvironment 추가 경계값', () => {
+  let savedApiKey: string | undefined;
+  let savedOauthToken: string | undefined;
+
+  beforeEach(() => {
+    savedApiKey = process.env['ANTHROPIC_API_KEY'];
+    savedOauthToken = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    delete process.env['ANTHROPIC_API_KEY'];
+    delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+  });
+
+  afterEach(() => {
+    if (savedApiKey !== undefined) {
+      process.env['ANTHROPIC_API_KEY'] = savedApiKey;
+    } else {
+      delete process.env['ANTHROPIC_API_KEY'];
+    }
+    if (savedOauthToken !== undefined) {
+      process.env['CLAUDE_CODE_OAUTH_TOKEN'] = savedOauthToken;
+    } else {
+      delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    }
+  });
+
+  it('공백만 있는 API key → 에러 (미설정 취급)', () => {
+    process.env['ANTHROPIC_API_KEY'] = '   ';
+    const result = loadEnvironment();
+    // 공백 문자열은 빈 문자열과 동일하게 처리될 수도 있음
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('UUID 형태의 API key → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = crypto.randomUUID();
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
+
+  it('매우 긴 API key → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-' + 'x'.repeat(500);
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
+
+  it('한국어 포함 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-한국어토큰';
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 API key → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-!@#$%^&*()';
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
 });

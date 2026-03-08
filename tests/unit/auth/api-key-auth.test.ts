@@ -696,3 +696,143 @@ describe('ApiKeyAuth getRateLimitStatus 필드 타입', () => {
     }
   });
 });
+
+// ── 추가 경계값: 다양한 API 키 패턴 ──────────────────────────
+
+describe('ApiKeyAuth 다양한 API 키 패턴', () => {
+  it('숫자만으로 된 키 → 헤더에 그대로 반영', () => {
+    const headers = createAuth('1234567890').getAuthHeader();
+    expect(headers['x-api-key']).toBe('1234567890');
+  });
+
+  it('이모지 포함 키 → 헤더에 그대로 반영', () => {
+    const key = 'sk-ant-🚀emoji🎉key';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('UUID 형태 키 → 헤더에 그대로 반영', () => {
+    const uuid = crypto.randomUUID();
+    const headers = createAuth(uuid).getAuthHeader();
+    expect(headers['x-api-key']).toBe(uuid);
+  });
+
+  it('탭 포함 키 → 헤더에 그대로 반영', () => {
+    const key = 'sk-ant\tkey';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('개행 포함 키 → 헤더에 그대로 반영', () => {
+    const key = 'sk-ant\nkey';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('authMode는 항상 api-key', () => {
+    const keys = ['key1', 'key2', '', 'uuid-' + crypto.randomUUID()];
+    for (const key of keys) {
+      expect(createAuth(key).authMode).toBe('api-key');
+    }
+  });
+
+  it('5가지 특수문자 키 → 모두 정상 헤더 반환', () => {
+    const keys = ['!key', '@key', '#key', '$key', '%key'];
+    for (const key of keys) {
+      const headers = createAuth(key).getAuthHeader();
+      expect(headers['x-api-key']).toBe(key);
+    }
+  });
+
+  it('500자 길이 키 → 헤더에 반영', () => {
+    const key = 'sk-ant-' + 'a'.repeat(493);
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+    expect(key.length).toBe(500);
+  });
+
+  it('단일 공백 키 → 헤더에 그대로 반영', () => {
+    const key = ' ';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+});
+
+// ── 추가 경계값: updateFromResponse 극단값 ───────────────────
+
+describe('ApiKeyAuth updateFromResponse 극단값', () => {
+  it('Number.MAX_SAFE_INTEGER 문자열 → 파싱됨', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': String(Number.MAX_SAFE_INTEGER),
+      'anthropic-ratelimit-requests-limit': String(Number.MAX_SAFE_INTEGER),
+    });
+    const status = auth.getRateLimitStatus();
+    expect(typeof status.requestsRemaining === 'number' || status.requestsRemaining === null).toBe(true);
+  });
+
+  it('requests-remaining=100, limit=100 → 잔여 100% → false', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '100',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('requests-remaining=0, limit=1 → 0% → true', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '0',
+      'anthropic-ratelimit-requests-limit': '1',
+    });
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('모든 헤더에 비숫자 → 모두 null', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': 'nan',
+      'anthropic-ratelimit-input-tokens-remaining': 'undefined',
+      'anthropic-ratelimit-output-tokens-remaining': 'null',
+      'retry-after': 'abc',
+    });
+    const status = auth.getRateLimitStatus();
+    expect(status.requestsRemaining).toBeNull();
+    expect(status.inputTokensRemaining).toBeNull();
+    expect(status.outputTokensRemaining).toBeNull();
+    expect(status.retryAfterSeconds).toBeNull();
+  });
+
+  it('input-tokens-remaining=1, limit=100000 → true (1% < 20%)', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-input-tokens-remaining': '1',
+      'anthropic-ratelimit-input-tokens-limit': '100000',
+    });
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('output-tokens-remaining=25000, limit=100000 → false (25% > 20%)', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-output-tokens-remaining': '25000',
+      'anthropic-ratelimit-output-tokens-limit': '100000',
+    });
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('retry-after=3600 → 3600으로 파싱', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({ 'retry-after': '3600' });
+    expect(auth.getRateLimitStatus().retryAfterSeconds).toBe(3600);
+  });
+
+  it('빈 헤더 객체 10번 호출 → 항상 ok=true', () => {
+    const auth = createAuth();
+    for (let i = 0; i < 10; i++) {
+      const result = auth.updateFromResponse({});
+      expect(result.ok).toBe(true);
+    }
+  });
+});

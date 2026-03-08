@@ -697,3 +697,141 @@ describe('Vectorizer 미초기화 혼합 경계값', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+// ── 추가 경계값: 다양한 쿼리 패턴 ───────────────────────────
+
+describe('Vectorizer 추가 쿼리 경계값', () => {
+  it('단일 문자 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('a');
+    expect(r.ok).toBe(false);
+  });
+
+  it('단일 숫자 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('1');
+    expect(r.ok).toBe(false);
+  });
+
+  it('이모지 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('🚀🎉🔥');
+    expect(r.ok).toBe(false);
+  });
+
+  it('SQL 쿼리 문자열 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search("SELECT * FROM table WHERE id = '1'");
+    expect(r.ok).toBe(false);
+  });
+
+  it('JSON 문자열 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('{"key": "value", "num": 42}');
+    expect(r.ok).toBe(false);
+  });
+
+  it('XML 문자열 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('<tag>content</tag>');
+    expect(r.ok).toBe(false);
+  });
+
+  it('URL 형태 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('https://example.com/path?query=value&other=123');
+    expect(r.ok).toBe(false);
+  });
+
+  it('UUID 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search(crypto.randomUUID());
+    expect(r.ok).toBe(false);
+  });
+
+  it('숫자만 있는 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('1234567890');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CRLF 포함 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('line1\r\nline2');
+    expect(r.ok).toBe(false);
+  });
+
+  it('limit=0 + 빈 쿼리 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('', 0);
+    expect(r.ok).toBe(false);
+  });
+
+  it('limit=Number.MIN_SAFE_INTEGER → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query', Number.MIN_SAFE_INTEGER);
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 경계값: 다양한 index 경로 패턴 ────────────────────
+
+describe('Vectorizer 추가 index 경로 경계값', () => {
+  it('Windows 스타일 경로 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('C:\\Users\\test\\src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('경로 순회 시도 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('../../etc/passwd');
+    expect(r.ok).toBe(false);
+  });
+
+  it('한국어 포함 경로 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/한국어경로/src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('공백 포함 경로 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/my project/src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('특수문자 포함 경로 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/my-project!@#/src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('매우 긴 경로 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const longPath = '/tmp/' + 'a/'.repeat(100);
+    const r = await v.index(longPath);
+    expect(r.ok).toBe(false);
+  });
+
+  it('options.extensions 빈 배열 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/dir', { extensions: [] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('options.extensions 다양한 확장자 → err (미초기화)', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/dir', { extensions: ['.ts', '.js', '.tsx', '.jsx', '.py'] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('5가지 절대경로 변형 → 모두 err', async () => {
+    const paths = ['/tmp/a', '/tmp/b', '/tmp/c', '/tmp/d', '/tmp/e'];
+    for (const p of paths) {
+      const v = makeVectorizer();
+      const r = await v.index(p);
+      expect(r.ok).toBe(false);
+    }
+  });
+});
