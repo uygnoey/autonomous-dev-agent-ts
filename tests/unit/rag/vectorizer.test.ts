@@ -835,3 +835,241 @@ describe('Vectorizer 추가 index 경로 경계값', () => {
     }
   });
 });
+
+// ── 추가 edge/random: 생성자 경계값 ──────────────────────────
+
+describe('Vectorizer 생성자 추가 경계값', () => {
+  it('경로에 이모지 포함 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/db-🚀')).not.toThrow();
+  });
+
+  it('경로에 공백 포함 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/my db path')).not.toThrow();
+  });
+
+  it('경로에 한글 포함 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/한글경로/db')).not.toThrow();
+  });
+
+  it('경로에 점 포함 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/db.v1')).not.toThrow();
+  });
+
+  it('경로에 특수문자 포함 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/db-!@#$')).not.toThrow();
+  });
+
+  it('UUID 경로 → 인스턴스 생성', () => {
+    const uuidPath = '/tmp/' + crypto.randomUUID();
+    expect(() => makeVectorizer(uuidPath)).not.toThrow();
+  });
+
+  it('initialize 메서드 존재', () => {
+    expect(typeof makeVectorizer().initialize).toBe('function');
+  });
+
+  it('20개 인스턴스 연속 생성 → 모두 인스턴스', () => {
+    for (let i = 0; i < 20; i++) {
+      const v = makeVectorizer(`/tmp/db-batch-${i}`);
+      expect(v).toBeInstanceOf(Vectorizer);
+    }
+  });
+
+  it('단일 문자 경로 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/')).not.toThrow();
+  });
+
+  it('경로에 숫자만 → 인스턴스 생성', () => {
+    expect(() => makeVectorizer('/tmp/12345')).not.toThrow();
+  });
+});
+
+// ── 추가 edge/random: search 다양한 언어 ─────────────────────
+
+describe('Vectorizer search 다양한 언어/인코딩 (미초기화)', () => {
+  it('일본어 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('テスト実装');
+    expect(r.ok).toBe(false);
+  });
+
+  it('중국어 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('测试实现');
+    expect(r.ok).toBe(false);
+  });
+
+  it('아랍어 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('اختبار التنفيذ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('러시아어 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('тест реализация');
+    expect(r.ok).toBe(false);
+  });
+
+  it('Base64 문자열 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('SGVsbG8gV29ybGQ=');
+    expect(r.ok).toBe(false);
+  });
+
+  it('Hex 문자열 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('0x48656c6c6f20576f726c64');
+    expect(r.ok).toBe(false);
+  });
+
+  it('binary-like 문자열 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('01001000 01100101 01101100');
+    expect(r.ok).toBe(false);
+  });
+
+  it('UUID 쿼리 5개 → 모두 err', async () => {
+    const v = makeVectorizer();
+    for (let i = 0; i < 5; i++) {
+      const r = await v.search(crypto.randomUUID());
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('이모지만 있는 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('🎉🚀💻🔥⚡');
+    expect(r.ok).toBe(false);
+  });
+
+  it('null 문자 포함 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('\u0000null\u0000char');
+    expect(r.ok).toBe(false);
+  });
+
+  it('반복 문자 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('a'.repeat(500));
+    expect(r.ok).toBe(false);
+  });
+
+  it('혼합 언어 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('한국어 English 日本語 中文');
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge/random: index 다양한 시나리오 ──────────────────
+
+describe('Vectorizer index 다양한 시나리오 (미초기화)', () => {
+  it('options.recursive=true → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/src', { recursive: true } as Parameters<typeof v.index>[1]);
+    expect(r.ok).toBe(false);
+  });
+
+  it('options.maxFileSize 설정 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/src', { maxFileSize: 1024 * 1024 } as Parameters<typeof v.index>[1]);
+    expect(r.ok).toBe(false);
+  });
+
+  it('10개 서로 다른 경로 index → 모두 err', async () => {
+    const v = makeVectorizer();
+    for (let i = 0; i < 10; i++) {
+      const r = await v.index(`/tmp/path-${i}`);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('UUID 경로 index → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/' + crypto.randomUUID());
+    expect(r.ok).toBe(false);
+  });
+
+  it('경로에 이모지 포함 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/🚀src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('경로에 한글 포함 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/소스코드/src');
+    expect(r.ok).toBe(false);
+  });
+
+  it('3번 교대로 search/index → 모두 err', async () => {
+    const v = makeVectorizer();
+    for (let i = 0; i < 3; i++) {
+      expect((await v.search(`q${i}`)).ok).toBe(false);
+      expect((await v.index(`/tmp/d${i}`)).ok).toBe(false);
+    }
+  });
+
+  it('options.extensions 한 개 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/src', { extensions: ['.ts'] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('루트 경로 "/" → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/');
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge/random: 다양한 config 조합 ──────────────────────
+
+describe('Vectorizer 다양한 config 조합', () => {
+  it('한글 model명 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: '한글-모델명', dimensions: 384 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('특수문자 model명 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'model!@#$%', dimensions: 384 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('dimensions=2 → 인스턴스 생성 + search err', async () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: 2 },
+    };
+    const v = new Vectorizer('/tmp/db', config, logger);
+    expect(v).toBeInstanceOf(Vectorizer);
+    const r = await v.search('query');
+    expect(r.ok).toBe(false);
+  });
+
+  it('dimensions=10000 → 인스턴스 생성 + index err', async () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: 10000 },
+    };
+    const v = new Vectorizer('/tmp/db', config, logger);
+    const r = await v.index('/tmp/dir');
+    expect(r.ok).toBe(false);
+  });
+
+  it('여러 logger 레벨 순서 생성 → 모두 가능', () => {
+    const levels = ['error', 'warn', 'info', 'debug'] as const;
+    for (const lvl of levels) {
+      const lg = new ConsoleLogger(lvl);
+      const config = makeConfig();
+      expect(() => new Vectorizer('/tmp/db', config, lg)).not.toThrow();
+    }
+  });
+});
