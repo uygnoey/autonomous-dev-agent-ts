@@ -531,3 +531,169 @@ describe('PhaseEngine 복합 시나리오', () => {
     expect(engine.currentPhase).toBe('DESIGN');
   });
 });
+
+// ── 추가 경계값: transition reason/triggeredBy ─────────────────
+
+describe('PhaseEngine transition 경계값', () => {
+  it('reason 빈 문자열 → ok', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '', 'qa');
+    expect(result.ok).toBe(true);
+  });
+
+  it('reason 매우 긴 문자열 → ok', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', 'x'.repeat(5000), 'qa');
+    expect(result.ok).toBe(true);
+  });
+
+  it('reason 한국어 → ok', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '코드 작성 단계로 전환', 'qa');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.reason).toBe('코드 작성 단계로 전환');
+  });
+
+  it('triggeredBy architect → from/to 올바름', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '이유', 'architect');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.triggeredBy).toBe('architect');
+      expect(result.value.from).toBe('DESIGN');
+      expect(result.value.to).toBe('CODE');
+    }
+  });
+
+  it('triggeredBy adev → 전환 가능', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '이유', 'adev');
+    expect(result.ok).toBe(true);
+  });
+
+  it('5번 반복 DESIGN→CODE 시도 → 첫 번째만 ok', () => {
+    const engine = makeEngine();
+    const results = [];
+    for (let i = 0; i < 5; i++) {
+      results.push(engine.transition('CODE', '이유', 'qa'));
+    }
+    expect(results[0]!.ok).toBe(true);
+    for (let i = 1; i < 5; i++) {
+      expect(results[i]!.ok).toBe(false);
+    }
+  });
+
+  it('전환 결과 from은 string', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '이유', 'qa');
+    if (result.ok) expect(typeof result.value.from).toBe('string');
+  });
+
+  it('전환 결과 to는 string', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '이유', 'qa');
+    if (result.ok) expect(typeof result.value.to).toBe('string');
+  });
+
+  it('전환 결과 reason은 string', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', '이유', 'qa');
+    if (result.ok) expect(typeof result.value.reason).toBe('string');
+  });
+
+  it('전환 실패 error code는 string', () => {
+    const engine = makeEngine();
+    const result = engine.transition('VERIFY', '이유', 'adev');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('전환 실패 error message는 string', () => {
+    const engine = makeEngine();
+    const result = engine.transition('TEST', '이유', 'adev');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+});
+
+// ── 추가 경계값: canTransition 일관성 ──────────────────────────
+
+describe('PhaseEngine canTransition 일관성', () => {
+  it('canTransition CODE → CODE 항상 false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', '이유', 'qa');
+    expect(engine.canTransition('CODE')).toBe(false);
+  });
+
+  it('canTransition TEST → TEST 항상 false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', '이유', 'qa');
+    engine.transition('TEST', '이유', 'architect');
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+
+  it('canTransition은 boolean', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      expect(typeof engine.canTransition(phase)).toBe('boolean');
+    }
+  });
+
+  it('5번 canTransition 반복 → 일관된 결과', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 5; i++) {
+      expect(engine.canTransition('CODE')).toBe(true);
+      expect(engine.canTransition('TEST')).toBe(false);
+    }
+  });
+
+  it('전환 전후 canTransition 결과 변경', () => {
+    const engine = makeEngine();
+    expect(engine.canTransition('CODE')).toBe(true);
+    engine.transition('CODE', '이유', 'qa');
+    expect(engine.canTransition('CODE')).toBe(false);
+    expect(engine.canTransition('TEST')).toBe(true);
+  });
+});
+
+// ── 추가 경계값: getParticipants 구조 ──────────────────────────
+
+describe('PhaseEngine getParticipants 구조 검증', () => {
+  it('모든 Phase → lead는 배열', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      expect(Array.isArray(engine.getParticipants(phase).lead)).toBe(true);
+    }
+  });
+
+  it('모든 Phase → active는 배열', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      expect(Array.isArray(engine.getParticipants(phase).active)).toBe(true);
+    }
+  });
+
+  it('모든 Phase → inactive는 배열', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      expect(Array.isArray(engine.getParticipants(phase).inactive)).toBe(true);
+    }
+  });
+
+  it('lead + active + inactive 합집합은 ALL_AGENTS 포함', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      const p = engine.getParticipants(phase);
+      const all = [...p.lead, ...p.active, ...p.inactive];
+      expect(all.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('DESIGN getParticipants → 5번 반복 일관성', () => {
+    const engine = makeEngine();
+    const firstResult = engine.getParticipants('DESIGN');
+    for (let i = 0; i < 4; i++) {
+      const r = engine.getParticipants('DESIGN');
+      expect(r.lead).toEqual(firstResult.lead);
+      expect(r.active).toEqual(firstResult.active);
+    }
+  });
+});

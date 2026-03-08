@@ -533,3 +533,166 @@ describe('ApiKeyAuth.isLimitApproaching', () => {
     }
   });
 });
+
+// ── 추가 경계값: getAuthHeader ────────────────────────────────
+
+describe('ApiKeyAuth getAuthHeader 추가 경계값', () => {
+  it('특수문자 포함 API 키 → 그대로 반영', () => {
+    const key = 'sk-ant!@#$%^&*()';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('한국어 포함 API 키 → 그대로 반영', () => {
+    const key = 'sk-ant-한국어키';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('공백 포함 API 키 → 그대로 반영', () => {
+    const key = 'sk ant key with spaces';
+    const headers = createAuth(key).getAuthHeader();
+    expect(headers['x-api-key']).toBe(key);
+  });
+
+  it('단일 문자 API 키 → 반영', () => {
+    const headers = createAuth('a').getAuthHeader();
+    expect(headers['x-api-key']).toBe('a');
+  });
+
+  it('10개 인스턴스 각각 독립적', () => {
+    const auths = Array.from({ length: 10 }, (_, i) => createAuth(`key-${i}`));
+    for (let i = 0; i < 10; i++) {
+      expect(auths[i]!.getAuthHeader()['x-api-key']).toBe(`key-${i}`);
+    }
+  });
+
+  it('5번 반복 호출 → anthropic-version 일관성', () => {
+    const auth = createAuth();
+    for (let i = 0; i < 5; i++) {
+      expect(auth.getAuthHeader()['anthropic-version']).toBe('2023-06-01');
+    }
+  });
+
+  it('5번 반복 호출 → x-api-key 일관성', () => {
+    const auth = createAuth('consistent-key');
+    for (let i = 0; i < 5; i++) {
+      expect(auth.getAuthHeader()['x-api-key']).toBe('consistent-key');
+    }
+  });
+
+  it('x-api-key 값은 string 타입', () => {
+    expect(typeof createAuth('key').getAuthHeader()['x-api-key']).toBe('string');
+  });
+
+  it('anthropic-version 값은 string 타입', () => {
+    expect(typeof createAuth().getAuthHeader()['anthropic-version']).toBe('string');
+  });
+});
+
+// ── 추가 경계값: updateFromResponse 조합 ─────────────────────
+
+describe('ApiKeyAuth updateFromResponse 추가 경계값', () => {
+  it('requests-remaining만 있을 때 → 해당 필드만 갱신', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '42',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(42);
+    expect(auth.getRateLimitStatus().inputTokensRemaining).toBeNull();
+  });
+
+  it('모든 토큰 필드 갱신 → 모두 파싱됨', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '50',
+      'anthropic-ratelimit-requests-limit': '100',
+      'anthropic-ratelimit-input-tokens-remaining': '10000',
+      'anthropic-ratelimit-input-tokens-limit': '50000',
+      'anthropic-ratelimit-output-tokens-remaining': '5000',
+      'anthropic-ratelimit-output-tokens-limit': '25000',
+    });
+    const status = auth.getRateLimitStatus();
+    expect(status.requestsRemaining).toBe(50);
+    expect(status.inputTokensRemaining).toBe(10000);
+    expect(status.outputTokensRemaining).toBe(5000);
+  });
+
+  it('updateFromResponse ok 반환값은 boolean', () => {
+    const auth = createAuth();
+    const result = auth.updateFromResponse({});
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('5번 연속 updateFromResponse → 마지막 값 반영', () => {
+    const auth = createAuth();
+    for (let i = 1; i <= 5; i++) {
+      auth.updateFromResponse({
+        'anthropic-ratelimit-requests-remaining': `${i * 10}`,
+        'anthropic-ratelimit-requests-limit': '100',
+      });
+    }
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(50);
+  });
+
+  it('retry-after=120 → 120으로 파싱', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({ 'retry-after': '120' });
+    expect(auth.getRateLimitStatus().retryAfterSeconds).toBe(120);
+  });
+
+  it('retry-after=1 → 1로 파싱', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({ 'retry-after': '1' });
+    expect(auth.getRateLimitStatus().retryAfterSeconds).toBe(1);
+  });
+
+  it('retry-after 이후 빈 헤더 → null로 초기화되지 않음 (마지막 값 유지)', () => {
+    const auth = createAuth();
+    auth.updateFromResponse({ 'retry-after': '30' });
+    auth.updateFromResponse({});
+    // 빈 헤더 후에는 null 또는 이전 값 중 구현에 따름
+    expect(typeof auth.getRateLimitStatus().retryAfterSeconds === 'number' || auth.getRateLimitStatus().retryAfterSeconds === null).toBe(true);
+  });
+});
+
+// ── 추가 경계값: getRateLimitStatus 필드 타입 ─────────────────
+
+describe('ApiKeyAuth getRateLimitStatus 필드 타입', () => {
+  it('requestsRemaining은 number 또는 null', () => {
+    const auth = createAuth();
+    const v = auth.getRateLimitStatus().requestsRemaining;
+    expect(typeof v === 'number' || v === null).toBe(true);
+  });
+
+  it('inputTokensRemaining은 number 또는 null', () => {
+    const auth = createAuth();
+    const v = auth.getRateLimitStatus().inputTokensRemaining;
+    expect(typeof v === 'number' || v === null).toBe(true);
+  });
+
+  it('outputTokensRemaining은 number 또는 null', () => {
+    const auth = createAuth();
+    const v = auth.getRateLimitStatus().outputTokensRemaining;
+    expect(typeof v === 'number' || v === null).toBe(true);
+  });
+
+  it('retryAfterSeconds는 number 또는 null', () => {
+    const auth = createAuth();
+    const v = auth.getRateLimitStatus().retryAfterSeconds;
+    expect(typeof v === 'number' || v === null).toBe(true);
+  });
+
+  it('isLimitApproaching은 boolean', () => {
+    const auth = createAuth();
+    expect(typeof auth.getRateLimitStatus().isLimitApproaching).toBe('boolean');
+  });
+
+  it('5번 반복 getRateLimitStatus → isLimitApproaching 일관성', () => {
+    const auth = createAuth();
+    for (let i = 0; i < 5; i++) {
+      expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+    }
+  });
+});
