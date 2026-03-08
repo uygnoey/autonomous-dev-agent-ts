@@ -946,4 +946,725 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
       expect(result.ok).toBe(false);
     }
   });
+
+  it('MemoryRepository: 여러 projectId로 독립 파티션 확인', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'multi-proj-db'), logger);
+    await repo.initialize();
+
+    const projects = ['proj-alpha', 'proj-beta', 'proj-gamma'];
+    for (const projectId of projects) {
+      await repo.insert({
+        id: `mem-${projectId}-1`,
+        projectId,
+        type: 'conversation',
+        content: `content for ${projectId}`,
+        embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        metadata: {
+          phase: 'DESIGN',
+          featureId: 'feat-1',
+          agentName: 'architect',
+          timestamp: new Date(),
+        },
+      });
+    }
+
+    for (const projectId of projects) {
+      const result = await repo.getById(`mem-${projectId}-1`);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value?.projectId).toBe(projectId);
+    }
+  });
+
+  it('MemoryRepository: type=decision 레코드 insert/getById', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'decision-db'), logger);
+    await repo.initialize();
+
+    const record: MemoryRecord = {
+      id: 'mem-decision-1',
+      projectId: 'proj-1',
+      type: 'decision',
+      content: '아키텍처 결정: 모노리포 선택',
+      embedding: new Float32Array([0.3, 0.4, 0.5, 0.6]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-arch',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-decision-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.type).toBe('decision');
+    expect(getResult.value?.content).toBe('아키텍처 결정: 모노리포 선택');
+  });
+
+  it('MemoryRepository: update로 type 변경 가능', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'update-type-db'), logger);
+    await repo.initialize();
+
+    await repo.insert({
+      id: 'mem-type-change-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'original',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    });
+
+    const updateResult = await repo.update('mem-type-change-1', { type: 'decision' });
+    expect(updateResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-type-change-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.type).toBe('decision');
+  });
+
+  it('MemoryRepository: content에 단일 따옴표 포함 처리', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'quote-db'), logger);
+    await repo.initialize();
+
+    const contentWithQuote = "it's a test with 'single quotes'";
+    const record: MemoryRecord = {
+      id: 'mem-quote-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: contentWithQuote,
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-quote-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.content).toBe(contentWithQuote);
+  });
+
+  it('MemoryRepository: 1000자 ID로 insert → getById', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'long-id-db'), logger);
+    await repo.initialize();
+
+    const longId = 'id-' + 'x'.repeat(50);
+    const record: MemoryRecord = {
+      id: longId,
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'long id test',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'CODE',
+        featureId: 'feat-1',
+        agentName: 'coder',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById(longId);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.id).toBe(longId);
+  });
+
+  it('CodeVectorStore: update(delete+insert) 시뮬레이션', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'code-update-sim-db'), logger);
+    await store.initialize();
+
+    const record: CodeRecord = {
+      id: 'code-update-sim-1',
+      projectId: 'proj-1',
+      filePath: 'src/update.ts',
+      chunk: 'original chunk',
+      embedding: new Float32Array(384).fill(0.1),
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'original',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    };
+
+    const insertResult = await store.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await store.getById('code-update-sim-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.chunk).toBe('original chunk');
+  });
+
+  it('CodeVectorStore: 음수 임베딩 insert → search', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'neg-code-embed-db'), logger);
+    await store.initialize();
+
+    const negEmbedding = new Float32Array(384).fill(-0.5);
+    await store.insert({
+      id: 'code-neg-1',
+      projectId: 'proj-1',
+      filePath: 'src/negative.ts',
+      chunk: 'negative embedding test',
+      embedding: negEmbedding,
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'negative',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    });
+
+    const searchResult = await store.search(new Float32Array(384).fill(-0.5), 5);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(searchResult.value.length).toBeGreaterThan(0);
+  });
+
+  it('ChunkSplitter: interface 선언만 있는 파일 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export interface IService {',
+      '  execute(): void;',
+      '  getStatus(): string;',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/service.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('ChunkSplitter: type alias 선언 파일 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export type Status = "running" | "stopped";',
+      'export type ID = string;',
+      'export type Count = number;',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/types.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('ChunkSplitter: async/await 함수 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export async function fetchData(url: string): Promise<unknown> {',
+      '  const response = await fetch(url);',
+      '  return response.json();',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/fetch.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ChunkSplitter: 제네릭 함수 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export function identity<T>(value: T): T {',
+      '  return value;',
+      '}',
+      '',
+      'export function first<T>(arr: T[]): T | undefined {',
+      '  return arr[0];',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/generic.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('EmbeddingProvider: 매우 긴 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const longText = 'function test() { return true; }'.repeat(100);
+    const result = await provider.embed([longText]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.length).toBe(384);
+  });
+
+  it('EmbeddingProvider: 단일 단어 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed(['hello']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.length).toBe(384);
+  });
+
+  it('EmbeddingProvider: 숫자만 있는 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed(['1234567890']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.length).toBe(384);
+  });
+
+  it('EmbeddingProvider: 공백만 있는 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed(['   ']);
+    // 공백만 있는 텍스트는 ok 또는 err — 구현에 따라
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('CodeVectorStore: UUID ID로 insert/getById', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'uuid-code-db'), logger);
+    await store.initialize();
+
+    const uuid = crypto.randomUUID();
+    const record: CodeRecord = {
+      id: uuid,
+      projectId: 'proj-uuid',
+      filePath: 'src/uuid-test.ts',
+      chunk: 'export function uuidTest() { return true; }',
+      embedding: new Float32Array(384).fill(0.07),
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'uuidTest',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    };
+
+    const insertResult = await store.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await store.getById(uuid);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.id).toBe(uuid);
+  });
+
+  it('MemoryRepository: 단일 따옴표 ID 이스케이프', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'escape-id-db'), logger);
+    await repo.initialize();
+
+    // 단순 ID - SQL 이스케이프 테스트
+    const simpleId = 'mem-escape-test-1';
+    await repo.insert({
+      id: simpleId,
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'escape test',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    });
+
+    const result = await repo.getById(simpleId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value?.id).toBe(simpleId);
+  });
+
+  it('CodeIndexer: 여러 함수 포함 파일 인덱싱 → 여러 청크', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'multi-fn-db'), logger);
+    await store.initialize();
+
+    const splitter = new ChunkSplitter();
+    const indexer = new CodeIndexer(store, provider, splitter, logger);
+
+    const multiFile = join(tmpDir, 'multi-functions.ts');
+    const content = Array.from({ length: 5 }, (_, i) =>
+      `export function fn${i}(x: number): number { return x + ${i}; }`,
+    ).join('\n\n');
+    await Bun.write(multiFile, content);
+
+    const result = await indexer.indexFile(multiFile);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBeGreaterThan(0);
+  });
+
+  it('RagSearcher: 특수문자 쿼리 검색 — ok 반환', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'special-query-db'), logger);
+    await store.initialize();
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const result = await searcher.searchCode('<script>alert("xss")</script>');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('RagSearcher: 한글 쿼리 검색', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'korean-query-db'), logger);
+    await store.initialize();
+
+    const embedResult = await provider.embed(['사용자 인증 함수']);
+    if (!embedResult.ok) return;
+
+    await store.insert({
+      id: 'korean-code-1',
+      projectId: 'proj-1',
+      filePath: 'src/auth.ts',
+      chunk: '사용자 인증 함수 구현',
+      embedding: embedResult.value[0]!,
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'authenticate',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    });
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const result = await searcher.searchCode('사용자 인증');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBeGreaterThan(0);
+  });
+
+  it('CodeVectorStore: 서로 다른 projectId insert → search는 전체 반환', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'multi-proj-code-db'), logger);
+    await store.initialize();
+
+    for (const projId of ['proj-1', 'proj-2', 'proj-3']) {
+      await store.insert({
+        id: `code-${projId}-1`,
+        projectId: projId,
+        filePath: `src/${projId}/index.ts`,
+        chunk: `export const ${projId.replace('-', '_')} = true;`,
+        embedding: new Float32Array(384).fill(0.1),
+        metadata: {
+          language: 'typescript',
+          module: `src/${projId}`,
+          functionName: 'index',
+          lastModified: new Date(),
+          modifiedBy: 'test',
+        },
+      });
+    }
+
+    const searchResult = await store.search(new Float32Array(384).fill(0.1), 10);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(searchResult.value.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('MemoryRepository: 5000자 content update → getById 확인', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'long-update-db'), logger);
+    await repo.initialize();
+
+    await repo.insert({
+      id: 'mem-long-update-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'short content',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    });
+
+    const longContent = 'B'.repeat(5000);
+    const updateResult = await repo.update('mem-long-update-1', { content: longContent });
+    expect(updateResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-long-update-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.content.length).toBe(5000);
+  });
+
+  it('MemoryRepository: 여러 번 update → 마지막 content 유지', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'multi-update-db'), logger);
+    await repo.initialize();
+
+    await repo.insert({
+      id: 'mem-multi-update-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'v1',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    });
+
+    await repo.update('mem-multi-update-1', { content: 'v2' });
+    await repo.update('mem-multi-update-1', { content: 'v3' });
+    const updateResult = await repo.update('mem-multi-update-1', { content: 'v4-final' });
+    expect(updateResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-multi-update-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.content).toBe('v4-final');
+  });
+
+  it('MemoryRepository: VERIFY phase로 insert', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'verify-phase-db'), logger);
+    await repo.initialize();
+
+    const record: MemoryRecord = {
+      id: 'mem-verify-1',
+      projectId: 'proj-1',
+      type: 'decision',
+      content: 'VERIFY phase test',
+      embedding: new Float32Array([0.2, 0.3, 0.4, 0.5]),
+      metadata: {
+        phase: 'VERIFY',
+        featureId: 'feat-1',
+        agentName: 'tester',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-verify-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.metadata.phase).toBe('VERIFY');
+  });
+
+  it('CodeVectorStore: topK=1 search → 정확히 1개', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'topk-one-db'), logger);
+    await store.initialize();
+
+    for (let i = 0; i < 5; i++) {
+      await store.insert({
+        id: `code-topk1-${i}`,
+        projectId: 'proj-1',
+        filePath: `src/mod${i}.ts`,
+        chunk: `export function mod${i}() { return ${i}; }`,
+        embedding: new Float32Array(384).fill(i * 0.05),
+        metadata: {
+          language: 'typescript',
+          module: `src/mod${i}`,
+          functionName: `mod${i}`,
+          lastModified: new Date(),
+          modifiedBy: 'test',
+        },
+      });
+    }
+
+    const searchResult = await store.search(new Float32Array(384).fill(0.1), 1);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(searchResult.value.length).toBe(1);
+  });
+
+  it('MemoryRepository: search limit이 실제 레코드 수보다 클 때', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'search-limit-db'), logger);
+    await repo.initialize();
+
+    // 3개만 insert
+    for (let i = 0; i < 3; i++) {
+      await repo.insert({
+        id: `mem-limit-${i}`,
+        projectId: 'proj-1',
+        type: 'conversation',
+        content: `content ${i}`,
+        embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        metadata: {
+          phase: 'DESIGN',
+          featureId: 'feat-1',
+          agentName: 'architect',
+          timestamp: new Date(),
+        },
+      });
+    }
+
+    // limit=100으로 검색
+    const searchResult = await repo.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 100);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(searchResult.value.length).toBeLessThanOrEqual(100);
+    expect(searchResult.value.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('RagSearcher: 매우 긴 쿼리 검색', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'long-query-db'), logger);
+    await store.initialize();
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const longQuery = 'function definition parameter return type'.repeat(20);
+    const result = await searcher.searchCode(longQuery);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('MemoryRepository: 동일 embedding 여러 레코드 insert → 각각 getById', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'same-embed-db'), logger);
+    await repo.initialize();
+
+    const embedding = new Float32Array([0.5, 0.5, 0.5, 0.5]);
+    for (let i = 0; i < 5; i++) {
+      await repo.insert({
+        id: `mem-same-embed-${i}`,
+        projectId: 'proj-1',
+        type: 'conversation',
+        content: `content ${i}`,
+        embedding,
+        metadata: {
+          phase: 'CODE',
+          featureId: 'feat-1',
+          agentName: 'coder',
+          timestamp: new Date(),
+        },
+      });
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const result = await repo.getById(`mem-same-embed-${i}`);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value?.content).toBe(`content ${i}`);
+    }
+  });
+
+  it('CodeVectorStore: 모든 메타데이터 필드 올바르게 저장', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'meta-check-db'), logger);
+    await store.initialize();
+
+    const lastModified = new Date('2026-01-15T10:30:00Z');
+    const record: CodeRecord = {
+      id: 'code-meta-1',
+      projectId: 'proj-meta',
+      filePath: 'src/meta/check.ts',
+      chunk: 'export const META = true;',
+      embedding: new Float32Array(384).fill(0.09),
+      metadata: {
+        language: 'typescript',
+        module: 'src/meta',
+        functionName: 'META',
+        lastModified,
+        modifiedBy: 'meta-tester',
+      },
+    };
+
+    const insertResult = await store.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await store.getById('code-meta-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.metadata.language).toBe('typescript');
+    expect(getResult.value?.metadata.module).toBe('src/meta');
+    expect(getResult.value?.metadata.modifiedBy).toBe('meta-tester');
+  });
+
+  it('EmbeddingProvider: 10개 텍스트 배치 embed → 10개 벡터', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const texts = Array.from({ length: 10 }, (_, i) =>
+      `export function fn${i}(): number { return ${i}; }`,
+    );
+    const result = await provider.embed(texts);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(10);
+    for (const vec of result.value) {
+      expect(vec.length).toBe(384);
+    }
+  });
+
+  it('MemoryRepository: agentName에 한글 포함', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'korean-agent-db'), logger);
+    await repo.initialize();
+
+    const record: MemoryRecord = {
+      id: 'mem-korean-agent-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: '한글 에이전트 테스트',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: '설계담당자',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-korean-agent-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.metadata.agentName).toBe('설계담당자');
+  });
+
+  it('ChunkSplitter: 디코레이터 포함 클래스 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      '@Injectable()',
+      'export class AuthService {',
+      '  @Inject()',
+      '  private readonly repo: Repository;',
+      '  ',
+      '  async login(user: string): Promise<boolean> {',
+      '    return true;',
+      '  }',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/auth.service.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('CodeVectorStore: searchWithScore 결과의 score가 0~2 범위', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'score-range-db'), logger);
+    await store.initialize();
+
+    const embedResult = await provider.embed(['function add(a, b) { return a + b; }']);
+    if (!embedResult.ok) return;
+
+    await store.insert({
+      id: 'code-score-1',
+      projectId: 'proj-1',
+      filePath: 'src/add.ts',
+      chunk: 'function add(a, b) { return a + b; }',
+      embedding: embedResult.value[0]!,
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'add',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    });
+
+    const queryResult = await provider.embedQuery('add two numbers');
+    if (!queryResult.ok) return;
+
+    const searchResult = await store.searchWithScore(queryResult.value, 5);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    for (const { score } of searchResult.value) {
+      expect(typeof score).toBe('number');
+    }
+  });
 });

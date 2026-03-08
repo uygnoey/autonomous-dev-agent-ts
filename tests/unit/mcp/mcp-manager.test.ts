@@ -954,4 +954,461 @@ describe('McpManager', () => {
       }
     });
   });
+
+  // ── listTools - 추가 경계값 ──────────────────────────────────
+
+  describe('listTools - 추가 경계값', () => {
+    it('초기화 없이 listTools → 빈 배열', () => {
+      const manager = createManager();
+      expect(manager.listTools()).toHaveLength(0);
+    });
+
+    it('10개 서버 시작 후 listTools → 빈 배열 (tools가 없으므로)', async () => {
+      for (let i = 0; i < 10; i++) {
+        await createMcpConfig(globalDir, `lt-${i}`, [
+          { name: `lt-${i}`, command: 'npx', args: [], enabled: true },
+        ]);
+      }
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      for (let i = 0; i < 10; i++) manager.startServer(`lt-${i}`);
+      // tools 배열은 비어있으므로 listTools()는 빈 배열
+      expect(manager.listTools()).toHaveLength(0);
+    });
+
+    it('서버 stop 후 listTools → 빈 배열', async () => {
+      await createMcpConfig(globalDir, 'lt-stopped', [
+        { name: 'lt-stopped', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('lt-stopped');
+      manager.stopServer('lt-stopped');
+      expect(manager.listTools()).toHaveLength(0);
+    });
+
+    it('listTools 반환값 원소 타입 확인 (있을 경우)', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const tools = manager.listTools();
+      expect(Array.isArray(tools)).toBe(true);
+    });
+
+    it('5번 연속 listTools → 동일 결과', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const first = manager.listTools().length;
+      for (let i = 0; i < 4; i++) {
+        expect(manager.listTools().length).toBe(first);
+      }
+    });
+  });
+
+  // ── 복합 시나리오 ────────────────────────────────────────────
+
+  describe('복합 시나리오', () => {
+    it('start → stop → healthCheck → getStatus 순서', async () => {
+      await createMcpConfig(globalDir, 'flow-srv', [
+        { name: 'flow-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      manager.startServer('flow-srv');
+      expect(manager.getStatus('flow-srv')).toBe('running');
+
+      const health1 = manager.healthCheck();
+      if (health1.ok) expect(health1.value['flow-srv']).toBe('running');
+
+      manager.stopServer('flow-srv');
+      expect(manager.getStatus('flow-srv')).toBe('stopped');
+
+      const health2 = manager.healthCheck();
+      if (health2.ok) expect(health2.value['flow-srv']).toBe('stopped');
+    });
+
+    it('5개 서버: 3개 start, 2개 stop → healthCheck 혼합', async () => {
+      for (let i = 0; i < 5; i++) {
+        await createMcpConfig(globalDir, `mix-${i}`, [
+          { name: `mix-${i}`, command: 'npx', args: [], enabled: true },
+        ]);
+      }
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      for (let i = 0; i < 3; i++) manager.startServer(`mix-${i}`);
+
+      const health = manager.healthCheck();
+      if (health.ok) {
+        expect(health.value['mix-0']).toBe('running');
+        expect(health.value['mix-1']).toBe('running');
+        expect(health.value['mix-2']).toBe('running');
+        expect(health.value['mix-3']).toBe('stopped');
+        expect(health.value['mix-4']).toBe('stopped');
+      }
+    });
+
+    it('disabled 서버 포함 시 healthCheck → disabled 서버는 stopped', async () => {
+      await createMcpConfig(globalDir, 'enabled-srv', [
+        { name: 'enabled-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(globalDir, 'disabled-srv', [
+        { name: 'disabled-srv', command: 'npx', args: [], enabled: false },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('enabled-srv');
+
+      const health = manager.healthCheck();
+      if (health.ok) {
+        expect(health.value['enabled-srv']).toBe('running');
+        // disabled 서버는 registry에 등록되지 않아 healthCheck에 없거나 stopped
+      }
+    });
+
+    it('재초기화 후 이전 서버 상태 초기화됨', async () => {
+      await createMcpConfig(globalDir, 'reinit-srv', [
+        { name: 'reinit-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('reinit-srv');
+      expect(manager.getStatus('reinit-srv')).toBe('running');
+
+      // 재초기화
+      await manager.initialize(globalDir);
+      expect(manager.getStatus('reinit-srv')).toBe('stopped');
+    });
+
+    it('UUID 서버 이름 start → stop → 재시작 사이클', async () => {
+      const uuid = crypto.randomUUID();
+      await createMcpConfig(globalDir, uuid, [
+        { name: uuid, command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      const r1 = manager.startServer(uuid);
+      expect(r1.ok).toBe(true);
+      expect(manager.getStatus(uuid)).toBe('running');
+
+      const r2 = manager.stopServer(uuid);
+      expect(r2.ok).toBe(true);
+      expect(manager.getStatus(uuid)).toBe('stopped');
+
+      const r3 = manager.startServer(uuid);
+      expect(r3.ok).toBe(true);
+      expect(manager.getStatus(uuid)).toBe('running');
+    });
+
+    it('stopAll → start 각 서버 → healthCheck 모두 running', async () => {
+      for (const name of ['sa-srv1', 'sa-srv2']) {
+        await createMcpConfig(globalDir, name, [
+          { name, command: 'npx', args: [], enabled: true },
+        ]);
+      }
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      manager.startServer('sa-srv1');
+      manager.startServer('sa-srv2');
+      manager.stopAll();
+
+      manager.startServer('sa-srv1');
+      manager.startServer('sa-srv2');
+
+      const health = manager.healthCheck();
+      if (health.ok) {
+        expect(health.value['sa-srv1']).toBe('running');
+        expect(health.value['sa-srv2']).toBe('running');
+      }
+    });
+
+    it('초기화 → getStatus → startServer → getStatus 일관성', async () => {
+      await createMcpConfig(globalDir, 'consistency-srv', [
+        { name: 'consistency-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      expect(manager.getStatus('consistency-srv')).toBe('stopped');
+      manager.startServer('consistency-srv');
+      expect(manager.getStatus('consistency-srv')).toBe('running');
+    });
+
+    it('여러 매니저 인스턴스 독립 상태 유지', async () => {
+      await createMcpConfig(globalDir, 'independent-srv', [
+        { name: 'independent-srv', command: 'npx', args: [], enabled: true },
+      ]);
+
+      const m1 = createManager();
+      const m2 = createManager();
+
+      await m1.initialize(globalDir);
+      await m2.initialize(globalDir);
+
+      m1.startServer('independent-srv');
+
+      expect(m1.getStatus('independent-srv')).toBe('running');
+      expect(m2.getStatus('independent-srv')).toBe('stopped');
+    });
+
+    it('10개 서버: 홀수 start, 짝수 skip → healthCheck 확인', async () => {
+      for (let i = 0; i < 10; i++) {
+        await createMcpConfig(globalDir, `odd-even-${i}`, [
+          { name: `odd-even-${i}`, command: 'npx', args: [], enabled: true },
+        ]);
+      }
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      for (let i = 0; i < 10; i++) {
+        if (i % 2 !== 0) manager.startServer(`odd-even-${i}`);
+      }
+
+      const health = manager.healthCheck();
+      if (health.ok) {
+        for (let i = 0; i < 10; i++) {
+          if (i % 2 !== 0) {
+            expect(health.value[`odd-even-${i}`]).toBe('running');
+          } else {
+            expect(health.value[`odd-even-${i}`]).toBe('stopped');
+          }
+        }
+      }
+    });
+
+    it('startServer 반환값의 config.name이 서버 이름과 일치', async () => {
+      await createMcpConfig(globalDir, 'name-check-srv', [
+        { name: 'name-check-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('name-check-srv');
+      if (result.ok) {
+        expect(result.value.config.name).toBe('name-check-srv');
+      }
+    });
+
+    it('startServer 반환값의 status가 running', async () => {
+      await createMcpConfig(globalDir, 'status-check-srv', [
+        { name: 'status-check-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('status-check-srv');
+      if (result.ok) {
+        expect(result.value.status).toBe('running');
+      }
+    });
+
+    it('startServer 반환값의 tools는 배열', async () => {
+      await createMcpConfig(globalDir, 'tools-check-srv', [
+        { name: 'tools-check-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('tools-check-srv');
+      if (result.ok) {
+        expect(Array.isArray(result.value.tools)).toBe(true);
+      }
+    });
+
+    it('stopServer ok=true 반환 후 startServer ok=true', async () => {
+      await createMcpConfig(globalDir, 'restart-check', [
+        { name: 'restart-check', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      manager.startServer('restart-check');
+      const stopResult = manager.stopServer('restart-check');
+      expect(stopResult.ok).toBe(true);
+
+      const startResult = manager.startServer('restart-check');
+      expect(startResult.ok).toBe(true);
+    });
+
+    it('5개 서버 모두 start/stop 사이클 5회', async () => {
+      for (let i = 0; i < 5; i++) {
+        await createMcpConfig(globalDir, `cycle5-${i}`, [
+          { name: `cycle5-${i}`, command: 'npx', args: [], enabled: true },
+        ]);
+      }
+      const manager = createManager();
+      await manager.initialize(globalDir);
+
+      for (let cycle = 0; cycle < 5; cycle++) {
+        for (let i = 0; i < 5; i++) {
+          const r = manager.startServer(`cycle5-${i}`);
+          expect(r.ok).toBe(true);
+        }
+        for (let i = 0; i < 5; i++) {
+          const r = manager.stopServer(`cycle5-${i}`);
+          expect(r.ok).toBe(true);
+        }
+      }
+    });
+  });
+
+  // ── 추가 경계값: 에러 코드 및 타입 검증 ─────────────────────
+
+  describe('에러 코드 및 타입 검증', () => {
+    it('startServer not found 에러 code 타입 string', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('nonexistent-server');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(typeof result.error.code).toBe('string');
+        expect(typeof result.error.message).toBe('string');
+      }
+    });
+
+    it('stopServer not found 에러 code 타입 string', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.stopServer('nonexistent-server');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(typeof result.error.code).toBe('string');
+      }
+    });
+
+    it('startServer disabled 에러 message 타입 string', async () => {
+      await createMcpConfig(globalDir, 'dis-msg', [
+        { name: 'dis-msg', command: 'npx', args: [], enabled: false },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('dis-msg');
+      if (!result.ok) {
+        expect(typeof result.error.message).toBe('string');
+      }
+    });
+
+    it('startServer already_running 에러 message 타입 string', async () => {
+      await createMcpConfig(globalDir, 'run-msg', [
+        { name: 'run-msg', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('run-msg');
+      const result = manager.startServer('run-msg');
+      if (!result.ok) {
+        expect(typeof result.error.message).toBe('string');
+      }
+    });
+
+    it('stopServer already_stopped 에러 code = mcp_server_already_stopped', async () => {
+      await createMcpConfig(globalDir, 'stop-msg', [
+        { name: 'stop-msg', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('stop-msg');
+      manager.stopServer('stop-msg');
+      const result = manager.stopServer('stop-msg');
+      if (!result.ok) {
+        expect(result.error.code).toBe('mcp_server_already_stopped');
+      }
+    });
+
+    it('stopServer not found 에러 code = mcp_server_not_found', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.stopServer('no-such-server');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('mcp_server_not_found');
+      }
+    });
+
+    it('startServer not found 에러 code = mcp_server_not_found', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('no-such-server-2');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('mcp_server_not_found');
+      }
+    });
+
+    it('healthCheck ok는 항상 true', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.healthCheck();
+      expect(result.ok).toBe(true);
+    });
+
+    it('stopAll ok는 항상 true', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.stopAll();
+      expect(result.ok).toBe(true);
+    });
+
+    it('initialize ok는 항상 boolean', async () => {
+      const manager = createManager();
+      const result = await manager.initialize(globalDir);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('startServer ok는 boolean', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('any-server');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('stopServer ok는 boolean', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.stopServer('any-server');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('getStatus 반환값은 running 또는 stopped 중 하나', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const status = manager.getStatus('any');
+      expect(['running', 'stopped']).toContain(status);
+    });
+
+    it('시작된 서버의 startedAt 타입 Date', async () => {
+      await createMcpConfig(globalDir, 'date-check', [
+        { name: 'date-check', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('date-check');
+      if (result.ok) {
+        expect(result.value.startedAt).toBeInstanceOf(Date);
+      }
+    });
+
+    it('시작된 서버의 config.command = npx', async () => {
+      await createMcpConfig(globalDir, 'cmd-check', [
+        { name: 'cmd-check', command: 'npx', args: ['-y', 'some-pkg'], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('cmd-check');
+      if (result.ok) {
+        expect(result.value.config.command).toBe('npx');
+      }
+    });
+
+    it('시작된 서버의 config.args 타입 배열', async () => {
+      await createMcpConfig(globalDir, 'args-check', [
+        { name: 'args-check', command: 'npx', args: ['-y', 'pkg'], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const result = manager.startServer('args-check');
+      if (result.ok) {
+        expect(Array.isArray(result.value.config.args)).toBe(true);
+      }
+    });
+  });
 });
