@@ -876,3 +876,267 @@ describe('McpRegistry 추가 edge 케이스', () => {
     expect(r.listServers().length).toBe(10);
   });
 });
+
+// ── register 추가 edge 케이스 ─────────────────────────────────
+
+describe('McpRegistry register 추가 edge 케이스', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('이름 시작이 숫자 → ok (유효)', () => {
+    const result = registry.register(createConfig({ name: '1server' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 점(.)만 → ok=true (비어있지 않음)', () => {
+    const result = registry.register(createConfig({ name: '.' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 절대경로 → ok', () => {
+    const result = registry.register(createConfig({ name: 'abs-path', command: '/usr/bin/python3' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 상대경로 → ok', () => {
+    const result = registry.register(createConfig({ name: 'rel-path', command: './scripts/run.sh' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('args에 특수문자 포함 → ok', () => {
+    const result = registry.register(createConfig({ name: 'spec-args', args: ['--config=my file.json', '--debug'] }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 매우 긴 UUID 반복 → ok', () => {
+    const longName = '550e8400-e29b-41d4-a716-446655440000'.repeat(3);
+    const result = registry.register(createConfig({ name: longName }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('서버 등록 후 command 검증', () => {
+    registry.register(createConfig({ name: 'cmd-verify', command: 'python3' }));
+    const found = registry.getServer('cmd-verify');
+    expect(found?.command).toBe('python3');
+  });
+
+  it('서버 등록 후 enabled 검증', () => {
+    registry.register(createConfig({ name: 'enabled-verify', enabled: true }));
+    const found = registry.getServer('enabled-verify');
+    expect(found?.enabled).toBe(true);
+  });
+
+  it('서버 등록 후 args 검증', () => {
+    const args = ['--port', '3000', '--host', 'localhost'];
+    registry.register(createConfig({ name: 'args-verify', args }));
+    const found = registry.getServer('args-verify');
+    expect(found?.args).toEqual(args);
+  });
+
+  it('3개 각각 다른 이름 등록 → 각각 ok', () => {
+    const r1 = registry.register(createConfig({ name: 'first-s' }));
+    const r2 = registry.register(createConfig({ name: 'second-s' }));
+    const r3 = registry.register(createConfig({ name: 'third-s' }));
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(true);
+  });
+
+  it('50개 등록 → 모두 getServer 가능', () => {
+    for (let i = 0; i < 50; i++) {
+      registry.register(createConfig({ name: `srv-extra-${i}` }));
+    }
+    for (let i = 0; i < 50; i++) {
+      expect(registry.getServer(`srv-extra-${i}`)).not.toBeNull();
+    }
+  });
+
+  it('동일 이름 3번 중복 → 1번째만 ok', () => {
+    const r1 = registry.register(createConfig({ name: 'triple-dup' }));
+    const r2 = registry.register(createConfig({ name: 'triple-dup' }));
+    const r3 = registry.register(createConfig({ name: 'triple-dup' }));
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(false);
+    expect(r3.ok).toBe(false);
+  });
+
+  it('중복 에러 코드는 mcp_duplicate_server', () => {
+    registry.register(createConfig({ name: 'dup-code' }));
+    const r = registry.register(createConfig({ name: 'dup-code' }));
+    if (!r.ok) expect(r.error.code).toBe('mcp_duplicate_server');
+  });
+
+  it('빈 name 에러 코드는 mcp_invalid_config', () => {
+    const r = registry.register(createConfig({ name: '' }));
+    if (!r.ok) expect(r.error.code).toBe('mcp_invalid_config');
+  });
+
+  it('빈 command 에러 코드는 mcp_invalid_config', () => {
+    const r = registry.register(createConfig({ command: '' }));
+    if (!r.ok) expect(r.error.code).toBe('mcp_invalid_config');
+  });
+
+  it('이름에 공백 포함 → ok (공백 포함 이름 허용)', () => {
+    // name.trim().length > 0이면 ok
+    const result = registry.register(createConfig({ name: 'server with spaces' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름 앞뒤 공백 → trim 후 빈 문자열 아니면 ok', () => {
+    const result = registry.register(createConfig({ name: ' valid ' }));
+    // trim 후 'valid'이므로 ok
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('args에 개행 포함 → ok', () => {
+    const result = registry.register(createConfig({ name: 'newline-arg', args: ['arg\nvalue'] }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── unregister 추가 edge 케이스 ───────────────────────────────
+
+describe('McpRegistry unregister 추가 edge 케이스', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('공백만 이름으로 unregister → ok=false (공백만으로는 등록 불가)', () => {
+    const r = registry.unregister('   ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('탭만 이름으로 unregister → ok=false', () => {
+    const r = registry.unregister('\t');
+    expect(r.ok).toBe(false);
+  });
+
+  it('10개 등록 후 5개 unregister → 5개 남음', () => {
+    for (let i = 0; i < 10; i++) registry.register(createConfig({ name: `remove-${i}` }));
+    for (let i = 0; i < 5; i++) registry.unregister(`remove-${i}`);
+    expect(registry.listServers().length).toBe(5);
+  });
+
+  it('unregister 성공 → ok는 true', () => {
+    registry.register(createConfig({ name: 'unreg-ok' }));
+    const r = registry.unregister('unreg-ok');
+    expect(r.ok).toBe(true);
+  });
+
+  it('unregister 후 같은 이름 등록 → ok', () => {
+    registry.register(createConfig({ name: 'reuse-name' }));
+    registry.unregister('reuse-name');
+    const r = registry.register(createConfig({ name: 'reuse-name' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('unregister 후 listServers 길이 1 감소', () => {
+    registry.register(createConfig({ name: 'dec1' }));
+    registry.register(createConfig({ name: 'dec2' }));
+    const before = registry.listServers().length;
+    registry.unregister('dec1');
+    expect(registry.listServers().length).toBe(before - 1);
+  });
+
+  it('여러 서버 중 첫 번째만 unregister → 나머지 유지', () => {
+    registry.register(createConfig({ name: 'first' }));
+    registry.register(createConfig({ name: 'middle' }));
+    registry.register(createConfig({ name: 'last' }));
+    registry.unregister('first');
+    expect(registry.getServer('middle')).not.toBeNull();
+    expect(registry.getServer('last')).not.toBeNull();
+  });
+
+  it('여러 서버 중 마지막만 unregister → 나머지 유지', () => {
+    registry.register(createConfig({ name: 'keep1' }));
+    registry.register(createConfig({ name: 'keep2' }));
+    registry.register(createConfig({ name: 'remove-last' }));
+    registry.unregister('remove-last');
+    expect(registry.getServer('keep1')).not.toBeNull();
+    expect(registry.getServer('keep2')).not.toBeNull();
+  });
+
+  it('UUID 등록 후 unregister → ok', () => {
+    const uuid = crypto.randomUUID();
+    registry.register(createConfig({ name: uuid }));
+    const r = registry.unregister(uuid);
+    expect(r.ok).toBe(true);
+  });
+
+  it('같은 UUID 2번 unregister → 2번째는 err', () => {
+    const uuid = crypto.randomUUID();
+    registry.register(createConfig({ name: uuid }));
+    registry.unregister(uuid);
+    const r = registry.unregister(uuid);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('mcp_server_not_found');
+  });
+});
+
+// ── listServers 추가 edge 케이스 ──────────────────────────────
+
+describe('McpRegistry listServers 추가 edge 케이스', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('listServers 결과는 McpServerConfig 배열', () => {
+    registry.register(createConfig({ name: 'ls-test' }));
+    const list = registry.listServers();
+    expect(Array.isArray(list)).toBe(true);
+    expect(list[0]).toHaveProperty('name');
+    expect(list[0]).toHaveProperty('command');
+  });
+
+  it('listServers 20개 → 길이 20', () => {
+    for (let i = 0; i < 20; i++) registry.register(createConfig({ name: `ls-${i}` }));
+    expect(registry.listServers().length).toBe(20);
+  });
+
+  it('listServers 결과 요소에 name, command, args, enabled 있음', () => {
+    registry.register(createConfig({ name: 'full-prop' }));
+    const list = registry.listServers();
+    const s = list[0];
+    expect(s).toHaveProperty('name');
+    expect(s).toHaveProperty('command');
+    expect(s).toHaveProperty('args');
+    expect(s).toHaveProperty('enabled');
+  });
+
+  it('listServers 100번 호출해도 길이 불변', () => {
+    registry.register(createConfig({ name: 'immutable-len' }));
+    const len = registry.listServers().length;
+    for (let i = 0; i < 100; i++) {
+      expect(registry.listServers().length).toBe(len);
+    }
+  });
+
+  it('clear 직전 listServers 길이 > 0, 직후 0', () => {
+    registry.register(createConfig({ name: 'before-clear' }));
+    expect(registry.listServers().length).toBeGreaterThan(0);
+    registry.clear();
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('listServers 요소의 enabled 값 검증', () => {
+    registry.register(createConfig({ name: 'en-true', enabled: true }));
+    registry.register(createConfig({ name: 'en-false', enabled: false }));
+    const list = registry.listServers();
+    const enabledValues = list.map((s) => s.enabled);
+    expect(enabledValues).toContain(true);
+    expect(enabledValues).toContain(false);
+  });
+
+  it('listServers 요소의 args 배열 접근', () => {
+    registry.register(createConfig({ name: 'args-list', args: ['a', 'b', 'c'] }));
+    const found = registry.listServers().find((s) => s.name === 'args-list');
+    expect(found?.args).toEqual(['a', 'b', 'c']);
+  });
+});

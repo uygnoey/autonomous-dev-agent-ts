@@ -875,3 +875,391 @@ describe('LanceDB 레코드 인터페이스 구조 검증', () => {
     expect(decision.timestamp).toBeInstanceOf(Date);
   });
 });
+
+// ── ok() 추가 경계값 ──────────────────────────────────────────
+
+describe('ok() 추가 경계값', () => {
+  it('ok(BigInt(1)) → value가 BigInt', () => {
+    const result = ok(BigInt(1));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(typeof result.value).toBe('bigint');
+  });
+
+  it('ok(new Error("test")) → value가 Error 인스턴스', () => {
+    const error = new Error('test');
+    const result = ok(error);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeInstanceOf(Error);
+  });
+
+  it('ok([]) 두 번 → 두 결과 독립', () => {
+    const r1 = ok([1, 2]);
+    const r2 = ok([3, 4]);
+    if (r1.ok && r2.ok) {
+      expect(r1.value[0]).toBe(1);
+      expect(r2.value[0]).toBe(3);
+    }
+  });
+
+  it('ok(0) ok 프로퍼티는 true', () => {
+    expect(ok(0).ok).toBe(true);
+  });
+
+  it('ok(false) ok 프로퍼티는 true', () => {
+    expect(ok(false).ok).toBe(true);
+  });
+
+  it('ok(null) ok 프로퍼티는 true', () => {
+    expect(ok(null).ok).toBe(true);
+  });
+
+  it('ok(undefined) ok 프로퍼티는 true', () => {
+    expect(ok(undefined).ok).toBe(true);
+  });
+
+  it('ok({}) 결과는 객체', () => {
+    const r = ok({});
+    expect(typeof r).toBe('object');
+  });
+
+  it('ok(Map) value가 Map', () => {
+    const m = new Map<string, number>([['a', 1]]);
+    const r = ok(m);
+    if (r.ok) expect(r.value.get('a')).toBe(1);
+  });
+
+  it('ok(Set) value가 Set', () => {
+    const s = new Set([1, 2, 3, 4, 5]);
+    const r = ok(s);
+    if (r.ok) expect(r.value.size).toBe(5);
+  });
+
+  it('10번 ok(i) → ok 모두 true', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(ok(i).ok).toBe(true);
+    }
+  });
+
+  it('ok 결과는 readonly ok property', () => {
+    const r = ok(42);
+    expect(r.ok).toBe(true);
+  });
+
+  it('ok(Number.POSITIVE_INFINITY) value 확인', () => {
+    const r = ok(Number.POSITIVE_INFINITY);
+    if (r.ok) expect(r.value).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it('ok(Number.NEGATIVE_INFINITY) value 확인', () => {
+    const r = ok(Number.NEGATIVE_INFINITY);
+    if (r.ok) expect(r.value).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  it('ok(Number.NaN) value는 NaN', () => {
+    const r = ok(Number.NaN);
+    if (r.ok) expect(Number.isNaN(r.value)).toBe(true);
+  });
+
+  it('ok(Number.EPSILON) value 확인', () => {
+    const r = ok(Number.EPSILON);
+    if (r.ok) expect(r.value).toBe(Number.EPSILON);
+  });
+
+  it('ok(빈 Map) value size는 0', () => {
+    const r = ok(new Map());
+    if (r.ok) expect(r.value.size).toBe(0);
+  });
+
+  it('ok(빈 Set) value size는 0', () => {
+    const r = ok(new Set());
+    if (r.ok) expect(r.value.size).toBe(0);
+  });
+
+  it('ok(Uint8Array) value는 Uint8Array', () => {
+    const arr = new Uint8Array([1, 2, 3]);
+    const r = ok(arr);
+    if (r.ok) expect(r.value).toBeInstanceOf(Uint8Array);
+  });
+
+  it('ok(Promise.resolve(1)) value는 Promise', () => {
+    const p = Promise.resolve(1);
+    const r = ok(p);
+    if (r.ok) expect(r.value).toBeInstanceOf(Promise);
+  });
+});
+
+// ── err() 추가 경계값 ──────────────────────────────────────────
+
+describe('err() 추가 경계값', () => {
+  it('err(AdevError) ok는 false', () => {
+    const r = err(new AdevError('code', 'msg'));
+    expect(r.ok).toBe(false);
+  });
+
+  it('err 결과는 readonly ok property', () => {
+    const r = err(new AdevError('c', 'm'));
+    expect(r.ok).toBe(false);
+  });
+
+  it('10번 err → 모두 ok=false', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(err(new AdevError(`code-${i}`, `msg-${i}`)).ok).toBe(false);
+    }
+  });
+
+  it('err(AdevError) error.code 문자열', () => {
+    const r = err(new AdevError('my_code', 'my msg'));
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('err(AdevError) error.message 문자열', () => {
+    const r = err(new AdevError('my_code', 'my msg'));
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('err 연속 5번 → 모두 다른 객체', () => {
+    const results = Array.from({ length: 5 }, (_, i) => err(new AdevError(`c${i}`, `m${i}`)));
+    for (let i = 0; i < 4; i++) {
+      expect(results[i]).not.toBe(results[i + 1]);
+    }
+  });
+
+  it('err(AdevError) code 긴 문자열 → ok=false', () => {
+    const longCode = 'code_' + 'x'.repeat(100);
+    const r = err(new AdevError(longCode, 'msg'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe(longCode);
+  });
+
+  it('err(AdevError) message 빈 문자열 → ok=false', () => {
+    const r = err(new AdevError('code', ''));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toBe('');
+  });
+
+  it('err(AdevError) message 한국어 → ok=false', () => {
+    const r = err(new AdevError('code', '한국어 에러 메시지'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain('한국어');
+  });
+
+  it('err(AdevError) message 특수문자 포함 → ok=false', () => {
+    const r = err(new AdevError('code', '!@#$%^&*()'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toBe('!@#$%^&*()');
+  });
+});
+
+// ── Result 추가 패턴 ──────────────────────────────────────────
+
+describe('Result 추가 패턴', () => {
+  it('ok와 err의 ok 필드 타입이 다름', () => {
+    const o = ok(1);
+    const e = err(new AdevError('c', 'm'));
+    expect(o.ok).not.toBe(e.ok);
+  });
+
+  it('함수 반환 Result ok → value 접근', () => {
+    const fn = (x: number): Result<number> => {
+      if (x < 0) return err(new AdevError('negative', 'negative value'));
+      return ok(x * 2);
+    };
+    const r = fn(5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBe(10);
+  });
+
+  it('함수 반환 Result err → error 접근', () => {
+    const fn = (x: number): Result<number> => {
+      if (x < 0) return err(new AdevError('negative', 'negative value'));
+      return ok(x * 2);
+    };
+    const r = fn(-1);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('negative');
+  });
+
+  it('배열 map으로 Result 생성 → 모두 ok', () => {
+    const values = [1, 2, 3, 4, 5];
+    const results = values.map(ok);
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('배열 map으로 err 생성 → 모두 ok=false', () => {
+    const codes = ['a', 'b', 'c'];
+    const results = codes.map((c) => err(new AdevError(c, c)));
+    for (const r of results) {
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('Result 중첩 3단계', () => {
+    const r = ok(ok(ok(42)));
+    expect(r.ok).toBe(true);
+    if (r.ok && r.value.ok && r.value.value.ok) {
+      expect(r.value.value.value).toBe(42);
+    }
+  });
+
+  it('ok(string 배열) value 접근', () => {
+    const arr = ['a', 'b', 'c'];
+    const r = ok(arr);
+    if (r.ok) {
+      expect(r.value[0]).toBe('a');
+      expect(r.value[2]).toBe('c');
+    }
+  });
+
+  it('err(AdevError) 타입 가드로 분기', () => {
+    const r: Result<number> = err(new AdevError('test', 'msg'));
+    if (r.ok) {
+      expect(true).toBe(false); // 실행 안 됨
+    } else {
+      expect(r.error.code).toBe('test');
+    }
+  });
+
+  it('ok(number) 타입 가드로 분기', () => {
+    const r: Result<number> = ok(99);
+    if (!r.ok) {
+      expect(true).toBe(false); // 실행 안 됨
+    } else {
+      expect(r.value).toBe(99);
+    }
+  });
+
+  it('Result<void> ok → value undefined', () => {
+    const r: Result<void> = ok(undefined);
+    if (r.ok) expect(r.value).toBeUndefined();
+  });
+
+  it('Result<string[]> ok → 배열 접근', () => {
+    const r: Result<string[]> = ok(['x', 'y', 'z']);
+    if (r.ok) {
+      expect(r.value).toHaveLength(3);
+      expect(r.value[1]).toBe('y');
+    }
+  });
+});
+
+// ── 리터럴 타입 추가 검증 ─────────────────────────────────────
+
+describe('리터럴 타입 추가 검증', () => {
+  it('Phase 배열 join → 유효 문자열', () => {
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    const joined = phases.join(',');
+    expect(joined).toBe('DESIGN,CODE,TEST,VERIFY');
+  });
+
+  it('AgentName 배열 정렬 → 유효 배열', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    const sorted = [...agents].sort();
+    expect(sorted.length).toBe(7);
+  });
+
+  it('FeatureStatus 배열 filter → pending만', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    const pending = statuses.filter((s) => s === 'pending');
+    expect(pending.length).toBe(1);
+  });
+
+  it('MemoryType 배열 includes decision', () => {
+    const types: MemoryType[] = ['conversation', 'decision', 'feedback', 'error'];
+    expect(types.includes('decision')).toBe(true);
+  });
+
+  it('MemoryType 배열 includes feedback', () => {
+    const types: MemoryType[] = ['conversation', 'decision', 'feedback', 'error'];
+    expect(types.includes('feedback')).toBe(true);
+  });
+
+  it('Phase는 4개 정확히', () => {
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    expect(phases.length).toBe(4);
+  });
+
+  it('AgentName은 7개 정확히', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    expect(agents.length).toBe(7);
+  });
+
+  it('FeatureStatus는 7개 정확히', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.length).toBe(7);
+  });
+
+  it('MemoryType은 4개 정확히', () => {
+    const types: MemoryType[] = ['conversation', 'decision', 'feedback', 'error'];
+    expect(types.length).toBe(4);
+  });
+
+  it('Phase 모든 값 대문자', () => {
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const p of phases) {
+      expect(p).toBe(p.toUpperCase());
+    }
+  });
+
+  it('AgentName 모든 값 소문자', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const a of agents) {
+      expect(a).toBe(a.toLowerCase());
+    }
+  });
+
+  it('FeatureStatus 모든 값 소문자', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    for (const s of statuses) {
+      expect(s).toBe(s.toLowerCase());
+    }
+  });
+
+  it('MemoryType 모든 값 소문자', () => {
+    const types: MemoryType[] = ['conversation', 'decision', 'feedback', 'error'];
+    for (const t of types) {
+      expect(t).toBe(t.toLowerCase());
+    }
+  });
+
+  it('AgentName reviewer 포함', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    expect(agents.includes('reviewer')).toBe(true);
+  });
+
+  it('AgentName documenter 포함', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    expect(agents.includes('documenter')).toBe(true);
+  });
+
+  it('AgentName qc 포함', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    expect(agents.includes('qc')).toBe(true);
+  });
+
+  it('FeatureStatus pending 포함', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.includes('pending')).toBe(true);
+  });
+
+  it('FeatureStatus designing 포함', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.includes('designing')).toBe(true);
+  });
+
+  it('FeatureStatus coding 포함', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.includes('coding')).toBe(true);
+  });
+
+  it('FeatureStatus testing 포함', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.includes('testing')).toBe(true);
+  });
+
+  it('FeatureStatus verifying 포함', () => {
+    const statuses: FeatureStatus[] = ['pending', 'designing', 'coding', 'testing', 'verifying', 'complete', 'failed'];
+    expect(statuses.includes('verifying')).toBe(true);
+  });
+});

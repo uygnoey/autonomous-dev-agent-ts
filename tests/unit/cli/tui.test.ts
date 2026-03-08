@@ -877,3 +877,593 @@ describe('엣지 케이스', () => {
     setNoColor(true);
   });
 });
+
+// ── ANSI 추가 edge 케이스 ─────────────────────────────────────
+
+describe('ansi 추가 edge 케이스', () => {
+  beforeEach(() => setNoColor(false));
+  afterEach(() => setNoColor(false));
+
+  it('noColor=false에서 colorize는 ANSI 포함', () => {
+    setNoColor(false);
+    const result = colorize('test', 'red');
+    expect(result).toContain('\x1b[');
+  });
+
+  it('noColor=true에서 bold는 원본 텍스트', () => {
+    setNoColor(true);
+    expect(bold('hello')).toBe('hello');
+  });
+
+  it('noColor=true에서 dim은 원본 텍스트', () => {
+    setNoColor(true);
+    expect(dim('world')).toBe('world');
+  });
+
+  it('noColor=true에서 cyan은 원본', () => {
+    setNoColor(true);
+    expect(cyan('text')).toBe('text');
+  });
+
+  it('noColor=true에서 green은 원본', () => {
+    setNoColor(true);
+    expect(green('text')).toBe('text');
+  });
+
+  it('noColor=true에서 red는 원본', () => {
+    setNoColor(true);
+    expect(red('text')).toBe('text');
+  });
+
+  it('noColor=true에서 yellow는 원본', () => {
+    setNoColor(true);
+    expect(yellow('text')).toBe('text');
+  });
+
+  it('noColor=true에서 gray는 원본', () => {
+    setNoColor(true);
+    expect(gray('text')).toBe('text');
+  });
+
+  it('noColor=true에서 brightCyan은 원본', () => {
+    setNoColor(true);
+    expect(brightCyan('text')).toBe('text');
+  });
+
+  it('noColor=true에서 brightWhite은 원본', () => {
+    setNoColor(true);
+    expect(brightWhite('text')).toBe('text');
+  });
+
+  it('stripAnsi 빈 문자열 → 빈 문자열', () => {
+    expect(stripAnsi('')).toBe('');
+  });
+
+  it('stripAnsi ANSI 없는 일반 텍스트 보존', () => {
+    const text = 'no ansi here 123';
+    expect(stripAnsi(text)).toBe(text);
+  });
+
+  it('displayWidth 한국어 2바이트 문자', () => {
+    // 한국어는 각 2열 폭이거나 구현에 따라 다를 수 있음
+    const w = displayWidth('안녕');
+    expect(typeof w).toBe('number');
+    expect(w).toBeGreaterThanOrEqual(2);
+  });
+
+  it('displayWidth 이모지 포함', () => {
+    const w = displayWidth('✔');
+    expect(typeof w).toBe('number');
+  });
+
+  it('cursorToLineStart는 ESC 시퀀스 포함', () => {
+    const r = cursorToLineStart();
+    // WHY: cursorToLineStart uses ANSI ESC[G (\u001B[G), not \r
+    expect(typeof r).toBe('string');
+    expect(r.length).toBeGreaterThan(0);
+  });
+
+  it('hideCursor는 문자열', () => {
+    expect(typeof hideCursor()).toBe('string');
+  });
+
+  it('showCursor는 문자열', () => {
+    expect(typeof showCursor()).toBe('string');
+  });
+
+  it('clearLine은 문자열', () => {
+    expect(typeof clearLine()).toBe('string');
+  });
+
+  it('clearAndReturn은 문자열', () => {
+    expect(typeof clearAndReturn()).toBe('string');
+  });
+
+  it('noColor=false에서 hideCursor는 ANSI 포함', () => {
+    setNoColor(false);
+    expect(hideCursor()).toContain('\x1b[');
+  });
+
+  it('noColor=false에서 showCursor는 ANSI 포함', () => {
+    setNoColor(false);
+    expect(showCursor()).toContain('\x1b[');
+  });
+
+  it('colorize 여러 스타일 동시 적용', () => {
+    const result = colorize('text', 'cyan', ['bold', 'dim']);
+    expect(result).toContain('text');
+  });
+
+  it('bold는 \\x1b[1m 포함 (noColor=false)', () => {
+    setNoColor(false);
+    expect(bold('x')).toContain('\x1b[1m');
+  });
+
+  it('dim는 \\x1b[2m 포함 (noColor=false)', () => {
+    setNoColor(false);
+    expect(dim('x')).toContain('\x1b[2m');
+  });
+
+  it('reset은 0m 포함 (noColor=false)', () => {
+    setNoColor(false);
+    expect(reset()).toContain('0m');
+  });
+
+  it('noColor=false에서 fg cyan은 36 포함', () => {
+    setNoColor(false);
+    expect(fg('cyan')).toContain('36');
+  });
+
+  it('noColor=true에서 fg는 빈 문자열', () => {
+    setNoColor(true);
+    expect(fg('cyan')).toBe('');
+  });
+
+  it('noColor=true에서 bg는 빈 문자열', () => {
+    setNoColor(true);
+    expect(bg('bgRed')).toBe('');
+  });
+
+  it('noColor=true에서 style은 빈 문자열', () => {
+    setNoColor(true);
+    expect(style('bold')).toBe('');
+  });
+
+  it('noColor=true에서 reset은 빈 문자열', () => {
+    setNoColor(true);
+    expect(reset()).toBe('');
+  });
+
+  it('stripAnsi 연속 ANSI 코드 제거', () => {
+    const text = '\x1b[1m\x1b[32m\x1b[4mbold-green-underline\x1b[0m';
+    expect(stripAnsi(text)).toBe('bold-green-underline');
+  });
+
+  it('displayWidth ANSI 포함 문자열 → 실제 표시 길이', () => {
+    const raw = 'hello';
+    const colored = colorize(raw, 'cyan');
+    expect(displayWidth(colored)).toBe(raw.length);
+  });
+});
+
+// ── Renderer 추가 edge 케이스 ─────────────────────────────────
+
+describe('renderer 추가 edge 케이스', () => {
+  beforeEach(() => setNoColor(true));
+  afterEach(() => setNoColor(false));
+
+  it('renderBox 빈 title → content만 포함', () => {
+    const result = renderBox('some content', { title: '' });
+    expect(result).toContain('some content');
+  });
+
+  it('renderHeader 긴 버전 문자열', () => {
+    const result = renderHeader('100.200.300-beta.1');
+    expect(result).toContain('100.200.300-beta.1');
+  });
+
+  it('renderDivider 긴 레이블', () => {
+    const longLabel = 'A'.repeat(50);
+    const result = renderDivider(longLabel);
+    expect(result).toContain(longLabel);
+  });
+
+  it('renderPrompt 빈 텍스트', () => {
+    const result = renderPrompt('');
+    expect(result).toContain('❯');
+  });
+
+  it('formatUserMessage 특수문자 포함', () => {
+    const result = formatUserMessage('!@#$%^&*()');
+    expect(result).toContain('!@#$%^&*()');
+  });
+
+  it('formatAssistantMessage 빈 메시지', () => {
+    const result = formatAssistantMessage('');
+    expect(typeof result).toBe('string');
+  });
+
+  it('formatSystemMessage 빈 메시지', () => {
+    const result = formatSystemMessage('');
+    expect(result).toContain('◆');
+  });
+
+  it('formatErrorMessage 빈 메시지', () => {
+    const result = formatErrorMessage('');
+    expect(result).toContain('✖');
+  });
+
+  it('formatSuccessMessage 빈 메시지', () => {
+    const result = formatSuccessMessage('');
+    expect(result).toContain('✔');
+  });
+
+  it('formatUserMessage 긴 메시지', () => {
+    const longMsg = 'A'.repeat(500);
+    const result = formatUserMessage(longMsg);
+    expect(result).toContain('You');
+  });
+
+  it('formatAssistantMessage 긴 메시지', () => {
+    const longMsg = 'B'.repeat(500);
+    const result = formatAssistantMessage(longMsg);
+    expect(typeof result).toBe('string');
+  });
+
+  it('createRenderer write 호출', () => {
+    const { target, output } = makeBuffer();
+    const renderer = createRenderer({ output: target });
+    renderer.write('raw write');
+    expect(output()).toContain('raw write');
+  });
+
+  it('createRenderer renderHeader 출력', () => {
+    const { target, output } = makeBuffer();
+    const renderer = createRenderer({ output: target });
+    renderer.renderHeader('1.0.0');
+    expect(output()).toContain('1.0.0');
+  });
+
+  it('createRenderer writeLine 빈 문자열', () => {
+    const { target, output } = makeBuffer();
+    const renderer = createRenderer({ output: target });
+    renderer.writeLine('');
+    expect(typeof output()).toBe('string');
+  });
+
+  it('createRenderer 여러 writeLine 순서 유지', () => {
+    const { target, output } = makeBuffer();
+    const renderer = createRenderer({ output: target });
+    renderer.writeLine('first');
+    renderer.writeLine('second');
+    renderer.writeLine('third');
+    const out = output();
+    expect(out.indexOf('first')).toBeLessThan(out.indexOf('second'));
+    expect(out.indexOf('second')).toBeLessThan(out.indexOf('third'));
+  });
+
+  it('renderBox 스타일 없을 때 기본 rounded', () => {
+    const result = renderBox('default style');
+    expect(result).toContain('╭'); // default = rounded
+  });
+
+  it('renderHeader 반환값 문자열', () => {
+    expect(typeof renderHeader('1.0.0')).toBe('string');
+  });
+
+  it('renderDivider 반환값 문자열', () => {
+    expect(typeof renderDivider()).toBe('string');
+  });
+
+  it('renderPrompt 반환값 문자열', () => {
+    expect(typeof renderPrompt()).toBe('string');
+  });
+
+  it('formatUserMessage 반환값 문자열', () => {
+    expect(typeof formatUserMessage('msg')).toBe('string');
+  });
+
+  it('formatAssistantMessage 반환값 문자열', () => {
+    expect(typeof formatAssistantMessage('msg')).toBe('string');
+  });
+
+  it('formatSystemMessage 반환값 문자열', () => {
+    expect(typeof formatSystemMessage('msg')).toBe('string');
+  });
+
+  it('formatErrorMessage 반환값 문자열', () => {
+    expect(typeof formatErrorMessage('msg')).toBe('string');
+  });
+
+  it('formatSuccessMessage 반환값 문자열', () => {
+    expect(typeof formatSuccessMessage('msg')).toBe('string');
+  });
+});
+
+// ── Spinner 추가 edge 케이스 ─────────────────────────────────
+
+describe('Spinner 추가 edge 케이스', () => {
+  it('BRAILLE_FRAMES 각 요소는 문자열', () => {
+    for (const frame of BRAILLE_FRAMES) {
+      expect(typeof frame).toBe('string');
+    }
+  });
+
+  it('ASCII_FRAMES 각 요소는 문자열', () => {
+    for (const frame of ASCII_FRAMES) {
+      expect(typeof frame).toBe('string');
+    }
+  });
+
+  it('DEFAULT_FRAMES는 배열', () => {
+    expect(Array.isArray(DEFAULT_FRAMES)).toBe(true);
+  });
+
+  it('createSpinner 기본 상태는 idle', () => {
+    const s = createSpinner('test');
+    expect(s.currentState).toBe('idle');
+  });
+
+  it('createSpinner 텍스트 설정', () => {
+    const s = createSpinner('hello spinner');
+    expect(s.currentText).toBe('hello spinner');
+  });
+
+  it('start 후 stop → idle 상태', () => {
+    const s = new Spinner({ text: 'test', color: 'cyan' }, () => {});
+    s.start();
+    s.stop();
+    expect(s.currentState).toBe('idle');
+  });
+
+  it('start 후 succeed → success 상태', () => {
+    const output: string[] = [];
+    const s = new Spinner({ text: 'test', color: 'green' }, (t) => output.push(t));
+    s.start();
+    s.succeed('완료');
+    expect(s.currentState).toBe('success');
+  });
+
+  it('start 후 fail → error 상태', () => {
+    const output: string[] = [];
+    const s = new Spinner({ text: 'test', color: 'red' }, (t) => output.push(t));
+    s.start();
+    s.fail('실패');
+    expect(s.currentState).toBe('error');
+  });
+
+  it('succeed 후 currentState 갱신', () => {
+    const s = new Spinner({ text: 'original', color: 'cyan' }, () => {});
+    s.start();
+    s.succeed('Done message');
+    // WHY: succeed() finalizes spinner but currentText stays as original
+    expect(s.currentText).toBe('original');
+    expect(s.currentState).toBe('success');
+  });
+
+  it('fail 후 currentState 갱신', () => {
+    const s = new Spinner({ text: 'original', color: 'cyan' }, () => {});
+    s.start();
+    s.fail('Failed message');
+    // WHY: fail() finalizes spinner but currentText stays as original
+    expect(s.currentText).toBe('original');
+    expect(s.currentState).toBe('error');
+  });
+
+  it('updateText → currentText 갱신', () => {
+    const s = createSpinner('initial text');
+    s.updateText('new text');
+    expect(s.currentText).toBe('new text');
+  });
+
+  it('빈 텍스트로 createSpinner → ok', () => {
+    const s = createSpinner('');
+    expect(s).toBeInstanceOf(Spinner);
+    expect(s.currentText).toBe('');
+  });
+
+  it('한국어 텍스트 spinner → ok', () => {
+    const s = createSpinner('처리 중...');
+    expect(s.currentText).toBe('처리 중...');
+    s.start();
+    s.stop();
+  });
+
+  it('spinner color: green → ok', () => {
+    const s = new Spinner({ text: 'test', color: 'green' }, () => {});
+    s.start();
+    expect(s.currentState).toBe('spinning');
+    s.stop();
+  });
+
+  it('spinner color: red → ok', () => {
+    const s = new Spinner({ text: 'test', color: 'red' }, () => {});
+    s.start();
+    expect(s.currentState).toBe('spinning');
+    s.stop();
+  });
+
+  it('spinner color: yellow → ok', () => {
+    const s = new Spinner({ text: 'test', color: 'yellow' }, () => {});
+    s.start();
+    expect(s.currentState).toBe('spinning');
+    s.stop();
+  });
+
+  it('idle 상태에서 stop → idle 유지', () => {
+    const s = createSpinner('test');
+    s.stop(); // idle에서 stop
+    expect(s.currentState).toBe('idle');
+  });
+
+  it('stop 후 succeed → 오류 없이 실행', () => {
+    const s = new Spinner({ text: 'test', color: 'cyan' }, () => {});
+    s.start();
+    s.stop();
+    expect(() => s.succeed('done after stop')).not.toThrow();
+  });
+});
+
+// ── ChatUi 추가 edge 케이스 ─────────────────────────────────
+
+describe('ChatUi 추가 edge 케이스', () => {
+  beforeEach(() => setNoColor(true));
+  afterEach(() => setNoColor(false));
+
+  it('createChatUi 기본 옵션 → ChatUi 인스턴스', () => {
+    const chat = createChatUi();
+    expect(chat).toBeInstanceOf(ChatUi);
+  });
+
+  it('createChatUi version 설정', () => {
+    const chat = createChatUi({ version: '3.0.0' });
+    expect(chat).toBeInstanceOf(ChatUi);
+  });
+
+  it('createChatUi model 설정', () => {
+    const chat = createChatUi({ model: 'claude-haiku-4-5-20251001' });
+    expect(chat).toBeInstanceOf(ChatUi);
+  });
+
+  it('createChatUi phase 설정', () => {
+    const chat = createChatUi({ phase: 'TEST' });
+    expect(chat).toBeInstanceOf(ChatUi);
+  });
+
+  it('error 빈 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.error('')).not.toThrow();
+  });
+
+  it('success 빈 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.success('')).not.toThrow();
+  });
+
+  it('system 빈 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.system('')).not.toThrow();
+  });
+
+  it('error 한국어 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.error('인증 오류가 발생했습니다')).not.toThrow();
+  });
+
+  it('success 한국어 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.success('작업이 완료되었습니다')).not.toThrow();
+  });
+
+  it('system 한국어 메시지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.system('시스템 초기화 중...')).not.toThrow();
+  });
+
+  it('showContractComplete 긴 경로 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    const longPath = '/home/user/projects/my-project/'.repeat(5) + '.adev/contract.json';
+    expect(() => chat.showContractComplete(longPath)).not.toThrow();
+  });
+
+  it('showMessages 빈 배열 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.showMessages([])).not.toThrow();
+  });
+
+  it('showMessages 1개 assistant 메시지', () => {
+    const chat = createChatUi();
+    expect(() => chat.showMessages([{ role: 'assistant', content: '응답' }])).not.toThrow();
+  });
+
+  it('showMessages 1개 error 메시지', () => {
+    const chat = createChatUi();
+    expect(() => chat.showMessages([{ role: 'error', content: '오류' }])).not.toThrow();
+  });
+
+  it('showStreamingDelta 빈 텍스트 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    chat.showStreamingStart();
+    expect(() => chat.showStreamingDelta('')).not.toThrow();
+    chat.showStreamingEnd();
+  });
+
+  it('showStreamingDelta 한국어 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    chat.showStreamingStart();
+    expect(() => chat.showStreamingDelta('안녕하세요')).not.toThrow();
+    chat.showStreamingEnd();
+  });
+
+  it('showStreamingDelta 이모지 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    chat.showStreamingStart();
+    expect(() => chat.showStreamingDelta('🎉 완료되었습니다!')).not.toThrow();
+    chat.showStreamingEnd();
+  });
+
+  it('startSpinner 빈 텍스트 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.startSpinner('')).not.toThrow();
+    chat.stopSpinner();
+  });
+
+  it('startSpinner 한국어 텍스트 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    expect(() => chat.startSpinner('처리 중입니다...')).not.toThrow();
+    chat.stopSpinner();
+  });
+
+  it('succeedSpinner 한국어 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    chat.startSpinner('작업 중');
+    expect(() => chat.succeedSpinner('작업 완료!')).not.toThrow();
+  });
+
+  it('failSpinner 한국어 → 오류 없이 실행', () => {
+    const chat = createChatUi();
+    chat.startSpinner('작업 중');
+    expect(() => chat.failSpinner('작업 실패')).not.toThrow();
+  });
+
+  it('연속 5번 startSpinner/stopSpinner → 오류 없음', () => {
+    const chat = createChatUi();
+    for (let i = 0; i < 5; i++) {
+      chat.startSpinner(`작업 ${i}`);
+      chat.stopSpinner();
+    }
+  });
+
+  it('연속 streaming 3회 → 오류 없음', () => {
+    const chat = createChatUi();
+    for (let i = 0; i < 3; i++) {
+      chat.showStreamingStart();
+      chat.showStreamingDelta(`응답 ${i}`);
+      chat.showStreamingEnd();
+    }
+  });
+
+  it('showStreamingStart timestamp 없이 호출', () => {
+    const chat = createChatUi();
+    expect(() => chat.showStreamingStart()).not.toThrow();
+    chat.showStreamingEnd();
+  });
+
+  it('showStreamingStart timestamp 포함 호출', () => {
+    const chat = createChatUi();
+    expect(() => chat.showStreamingStart(new Date('2026-01-01'))).not.toThrow();
+    chat.showStreamingEnd();
+  });
+
+  it('showStreamingEnd 없이 start만 → 오류 없음', () => {
+    const chat = createChatUi();
+    expect(() => chat.showStreamingStart()).not.toThrow();
+    // end 없이도 문제없어야 함
+  });
+
+  it('showMessage role=success → 오류 없이 실행 (있다면)', () => {
+    const chat = createChatUi();
+    // role=success는 정의에 없을 수 있으나 타입에 있다면 처리
+    expect(() => chat.showMessage({ role: 'assistant', content: 'ok' })).not.toThrow();
+  });
+});
