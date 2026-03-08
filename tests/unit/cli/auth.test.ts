@@ -773,3 +773,174 @@ describe('AuthCommand 다양한 env 포맷 경계값', () => {
     expect((await cmd.execute([], { status: true })).ok).toBe(true);
   });
 });
+
+// ── help() 추가 경계값 ─────────────────────────────────────────
+
+describe('AuthCommand help() 추가 경계값', () => {
+  it('help() 반환값에 개행이 포함됨', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).toContain('\n');
+  });
+
+  it('help() 100번 연속 호출 → 동일한 값', () => {
+    const cmd = new AuthCommand(logger);
+    const first = cmd.help();
+    for (let i = 0; i < 100; i++) {
+      expect(cmd.help()).toBe(first);
+    }
+  });
+
+  it('help() 길이는 50자 이상', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help().length).toBeGreaterThan(50);
+  });
+
+  it('help() 소문자 문자열 포함', () => {
+    const cmd = new AuthCommand(logger);
+    const h = cmd.help();
+    expect(h).toMatch(/[a-z]/);
+  });
+
+  it('help()는 undefined가 아님', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).not.toBeUndefined();
+  });
+
+  it('help()는 null이 아님', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).not.toBeNull();
+  });
+
+  it('info logger 인스턴스 help() 정상 반환', () => {
+    const cmd = new AuthCommand(new ConsoleLogger('info'));
+    expect(typeof cmd.help()).toBe('string');
+  });
+
+  it('debug logger 인스턴스 help() 정상 반환', () => {
+    const cmd = new AuthCommand(new ConsoleLogger('debug'));
+    expect(typeof cmd.help()).toBe('string');
+  });
+});
+
+// ── execute 연속 실행 및 격리 ─────────────────────────────────
+
+describe('AuthCommand execute 연속 실행 격리', () => {
+  const mgr = new TempEnvManager();
+
+  beforeEach(async () => await mgr.backup());
+  afterEach(async () => await mgr.restore());
+
+  it('10번 연속 status → 모두 ok', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-multi\n');
+    for (let i = 0; i < 10; i++) {
+      const cmd = new AuthCommand(logger);
+      const result = await cmd.execute([], { status: true });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('빈 env 후 키 추가 후 status → ok', async () => {
+    await mgr.clearEnv();
+    const cmd1 = new AuthCommand(logger);
+    const r1 = await cmd1.execute([], { status: true });
+    expect(r1.ok).toBe(true);
+
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-added\n');
+    const cmd2 = new AuthCommand(logger);
+    const r2 = await cmd2.execute([], { status: true });
+    expect(r2.ok).toBe(true);
+  });
+
+  it('5개 인스턴스 병렬 status → 모두 ok', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-parallel\n');
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => new AuthCommand(logger).execute([], { status: true })),
+    );
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('인스턴스 재사용 → 동일 결과', async () => {
+    const cmd = new AuthCommand(logger);
+    const r1 = await cmd.execute([], { status: true });
+    const r2 = await cmd.execute([], { status: true });
+    expect(r1.ok).toBe(r2.ok);
+  });
+
+  it('env 초기화 후 status → ok', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('OAuth 토큰만 있는 env → status ok', async () => {
+    await mgr.writeEnv('CLAUDE_CODE_OAUTH_TOKEN=sk-ant-fake-token-only\n');
+    const cmd = new AuthCommand(logger);
+    expect((await cmd.execute([], { status: true })).ok).toBe(true);
+  });
+
+  it('execute 반환값 구조 확인: ok 필드 있음', async () => {
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('execute 반환값 ok 타입 boolean', async () => {
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── .env 파일 없는 환경 ────────────────────────────────────────
+
+describe('AuthCommand .env 파일 미존재 경계값', () => {
+  const mgr = new TempEnvManager();
+
+  beforeEach(async () => await mgr.backup());
+  afterEach(async () => await mgr.restore());
+
+  it('비어있는 값 API Key 경계값 케이스 #1', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('비어있는 값 API Key 경계값 케이스 #2', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('API Key 경계값: sk-ant-test-a (최소 길이)', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-a\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('매우 짧은 값 → ok 또는 안전 처리', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=x\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('값이 숫자만 → ok 또는 안전 처리', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=123456\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('값에 공백 포함 → ok 또는 안전 처리', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test ab cd\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+});

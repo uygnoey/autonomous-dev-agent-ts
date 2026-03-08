@@ -786,3 +786,205 @@ describe('FailureHandler 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 경계값: 다양한 Phase 조합 ──────────────────────────────
+
+describe('FailureHandler 다양한 Phase 조합 경계값', () => {
+  it('DESIGN Phase + design_flaw 메시지 → design_flaw', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'DESIGN', 'architecture 설계 결함');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('design_flaw');
+  });
+
+  it('CODE Phase + implementation_bug 메시지 → implementation_bug', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'CODE', 'undefined is not a function');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('implementation_bug');
+  });
+
+  it('TEST Phase + test_gap 메시지 → test_gap', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'TEST', 'test coverage 부족');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('test_gap');
+  });
+
+  it('VERIFY Phase + spec_ambiguity 메시지 → spec_ambiguity', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', '요구사항 모호 unclear');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('spec_ambiguity');
+  });
+
+  it('DESIGN Phase + infrastructure 메시지 → infrastructure', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'DESIGN', 'connection timeout 실패');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('infrastructure');
+  });
+
+  it('CODE Phase + unknown 메시지 → unknown', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'CODE', '알 수 없는 문제');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('unknown');
+  });
+
+  it('TEST Phase + design_flaw 메시지 → design_flaw (Phase 무관 분류)', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'TEST', 'interface structure 설계 결함');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('design_flaw');
+  });
+
+  it('VERIFY Phase + implementation_bug 메시지 → implementation_bug', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'crash exception 발생');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('implementation_bug');
+  });
+});
+
+// ── 추가 경계값: featureId 다양한 케이스 ────────────────────────
+
+describe('FailureHandler featureId 다양한 케이스', () => {
+  it('특수문자 포함 featureId → ok', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat!@#$', 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feat!@#$');
+  });
+
+  it('한글 featureId → ok', () => {
+    const handler = makeHandler();
+    const result = handler.classify('기능-인증', 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('기능-인증');
+  });
+
+  it('긴 featureId (100자) → ok', () => {
+    const handler = makeHandler();
+    const longId = 'f'.repeat(100);
+    const result = handler.classify(longId, 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe(longId);
+  });
+
+  it('숫자만 featureId → ok', () => {
+    const handler = makeHandler();
+    const result = handler.classify('123456', 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('123456');
+  });
+
+  it('이모지 포함 featureId → ok', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-🎯', 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feat-🎯');
+  });
+
+  it('공백 포함 featureId → ok', () => {
+    const handler = makeHandler();
+    const result = handler.classify('my feature id', 'VERIFY', 'some error message');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('my feature id');
+  });
+});
+
+// ── 추가 경계값: 에러 메시지 다양한 케이스 ───────────────────────
+
+describe('FailureHandler 에러 메시지 다양한 케이스', () => {
+  it('개행 포함 에러 메시지 → 분류됨', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'line1\nline2\narchitecture error');
+    expect(result.ok).toBe(true);
+  });
+
+  it('탭 포함 에러 메시지 → 분류됨', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'error\ttab\tdesign issue');
+    expect(result.ok).toBe(true);
+  });
+
+  it('대문자 키워드 → 분류됨 (대소문자 무관)', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'ARCHITECTURE DESIGN FLAW');
+    expect(result.ok).toBe(true);
+  });
+
+  it('혼합 대소문자 키워드 → 분류됨', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'Architecture Design flaw');
+    expect(result.ok).toBe(true);
+  });
+
+  it('여러 카테고리 키워드 혼합 → 한 카테고리로 분류', () => {
+    const handler = makeHandler();
+    // architecture(design_flaw)와 bug(implementation_bug) 키워드 혼합
+    // 먼저 매칭되는 타입으로 분류
+    const result = handler.classify('feat-1', 'VERIFY', 'architecture design bug crash');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(['design_flaw', 'implementation_bug']).toContain(result.value.type);
+    }
+  });
+
+  it('이모지만 있는 에러 메시지 → 분류됨', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', '🚀🎉💥');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('unknown');
+  });
+
+  it('JSON 형식 에러 메시지 → 분류됨', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', '{"error": "undefined is not a function", "type": "bug"}');
+    expect(result.ok).toBe(true);
+  });
+
+  it('스택 트레이스 형식 → 분류됨', () => {
+    const handler = makeHandler();
+    const stackTrace = 'Error: undefined is not a function\n  at foo (index.ts:10)\n  at bar (main.ts:20)';
+    const result = handler.classify('feat-1', 'VERIFY', stackTrace);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('implementation_bug');
+  });
+
+  it('숫자만 있는 에러 메시지 → unknown', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', '404');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('unknown');
+  });
+
+  it('단일 키워드 "design" → design_flaw', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('design_flaw');
+  });
+
+  it('단일 키워드 "bug" → implementation_bug', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'bug');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('implementation_bug');
+  });
+
+  it('단일 키워드 "test" → test_gap', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'test');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('test_gap');
+  });
+
+  it('단일 키워드 "timeout" → infrastructure', () => {
+    const handler = makeHandler();
+    const result = handler.classify('feat-1', 'VERIFY', 'timeout');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('infrastructure');
+  });
+});

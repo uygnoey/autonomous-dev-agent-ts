@@ -531,14 +531,29 @@ describe('DocCollaborator.getState', () => {
     expect(result.ok).toBe(false);
   });
 
-  it.each(['', '   ', 'invalid-id-xyz', crypto.randomUUID()])(
-    '알 수 없는 docId (%s) → 에러 반환',
-    async (docId) => {
-      const collab = makeCollaborator();
-      const result = await collab.getState(docId);
-      expect(result.ok).toBe(false);
-    },
-  );
+  it('빈 문자열 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState('');
+    expect(result.ok).toBe(false);
+  });
+
+  it('공백만 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState('   ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('invalid-id-xyz docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState('invalid-id-xyz');
+    expect(result.ok).toBe(false);
+  });
+
+  it('UUID docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState(crypto.randomUUID());
+    expect(result.ok).toBe(false);
+  });
 
   it('5번 반복 — 항상 ok=false (존재하지 않는 ID)', async () => {
     for (let i = 0; i < 5; i++) {
@@ -780,5 +795,110 @@ describe('DocCollaborator 경계값 랜덤 테스트', () => {
         expect(result.value).toBe(firstResult.value);
       }
     }
+  });
+
+  it('collaborate 결과 value에 두 입력 내용이 모두 포함', () => {
+    const outline = 'UNIQUE_OUTLINE_STRING';
+    const details = 'UNIQUE_DETAILS_STRING';
+    const result = collab.collaborate(outline, details);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain(outline);
+      expect(result.value).toContain(details);
+    }
+  });
+
+  it('collaborate 경계값: 개행 없는 outline + 개행 있는 details', () => {
+    const result = collab.collaborate('single line outline', 'line1\nline2\nline3');
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate 경계값: 개행 있는 outline + 개행 없는 details', () => {
+    const result = collab.collaborate('line1\nline2\nline3', 'single line details');
+    expect(result.ok).toBe(true);
+  });
+
+  it('generateTableOfContents: 번호 헤딩 포함 → ok', () => {
+    const result = collab.generateTableOfContents('# 1. 첫 번째\n## 1.1 소섹션\n내용');
+    expect(result.ok).toBe(true);
+  });
+
+  it('generateTableOfContents: 특수기호 없는 순수 텍스트 헤딩 → ok', () => {
+    const result = collab.generateTableOfContents('# Introduction\n## Background\n### Motivation');
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate: outline만 헤딩 포함, details는 일반 텍스트', () => {
+    const result = collab.collaborate('# 제목\n## 소제목\n내용', '일반 텍스트 상세 내용입니다.');
+    expect(result.ok).toBe(true);
+  });
+
+  it('collaborate: outline 일반 텍스트, details만 헤딩 포함', () => {
+    const result = collab.collaborate('일반 텍스트 아웃라인입니다.', '# 상세\n## 소상세\n내용');
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── complete 메서드 추가 경계값 ────────────────────────────────
+
+describe('DocCollaborator.complete 추가 경계값', () => {
+  it('빈 문자열 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('');
+    expect(result.ok).toBe(false);
+  });
+
+  it('공백 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('   ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('한글 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('존재하지않는문서');
+    expect(result.ok).toBe(false);
+  });
+
+  it('특수문자 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('!@#$%^&*');
+    expect(result.ok).toBe(false);
+  });
+
+  it('매우 긴 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('x'.repeat(500));
+    expect(result.ok).toBe(false);
+  });
+
+  it('숫자 docId → 에러 반환', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('123456789');
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ── requestLayer1/requestLayer2 메서드 ────────────────────────
+
+describe('DocCollaborator.requestLayer1 requestLayer2', () => {
+  it('requestLayer1은 function 타입', () => {
+    const collab = makeCollaborator();
+    expect(typeof collab.requestLayer1).toBe('function');
+  });
+
+  it('requestLayer2는 function 타입', () => {
+    const collab = makeCollaborator();
+    expect(typeof collab.requestLayer2).toBe('function');
+  });
+
+  it('simple 생성자도 requestLayer1 메서드 있음', () => {
+    const collab = makeSimpleCollaborator();
+    expect(typeof collab.requestLayer1).toBe('function');
+  });
+
+  it('simple 생성자도 requestLayer2 메서드 있음', () => {
+    const collab = makeSimpleCollaborator();
+    expect(typeof collab.requestLayer2).toBe('function');
   });
 });

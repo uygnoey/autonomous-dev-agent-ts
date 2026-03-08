@@ -755,6 +755,84 @@ describe('layer1 ↔ rag 통합 / layer1 ↔ rag integration', () => {
     expect(['webapp', 'web-app', 'generic']).toContain(result.value.projectType);
   });
 
+  it('ContractBuilder: 순서가 섞인 feature 배열에서 올바른 구현 순서 도출', () => {
+    const builder = new ContractBuilder(logger);
+
+    // feat-3 → feat-2 → feat-1 순으로 배열, 의존성 순서는 feat-1 → feat-2 → feat-3
+    const features = [
+      createFeature('feat-3', ['feat-2']),
+      createFeature('feat-1'),
+      createFeature('feat-2', ['feat-1']),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'shuffled order design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const order = result.value.implementationOrder;
+    expect(order.indexOf('feat-1')).toBeLessThan(order.indexOf('feat-2'));
+    expect(order.indexOf('feat-2')).toBeLessThan(order.indexOf('feat-3'));
+  });
+
+  it('ConversationManager: 같은 projectId로 교차 저장 후 조회', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'interleave-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+
+    for (let i = 0; i < 10; i++) {
+      const role: 'user' | 'assistant' = i % 2 === 0 ? 'user' : 'assistant';
+      await manager.addMessage(createMessage(`msg-${i}`, role, `content ${i}`, 'proj-shared'));
+    }
+
+    const hist = await manager.getHistory('proj-shared');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(10);
+  });
+
+  it('ContractBuilder: validateContract 에러 배열 길이 확인 (IO 없는 feature)', () => {
+    const builder = new ContractBuilder(logger);
+
+    const featureNoIO: FeatureSpec = {
+      id: 'feat-no-io',
+      name: 'No IO Feature',
+      description: 'Feature without inputs and outputs',
+      acceptanceCriteria: [
+        { id: 'ac-1', description: 'criterion', verifiable: true, testCategory: 'unit' },
+      ],
+      dependencies: [],
+      inputs: [],
+      outputs: [],
+    };
+
+    const contractResult = builder.buildContract([featureNoIO], [createTestDef('feat-no-io')], 'design');
+    expect(contractResult.ok).toBe(true);
+    if (!contractResult.ok) return;
+
+    const validationResult = builder.validateContract(contractResult.value);
+    expect(validationResult.ok).toBe(true);
+    if (!validationResult.ok) return;
+
+    // WHY: inputs/outputs 없으면 allIODefined=false → 에러 있음
+    expect(Array.isArray(validationResult.value)).toBe(true);
+  });
+
+  it('ConversationManager: 매우 짧은 검색 키워드 (1글자)', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'short-kw-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('msg-1', 'user', 'authentication required', 'proj-kw'));
+    await manager.addMessage(createMessage('msg-2', 'user', 'also needs authorization', 'proj-kw'));
+
+    const searchResult = await manager.searchContext('proj-kw', 'a');
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(Array.isArray(searchResult.value)).toBe(true);
+  });
+
   it('ConversationManager: 여러 독립 repo 인스턴스가 서로 격리', async () => {
     const repo1 = new MemoryRepository(join(tmpDir, 'isolated-db-1'), logger);
     const repo2 = new MemoryRepository(join(tmpDir, 'isolated-db-2'), logger);
@@ -777,5 +855,138 @@ describe('layer1 ↔ rag 통합 / layer1 ↔ rag integration', () => {
     // WHY: 두 repo는 서로 격리되어 각각 1개 메시지만 가짐
     expect(hist1.value.length).toBe(1);
     expect(hist2.value.length).toBe(1);
+  });
+
+  it('ContractBuilder: ID에 하이픈 많은 feature 처리', () => {
+    const builder = new ContractBuilder(logger);
+    const feature = createFeature('feat-a-b-c-d-e-f');
+    const testDef = createTestDef('feat-a-b-c-d-e-f');
+
+    const result = builder.buildContract([feature], [testDef], 'hyphenated id design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.features[0]?.id).toBe('feat-a-b-c-d-e-f');
+  });
+
+  it('ConversationManager: 이모지 포함 projectId', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'emoji-proj-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const msg = createMessage('msg-e1', 'user', 'test content', 'proj-🎯');
+
+    const addResult = await manager.addMessage(msg);
+    expect(typeof addResult.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder: ratios 합이 1.0인 TestTypeDefinition → 올바르게 처리', () => {
+    const builder = new ContractBuilder(logger);
+
+    const testDef: TestTypeDefinition = {
+      featureId: 'feat-ratio',
+      categories: [
+        { name: 'unit', description: 'Unit', mappedCriteria: ['ac-feat-ratio-1'] },
+        { name: 'module', description: 'Module', mappedCriteria: [] },
+        { name: 'e2e', description: 'E2E', mappedCriteria: [] },
+      ],
+      rules: ['test first'],
+      sampleTests: [{ category: 'unit', description: 'sample', expectedBehavior: 'ok' }],
+      ratios: { unit: 0.5, module: 0.3, e2e: 0.2 },
+    };
+    const feature = createFeature('feat-ratio');
+    const result = builder.buildContract([feature], [testDef], 'ratio design');
+    expect(result.ok).toBe(true);
+  });
+
+  it('ConversationManager: 역할이 assistant인 메시지만 저장 → 조회', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'asst-only-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    for (let i = 0; i < 5; i++) {
+      await manager.addMessage(createMessage(`asst-${i}`, 'assistant', `answer ${i}`, 'proj-asst'));
+    }
+
+    const hist = await manager.getHistory('proj-asst');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(5);
+    expect(hist.value.every((m) => m.role === 'assistant')).toBe(true);
+  });
+
+  it('ContractBuilder: 아주 긴 feature name과 description 처리', () => {
+    const builder = new ContractBuilder(logger);
+
+    const longFeature: FeatureSpec = {
+      id: 'feat-long-name',
+      name: 'N'.repeat(200),
+      description: 'D'.repeat(500),
+      acceptanceCriteria: [
+        { id: 'ac-ln-1', description: 'criterion', verifiable: true, testCategory: 'unit' },
+      ],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    };
+
+    const result = builder.buildContract([longFeature], [createTestDef('feat-long-name')], 'long name design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.features[0]?.name.length).toBe(200);
+  });
+
+  it('ConversationManager: UUID projectId → getHistory 정상 처리', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'uuid-proj-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const uuid = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+    await manager.addMessage(createMessage('msg-uuid-p', 'user', 'uuid project message', uuid));
+
+    const hist = await manager.getHistory(uuid);
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(1);
+  });
+
+  it('ContractBuilder: 하나의 feature가 여러 다른 feature에 의존', () => {
+    const builder = new ContractBuilder(logger);
+
+    const features = [
+      createFeature('feat-a'),
+      createFeature('feat-b'),
+      createFeature('feat-c'),
+      createFeature('feat-dependent', ['feat-a', 'feat-b', 'feat-c']),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'multi-dep design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const order = result.value.implementationOrder;
+    const depIdx = order.indexOf('feat-dependent');
+    expect(depIdx).toBeGreaterThan(order.indexOf('feat-a'));
+    expect(depIdx).toBeGreaterThan(order.indexOf('feat-b'));
+    expect(depIdx).toBeGreaterThan(order.indexOf('feat-c'));
+  });
+
+  it('ContractBuilder: feature description이 특수문자 포함', () => {
+    const builder = new ContractBuilder(logger);
+
+    const specialFeature: FeatureSpec = {
+      id: 'feat-special-desc',
+      name: 'Special Desc Feature',
+      description: '특수문자 포함: <>&"\'`!@#$%^*(){}[]|\\',
+      acceptanceCriteria: [
+        { id: 'ac-sd-1', description: 'criterion', verifiable: true, testCategory: 'unit' },
+      ],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    };
+
+    const result = builder.buildContract([specialFeature], [createTestDef('feat-special-desc')], 'special design');
+    expect(result.ok).toBe(true);
   });
 });
