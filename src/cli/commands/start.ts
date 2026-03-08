@@ -4,14 +4,14 @@
  * @description
  * KR: Layer1 Claude Opus와 대화 세션을 시작하고,
  *     기획/설계 대화를 진행하여 Contract를 생성한다.
+ *     TUI ChatUi를 사용하여 Claude Code 스타일 인터페이스를 제공한다.
  * EN: Starts conversation session with Layer1 Claude Opus,
  *     conducts planning/design conversation, and generates Contract.
+ *     Uses TUI ChatUi for a Claude Code-style interface.
  */
 
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { stdin as input, stdout as output } from 'node:process';
-import * as readline from 'node:readline/promises';
 import { createAuthProvider } from '../../auth/index.js';
 import { loadConfig } from '../../core/config.js';
 import { AdevError } from '../../core/errors.js';
@@ -22,7 +22,13 @@ import type { Result } from '../../core/types.js';
 import { ClaudeApi } from '../../layer1/claude-api.js';
 import { ContractBuilder } from '../../layer1/contract-builder.js';
 import { ConversationManager } from '../../layer1/conversation.js';
+import { Designer } from '../../layer1/designer.js';
+import { Planner } from '../../layer1/planner.js';
+import { SpecBuilder } from '../../layer1/spec-builder.js';
+import { TestTypeDesigner } from '../../layer1/test-type-designer.js';
 import type { ConversationMessage } from '../../layer1/types.js';
+import { createChatUi } from '../tui/chat.js';
+import type { ChatUi } from '../tui/chat.js';
 import type { GlobalCliOptions, ProjectInfo } from '../types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
@@ -40,25 +46,8 @@ const LAYER1_SYSTEM_PROMPT = `당신은 프로젝트 기획 및 설계 전문가
 
 한국어로 명확하고 구조화된 응답을 제공하세요.`;
 
-/** Contract 생성 트리거 키워드 / Contract generation trigger keywords */
-const CONTRACT_TRIGGERS = ['확정', '완료', 'confirm', 'finalize'];
-
-/** 종료 키워드 / Exit keywords */
-const EXIT_KEYWORDS = ['exit', 'quit', '종료', '나가기'];
-
-// ── ANSI 색상 코드 / ANSI color codes ───────────────────────────
-
-const COLORS = {
-  reset: '\x1b[0m',
-  bright: '\x1b[1m',
-  dim: '\x1b[2m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  gray: '\x1b[90m',
-} as const;
+/** adev 현재 버전 / Current adev version */
+const ADEV_VERSION = '0.0.1';
 
 // ── 인터페이스 / Interfaces ─────────────────────────────────────
 
@@ -86,6 +75,14 @@ interface Layer1SessionState {
   readonly conversationManager: ConversationManager;
   /** Contract 빌더 / Contract builder */
   readonly contractBuilder: ContractBuilder;
+  /** 기획자 / Planner */
+  readonly planner: Planner;
+  /** 설계자 / Designer */
+  readonly designer: Designer;
+  /** 스펙 빌더 / Spec builder */
+  readonly specBuilder: SpecBuilder;
+  /** 테스트 타입 설계자 / Test type designer */
+  readonly testTypeDesigner: TestTypeDesigner;
   /** 대화 이력 / Conversation history */
   readonly messages: ConversationMessage[];
 }
@@ -98,8 +95,10 @@ interface Layer1SessionState {
  * @description
  * KR: 사용자와 Claude Opus 간 대화 세션을 시작하고,
  *     REPL 루프를 실행하여 기획/설계를 진행한 후 Contract를 생성한다.
+ *     TUI ChatUi를 통해 Claude Code 스타일 인터페이스를 제공한다.
  * EN: Starts conversation session between user and Claude Opus,
  *     runs REPL loop for planning/design, and generates Contract.
+ *     Provides Claude Code-style interface via TUI ChatUi.
  *
  * @param logger - 로거 인스턴스 / Logger instance
  *
@@ -151,8 +150,15 @@ export class StartCommand {
     const session = sessionResult.value;
     this.logger.info('Layer1 세션 초기화 완료');
 
-    // 3. 대화 루프 실행
-    const conversationResult = await this.runConversationLoop(session, options);
+    // 3. TUI 초기화 및 대화 루프 실행
+    const chat = createChatUi({
+      version: ADEV_VERSION,
+      model: 'claude-opus-4-6',
+      projectName: projectInfo.name,
+      phase: 'DESIGN',
+    });
+
+    const conversationResult = await this.runConversationLoop(session, options, chat);
     if (!conversationResult.ok) {
       return conversationResult;
     }
@@ -238,17 +244,17 @@ export class StartCommand {
       const claudeApi = new ClaudeApi(authResult.value, this.logger);
 
       // 메모리 저장소 생성
-      // WHY: MemoryRepository는 LanceDB 테이블 경로가 필요하나,
-      //      여기서는 간단히 더미 리포지토리를 생성
       const memoryDbPath = resolve(projectInfo.path, '.adev', 'data', 'memory');
       const memoryRepo = new MemoryRepository(memoryDbPath, this.logger);
       await memoryRepo.initialize();
 
-      // 대화 관리자 생성
+      // 대화 관리자 + Layer1 파이프라인 컴포넌트 생성
       const conversationManager = new ConversationManager(memoryRepo, this.logger);
-
-      // Contract 빌더 생성
       const contractBuilder = new ContractBuilder(this.logger);
+      const planner = new Planner(this.logger);
+      const designer = new Designer(this.logger);
+      const specBuilder = new SpecBuilder(this.logger);
+      const testTypeDesigner = new TestTypeDesigner(this.logger);
 
       // 기존 대화 이력 로드
       const historyResult = await conversationManager.getHistory(projectInfo.id, 10);
@@ -259,6 +265,10 @@ export class StartCommand {
         claudeApi,
         conversationManager,
         contractBuilder,
+        planner,
+        designer,
+        specBuilder,
+        testTypeDesigner,
         messages,
       };
 
@@ -279,35 +289,22 @@ export class StartCommand {
    *
    * @param session - Layer1 세션 상태 / Layer1 session state
    * @param options - CLI 옵션 / CLI options
+   * @param chat - TUI 채팅 인터페이스 / TUI chat interface
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
   private async runConversationLoop(
     session: Layer1SessionState,
     options: GlobalCliOptions,
+    chat: ChatUi,
   ): Promise<Result<void, AdevError>> {
-    const rl = readline.createInterface({ input, output });
-
     try {
-      // 시작 배너
-      console.log('');
-      console.log(`${COLORS.bright}${COLORS.cyan}╔════════════════════════════════════════════════╗${COLORS.reset}`);
-      console.log(`${COLORS.bright}${COLORS.cyan}║${COLORS.reset}  ${COLORS.bright}🚀 adev - Autonomous Development Agent${COLORS.reset}  ${COLORS.cyan}║${COLORS.reset}`);
-      console.log(`${COLORS.bright}${COLORS.cyan}╚════════════════════════════════════════════════╝${COLORS.reset}`);
-      console.log('');
-      console.log(`${COLORS.dim}프로젝트:${COLORS.reset} ${COLORS.bright}${session.projectInfo.name}${COLORS.reset}`);
-      console.log(`${COLORS.dim}경로:${COLORS.reset}     ${session.projectInfo.path}`);
-      console.log('');
-      console.log(`${COLORS.yellow}💡 시작 가이드${COLORS.reset}`);
-      console.log(`   ${COLORS.dim}•${COLORS.reset} 프로젝트 요구사항을 자유롭게 설명하세요`);
-      console.log(`   ${COLORS.dim}•${COLORS.reset} ${COLORS.green}"확정"${COLORS.reset} 또는 ${COLORS.green}"완료"${COLORS.reset} → Contract 생성`);
-      console.log(`   ${COLORS.dim}•${COLORS.reset} ${COLORS.gray}"exit"${COLORS.reset} 또는 ${COLORS.gray}"종료"${COLORS.reset} → 대화 종료`);
-      console.log('');
+      // TUI 시작
+      chat.start();
 
       // 초기 기능 설명이 있으면 자동 입력
       const initialFeature = (options as StartOptions).feature;
       if (initialFeature) {
-        console.log(`${COLORS.blue}>${COLORS.reset} ${initialFeature}\n`);
-        const responseResult = await this.processUserInput(session, initialFeature);
+        const responseResult = await this.processUserInput(session, initialFeature, chat);
         if (!responseResult.ok) {
           return responseResult;
         }
@@ -315,40 +312,51 @@ export class StartCommand {
 
       // REPL 루프
       while (true) {
-        const userInput = await rl.question(`${COLORS.blue}>${COLORS.reset} `);
+        const event = await chat.waitForInput();
 
-        if (!userInput.trim()) {
-          continue;
-        }
+        switch (event.type) {
+          case 'exit':
+            chat.showExit();
+            return ok(undefined);
 
-        // 종료 체크
-        if (EXIT_KEYWORDS.some((keyword) => userInput.trim().toLowerCase() === keyword)) {
-          console.log('\n대화를 종료합니다. / Exiting conversation.\n');
-          break;
-        }
+          case 'interrupt':
+            chat.showInterrupt();
+            return ok(undefined);
 
-        // Contract 생성 체크
-        if (CONTRACT_TRIGGERS.some((trigger) => userInput.trim().includes(trigger))) {
-          console.log('\n📋 Contract 생성 중... / Generating Contract...\n');
-          const contractResult = await this.generateContract(session);
-          if (!contractResult.ok) {
-            console.error(`❌ Contract 생성 실패: ${contractResult.error.message}`);
-            continue;
+          case 'eof':
+            return ok(undefined);
+
+          case 'help':
+            chat.showHelp();
+            break;
+
+          case 'clear':
+            // 대화 이력 초기화
+            session.messages.length = 0;
+            chat.system('대화 이력이 초기화되었습니다.');
+            break;
+
+          case 'contract': {
+            chat.showContractStart();
+            const contractResult = await this.generateContract(session, chat);
+            if (!contractResult.ok) {
+              chat.error(`Contract 생성 실패: ${contractResult.error.message}`);
+              continue;
+            }
+            const contractPath = resolve(session.projectInfo.path, '.adev', 'contract.json');
+            chat.showContractComplete(contractPath);
+            return ok(undefined);
           }
 
-          console.log('✅ Contract 생성 완료!');
-          console.log(`   출력 경로: ${session.projectInfo.path}/.adev/contract.json\n`);
-          break;
-        }
-
-        // 일반 대화 처리
-        const responseResult = await this.processUserInput(session, userInput);
-        if (!responseResult.ok) {
-          console.error(`❌ 응답 생성 실패: ${responseResult.error.message}`);
+          case 'message': {
+            const responseResult = await this.processUserInput(session, event.text, chat);
+            if (!responseResult.ok) {
+              chat.error(`응답 생성 실패: ${responseResult.error.message}`);
+            }
+            break;
+          }
         }
       }
-
-      return ok(undefined);
     } catch (error: unknown) {
       return err(
         new AdevError(
@@ -357,8 +365,6 @@ export class StartCommand {
           error,
         ),
       );
-    } finally {
-      rl.close();
     }
   }
 
@@ -367,11 +373,13 @@ export class StartCommand {
    *
    * @param session - Layer1 세션 상태 / Layer1 session state
    * @param userInput - 사용자 입력 / User input
+   * @param chat - TUI 채팅 인터페이스 / TUI chat interface
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
   private async processUserInput(
     session: Layer1SessionState,
     userInput: string,
+    chat: ChatUi,
   ): Promise<Result<void, AdevError>> {
     try {
       // 사용자 메시지 저장
@@ -385,7 +393,9 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(userMessage);
 
-      // Claude API 호출
+      // Claude API 호출 (스피너 표시)
+      chat.startSpinner('생각 중...');
+
       const messages = [
         { role: 'user' as const, content: LAYER1_SYSTEM_PROMPT },
         ...session.messages.map((m) => ({
@@ -401,6 +411,7 @@ export class StartCommand {
       });
 
       if (!responseResult.ok) {
+        chat.failSpinner('API 호출 실패');
         return err(
           new AdevError(
             'cli_start_api_failed',
@@ -409,6 +420,8 @@ export class StartCommand {
           ),
         );
       }
+
+      chat.succeedSpinner();
 
       const assistantContent = responseResult.value.content;
 
@@ -423,12 +436,8 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(assistantMessage);
 
-      // 응답 출력 (Claude Code 스타일)
-      console.log('');
-      console.log(`${COLORS.dim}─────────────────────────────────────────────────${COLORS.reset}`);
-      console.log(`${assistantContent}`);
-      console.log(`${COLORS.dim}─────────────────────────────────────────────────${COLORS.reset}`);
-      console.log('');
+      // TUI를 통해 응답 표시
+      chat.showMessage({ role: 'assistant', content: assistantContent, timestamp: new Date() });
 
       // 세션 메시지 업데이트
       session.messages.push(userMessage, assistantMessage);
@@ -448,34 +457,108 @@ export class StartCommand {
   /**
    * Contract 생성 / Generate Contract
    *
+   * @description
+   * KR: Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder 파이프라인으로 Contract를 생성한다.
+   * EN: Generates Contract via Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder pipeline.
+   *
    * @param session - Layer1 세션 상태 / Layer1 session state
+   * @param chat - TUI 채팅 인터페이스 / TUI chat interface
    * @returns 성공 시 ok(void), 실패 시 err(AdevError)
    */
-  private async generateContract(session: Layer1SessionState): Promise<Result<void, AdevError>> {
+  private async generateContract(
+    session: Layer1SessionState,
+    chat: ChatUi,
+  ): Promise<Result<void, AdevError>> {
     try {
-      // WHY: 실제 구현에서는 ContractBuilder를 사용하여 대화 내용에서 Contract를 생성해야 하나,
-      //      ContractBuilder.build() 메서드가 아직 구현되지 않았으므로
-      //      여기서는 간단히 더미 Contract를 생성
+      chat.startSpinner('기획 문서 분석 중...');
 
-      // 더미 Contract 생성
-      const dummyContract = {
-        version: 1,
-        projectType: 'general',
-        features: [],
-        testDefinitions: [],
-        implementationOrder: [],
-        verificationMatrix: {
-          allFeaturesHaveCriteria: false,
-          allCriteriaHaveTests: false,
-          noCyclicDependencies: true,
-          allIODefined: false,
-          completenessScore: 0,
-        },
-      };
+      // 1. Planner: 대화에서 기획 문서 생성
+      const planResult = session.planner.createPlan(session.projectInfo.id, session.messages);
+      if (!planResult.ok) {
+        chat.failSpinner('기획 문서 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `기획 문서 생성 실패 / Plan creation failed: ${planResult.error.message}`,
+            planResult.error,
+          ),
+        );
+      }
 
-      // Contract 파일 저장
+      // 2. Planner: 기능 추출
+      const featuresResult = session.planner.extractFeatures(planResult.value);
+      if (!featuresResult.ok) {
+        chat.failSpinner('기능 추출 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `기능 추출 실패 / Feature extraction failed: ${featuresResult.error.message}`,
+            featuresResult.error,
+          ),
+        );
+      }
+
+      chat.succeedSpinner('기획 문서 완성');
+      chat.startSpinner('설계 문서 생성 중...');
+
+      // 3. Designer: 설계 문서 생성
+      const designResult = session.designer.createDesign(
+        session.projectInfo.id,
+        planResult.value,
+        featuresResult.value,
+      );
+      if (!designResult.ok) {
+        chat.failSpinner('설계 문서 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `설계 문서 생성 실패 / Design creation failed: ${designResult.error.message}`,
+            designResult.error,
+          ),
+        );
+      }
+
+      chat.succeedSpinner('설계 문서 완성');
+      chat.startSpinner('테스트 정의 생성 중...');
+
+      // 4. TestTypeDesigner: 테스트 케이스 유형 정의서 생성
+      const testDefsResult = session.testTypeDesigner.createDefinitions(featuresResult.value);
+      if (!testDefsResult.ok) {
+        chat.failSpinner('테스트 정의 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `테스트 정의 생성 실패 / Test definition creation failed: ${testDefsResult.error.message}`,
+            testDefsResult.error,
+          ),
+        );
+      }
+
+      chat.succeedSpinner('테스트 정의 완성');
+      chat.startSpinner('Contract 생성 중...');
+
+      // 5. ContractBuilder: Contract 생성
+      const contractResult = session.contractBuilder.buildContract(
+        featuresResult.value,
+        testDefsResult.value,
+        designResult.value,
+      );
+      if (!contractResult.ok) {
+        chat.failSpinner('Contract 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `Contract 생성 실패 / Contract build failed: ${contractResult.error.message}`,
+            contractResult.error,
+          ),
+        );
+      }
+
+      chat.succeedSpinner('Contract 생성 완료');
+
+      // 6. Contract 파일 저장
       const contractPath = resolve(session.projectInfo.path, '.adev', 'contract.json');
-      const contractJson = JSON.stringify(dummyContract, null, 2);
+      const contractJson = JSON.stringify(contractResult.value, null, 2);
       await Bun.write(contractPath, contractJson);
 
       this.logger.info('Contract 생성 완료', { contractPath });
