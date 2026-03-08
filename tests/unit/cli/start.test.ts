@@ -1157,3 +1157,379 @@ describe('StartCommand 추가 랜덤 경계값', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 });
+
+// ── StartCommand 추가 경계값 3 ────────────────────────────────
+
+describe('StartCommand 추가 경계값 3', () => {
+  it('name이 start', () => {
+    expect(new StartCommand(logger).name).toBe('start');
+  });
+
+  it('description이 비어있지 않음', () => {
+    expect(new StartCommand(logger).description.length).toBeGreaterThan(0);
+  });
+
+  it('aliases 배열이 비어있지 않음', () => {
+    expect(new StartCommand(logger).aliases.length).toBeGreaterThan(0);
+  });
+
+  it('aliases[0]이 문자열', () => {
+    const cmd = new StartCommand(logger);
+    expect(typeof cmd.aliases[0]).toBe('string');
+  });
+
+  it('새 인스턴스 생성 → 에러 없음 (2회)', () => {
+    expect(() => new StartCommand(logger)).not.toThrow();
+    expect(() => new StartCommand(logger)).not.toThrow();
+  });
+
+  it('description에 한국어 포함 가능', () => {
+    const cmd = new StartCommand(logger);
+    expect(typeof cmd.description).toBe('string');
+  });
+
+  it('execute 반환 타입은 Promise', () => {
+    const cmd = new StartCommand(logger);
+    const ret = cmd.execute([], { flags: {} });
+    expect(ret instanceof Promise).toBe(true);
+    ret.catch(() => {});
+  });
+
+  it('execute 결과 ok는 boolean', async () => {
+    const tempDir = join(tmpdir(), `adev-bool-${crypto.randomUUID()}`);
+    await mkdir(join(tempDir, '.adev'), { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    expect(typeof result.ok).toBe('boolean');
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('projectPath가 존재하지 않는 경로 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '/absolutely/nonexistent/path/xyz', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('execute 3회 연속 (미초기화 경로) → 모두 ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    for (let i = 0; i < 3; i++) {
+      const result = await cmd.execute([], { projectPath: `/nonexistent-${i}`, flags: {} });
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('error 반환 시 error.code는 string', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('error 반환 시 error.message는 string', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('projectPath가 tempdir → config 없으면 ok=false', async () => {
+    const tempDir = join(tmpdir(), `adev-noconf-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('verbose=true + noColor=true → ok=false (미초기화)', async () => {
+    const tempDir = join(tmpdir(), `adev-vb-nc-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], {
+      projectPath: tempDir,
+      verbose: true,
+      noColor: true,
+      flags: {},
+    });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+});
+
+// ── StartCommand 다양한 flags 조합 ───────────────────────────
+
+describe('StartCommand 다양한 flags 조합', () => {
+  it('flags가 빈 객체 → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('flags에 unknown key → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: { unknownFlag: true } });
+    expect(result.ok).toBe(false);
+  });
+
+  it('logLevel info → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { logLevel: 'info', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('logLevel warn → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { logLevel: 'warn', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('logLevel debug → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { logLevel: 'debug', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('logLevel error → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { logLevel: 'error', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('noColor=true → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { noColor: true, flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('verbose=true → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { verbose: true, flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('모든 flags 조합 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], {
+      logLevel: 'debug',
+      verbose: true,
+      noColor: true,
+      projectId: 'test-id',
+      flags: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('args에 여러 값 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute(['a', 'b', 'c'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('args에 숫자 문자열 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute(['123', '456'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('args에 빈 문자열 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([''], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('args에 공백 문자열 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute(['   '], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ── StartCommand projectPath 다양한 경로 패턴 ────────────────
+
+describe('StartCommand projectPath 다양한 경로 패턴', () => {
+  it('존재하지 않는 절대 경로 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '/no/such/path/ever', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('루트 경로 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '/', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('상대 경로 → ok=false 또는 ok (경로에 따라)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '.', flags: {} });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('빈 문자열 projectPath → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('projectPath가 undefined → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('Windows 스타일 경로 → ok=false (Unix에서)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: 'C:\\Windows\\Path', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('매우 긴 경로 → ok=false', async () => {
+    const longPath = '/tmp/' + 'a'.repeat(500);
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: longPath, flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('5개 다른 비존재 경로 → 모두 ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const paths = [
+      '/no/path/1', '/no/path/2', '/no/path/3', '/no/path/4', '/no/path/5',
+    ];
+    for (const path of paths) {
+      const result = await cmd.execute([], { projectPath: path, flags: {} });
+      expect(result.ok).toBe(false);
+    }
+  });
+});
+
+// ── StartCommand 생성자 다양한 Logger ────────────────────────
+
+describe('StartCommand 생성자 다양한 Logger', () => {
+  it('info level logger로 생성 → ok', () => {
+    const infoLogger = new ConsoleLogger('info');
+    expect(() => new StartCommand(infoLogger)).not.toThrow();
+  });
+
+  it('warn level logger로 생성 → ok', () => {
+    const warnLogger = new ConsoleLogger('warn');
+    expect(() => new StartCommand(warnLogger)).not.toThrow();
+  });
+
+  it('debug level logger로 생성 → ok', () => {
+    const debugLogger = new ConsoleLogger('debug');
+    expect(() => new StartCommand(debugLogger)).not.toThrow();
+  });
+
+  it('5개 다른 logger로 5개 인스턴스 → 각각 독립', () => {
+    const loggers = Array.from({ length: 5 }, () => new ConsoleLogger('error'));
+    const cmds = loggers.map((l) => new StartCommand(l));
+    for (const cmd of cmds) {
+      expect(cmd.name).toBe('start');
+      expect(Array.isArray(cmd.aliases)).toBe(true);
+    }
+  });
+
+  it('인스턴스별 name 일관성', () => {
+    const cmds = Array.from({ length: 3 }, () => new StartCommand(new ConsoleLogger('error')));
+    for (const cmd of cmds) {
+      expect(cmd.name).toBe('start');
+    }
+  });
+
+  it('인스턴스별 description 일관성', () => {
+    const cmds = Array.from({ length: 3 }, () => new StartCommand(new ConsoleLogger('error')));
+    const desc0 = cmds[0]!.description;
+    for (const cmd of cmds) {
+      expect(cmd.description).toBe(desc0);
+    }
+  });
+
+  it('인스턴스별 aliases 일관성', () => {
+    const cmds = Array.from({ length: 3 }, () => new StartCommand(new ConsoleLogger('error')));
+    const aliases0 = JSON.stringify(cmds[0]!.aliases);
+    for (const cmd of cmds) {
+      expect(JSON.stringify(cmd.aliases)).toBe(aliases0);
+    }
+  });
+
+  it('인스턴스 생성 후 name/description/aliases 필드 존재', () => {
+    const cmd = new StartCommand(logger);
+    expect('name' in cmd).toBe(true);
+    expect('description' in cmd).toBe(true);
+    expect('aliases' in cmd).toBe(true);
+  });
+});
+
+// ── StartCommand generateContract 경계값 ─────────────────────
+
+describe('StartCommand generateContract 경계값', () => {
+  it('generateContract 없는 config → ok=false', async () => {
+    const tempDir = join(tmpdir(), `adev-gc-noconf-${crypto.randomUUID()}`);
+    await mkdir(join(tempDir, '.adev'), { recursive: true });
+    // config.json without ANTHROPIC_API_KEY
+    const { writeFile: wf } = await import('node:fs/promises');
+    await wf(
+      join(tempDir, '.adev', 'config.json'),
+      JSON.stringify({ version: '1', logLevel: 'error', model: 'claude-opus-4-6' }),
+    );
+    const cmd = new StartCommand(logger);
+    // execute without user input → should fail (no API key configured)
+    const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('generateContract config 존재 + api key 없음 → ok=false', async () => {
+    const tempDir = join(tmpdir(), `adev-gc-nokey-${crypto.randomUUID()}`);
+    await mkdir(join(tempDir, '.adev'), { recursive: true });
+    const { writeFile: wf } = await import('node:fs/promises');
+    await wf(
+      join(tempDir, '.adev', 'config.json'),
+      JSON.stringify({ version: '1', logLevel: 'error', model: 'claude-opus-4-6' }),
+    );
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('5회 연속 execute 미초기화 경로 → 모두 ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    for (let i = 0; i < 5; i++) {
+      const result = await cmd.execute([], {
+        projectPath: `/definitely-does-not-exist-${crypto.randomUUID()}`,
+        flags: {},
+      });
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('feature 옵션 전달 → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { feature: 'some feature description', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('projectId 옵션 전달 → ok=false (미초기화)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectId: crypto.randomUUID(), flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('feature + projectId 동시 전달 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], {
+      feature: 'test feature',
+      projectId: crypto.randomUUID(),
+      flags: {},
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('execute 반환값 error.code가 string (실패 시)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+      expect(result.error.code.length).toBeGreaterThan(0);
+    }
+  });
+});

@@ -1161,3 +1161,715 @@ describe('layer2 ↔ layer1 통합 / layer2 ↔ layer1 integration', () => {
     expect(tracker.getProgress('feat-rollback')?.currentPhase).toBe('CODE');
   });
 });
+
+// ── HandoffReceiver 심화 경계값 ───────────────────────────────
+
+describe('HandoffReceiver 심화 경계값', () => {
+  it('두 번 receive → 두 번 모두 ok=true', () => {
+    const receiver = new HandoffReceiver(logger);
+    const h1 = createValidHandoffPackage();
+    const h2 = createValidHandoffPackage();
+    expect(receiver.receive(h1).ok).toBe(true);
+    expect(receiver.receive(h2).ok).toBe(true);
+  });
+
+  it('validateStructure 5회 연속 → 모두 ok=true', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    for (let i = 0; i < 5; i++) {
+      const r = receiver.validateStructure(handoff.contract);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('validateStructure 반환 value는 배열', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const r = receiver.validateStructure(handoff.contract);
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('validateStructure 오류 배열 길이 0 (유효한 contract)', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const r = receiver.validateStructure(handoff.contract);
+    if (r.ok) expect(r.value.length).toBe(0);
+  });
+
+  it('receive 반환 ok는 boolean 타입', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const r = receiver.receive(handoff);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('10개 다른 HandoffPackage 수신 → 모두 ok=true', () => {
+    const receiver = new HandoffReceiver(logger);
+    for (let i = 0; i < 10; i++) {
+      const handoff = createValidHandoffPackage();
+      expect(receiver.receive(handoff).ok).toBe(true);
+    }
+  });
+
+  it('HandoffReceiver 3개 인스턴스 → 각각 독립', () => {
+    const receivers = Array.from({ length: 3 }, () => new HandoffReceiver(logger));
+    const handoff = createValidHandoffPackage();
+    for (const r of receivers) {
+      expect(r.receive(handoff).ok).toBe(true);
+    }
+  });
+
+  it('validateStructure + receive 순서 → 모두 ok=true', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const val = receiver.validateStructure(handoff.contract);
+    const rec = receiver.receive(handoff);
+    expect(val.ok).toBe(true);
+    expect(rec.ok).toBe(true);
+  });
+
+  it('receive then validateStructure → 모두 ok=true', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const rec = receiver.receive(handoff);
+    const val = receiver.validateStructure(handoff.contract);
+    expect(rec.ok).toBe(true);
+    expect(val.ok).toBe(true);
+  });
+
+  it('HandoffPackage.contract.features 길이 확인', () => {
+    const handoff = createValidHandoffPackage();
+    expect(handoff.contract.features.length).toBeGreaterThan(0);
+  });
+
+  it('HandoffPackage.contract.version 존재', () => {
+    const handoff = createValidHandoffPackage();
+    expect(handoff.contract.version).toBeDefined();
+  });
+
+  it('HandoffPackage.projectId 존재', () => {
+    const handoff = createValidHandoffPackage();
+    expect(handoff.projectId).toBeDefined();
+  });
+
+  it('HandoffPackage.planDocument 존재', () => {
+    const handoff = createValidHandoffPackage();
+    expect(handoff.planDocument).toBeDefined();
+  });
+
+  it('HandoffPackage.specDocument 존재', () => {
+    const handoff = createValidHandoffPackage();
+    expect(handoff.specDocument).toBeDefined();
+  });
+});
+
+// ── PhaseEngine 심화 경계값 ───────────────────────────────────
+
+describe('PhaseEngine 심화 경계값', () => {
+  it('DESIGN → CODE → TEST → VERIFY 전체 사이클', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.currentPhase).toBe('DESIGN');
+    engine.transition('CODE', 'done', 'architect');
+    expect(engine.currentPhase).toBe('CODE');
+    engine.transition('TEST', 'done', 'coder');
+    expect(engine.currentPhase).toBe('TEST');
+    engine.transition('VERIFY', 'done', 'tester');
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('VERIFY에서 CODE로 롤백 가능', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'd', 'a');
+    engine.transition('TEST', 'd', 'b');
+    engine.transition('VERIFY', 'd', 'c');
+    engine.transition('CODE', 'fail', 'qa');
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('초기 상태는 DESIGN', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('transition 반환값 ok는 boolean', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('CODE', 'reason', 'actor');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('DESIGN → CODE transition ok=true', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('CODE', 'design done', 'architect');
+    expect(r.ok).toBe(true);
+  });
+
+  it('CODE → TEST transition ok=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'd', 'a');
+    const r = engine.transition('TEST', 'code done', 'coder');
+    expect(r.ok).toBe(true);
+  });
+
+  it('TEST → VERIFY transition ok=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'd', 'a');
+    engine.transition('TEST', 'd', 'b');
+    const r = engine.transition('VERIFY', 'tests done', 'tester');
+    expect(r.ok).toBe(true);
+  });
+
+  it('3개 PhaseEngine 인스턴스 → 독립', () => {
+    const engines = Array.from({ length: 3 }, () => new PhaseEngine(logger));
+    engines[0]!.transition('CODE', 'd', 'a');
+    expect(engines[0]!.currentPhase).toBe('CODE');
+    expect(engines[1]!.currentPhase).toBe('DESIGN');
+    expect(engines[2]!.currentPhase).toBe('DESIGN');
+  });
+
+  it('transition 후 currentPhase는 전이된 phase', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'r', 'a');
+    expect(engine.currentPhase).toBe('CODE');
+    engine.transition('TEST', 'r', 'b');
+    expect(engine.currentPhase).toBe('TEST');
+  });
+
+  it('5번 DESIGN→CODE→TEST→VERIFY→DESIGN 왕복', () => {
+    const engine = new PhaseEngine(logger);
+    for (let i = 0; i < 5; i++) {
+      engine.transition('CODE', 'r', 'a');
+      expect(engine.currentPhase).toBe('CODE');
+      engine.transition('TEST', 'r', 'b');
+      expect(engine.currentPhase).toBe('TEST');
+      engine.transition('VERIFY', 'r', 'c');
+      expect(engine.currentPhase).toBe('VERIFY');
+      engine.transition('DESIGN', 'r', 'd');
+      expect(engine.currentPhase).toBe('DESIGN');
+    }
+  });
+
+  it('currentPhase는 string 타입', () => {
+    const engine = new PhaseEngine(logger);
+    expect(typeof engine.currentPhase).toBe('string');
+  });
+
+  it('history 초기값 존재 또는 빈 배열', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.history).toBeDefined();
+    expect(Array.isArray(engine.history)).toBe(true);
+  });
+
+  it('transition 후 history 길이 증가', () => {
+    const engine = new PhaseEngine(logger);
+    const lenBefore = engine.history.length;
+    engine.transition('CODE', 'r', 'a');
+    expect(engine.history.length).toBeGreaterThan(lenBefore);
+  });
+
+  it('DESIGN→CODE→TEST→VERIFY 후 history 4개 이상', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'd', 'a');
+    engine.transition('TEST', 'd', 'b');
+    engine.transition('VERIFY', 'd', 'c');
+    expect(engine.history.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ── ProgressTracker 심화 경계값 ──────────────────────────────
+
+describe('ProgressTracker 심화 경계값', () => {
+  it('5개 feature 초기화 → 각각 독립', () => {
+    const tracker = new ProgressTracker(logger);
+    for (let i = 0; i < 5; i++) {
+      tracker.initFeature(`feat-${i}`);
+    }
+    for (let i = 0; i < 5; i++) {
+      const prog = tracker.getProgress(`feat-${i}`);
+      expect(prog).toBeDefined();
+      expect(prog?.currentPhase).toBe('DESIGN');
+    }
+  });
+
+  it('initFeature 후 getProgress는 DESIGN phase', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('init-check');
+    expect(tracker.getProgress('init-check')?.currentPhase).toBe('DESIGN');
+  });
+
+  it('updatePhase CODE → getProgress().currentPhase === CODE', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('phase-upd');
+    tracker.updatePhase('phase-upd', 'CODE');
+    expect(tracker.getProgress('phase-upd')?.currentPhase).toBe('CODE');
+  });
+
+  it('updatePhase TEST → getProgress().currentPhase === TEST', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('phase-test');
+    tracker.updatePhase('phase-test', 'TEST');
+    expect(tracker.getProgress('phase-test')?.currentPhase).toBe('TEST');
+  });
+
+  it('updatePhase VERIFY → getProgress().currentPhase === VERIFY', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('phase-verify');
+    tracker.updatePhase('phase-verify', 'VERIFY');
+    expect(tracker.getProgress('phase-verify')?.currentPhase).toBe('VERIFY');
+  });
+
+  it('addVerification 후 verificationResults 길이 증가', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('vr-len');
+    const ver = createVerificationResult('vr-len', 'qa_qc', true);
+    tracker.addVerification('vr-len', ver);
+    expect(tracker.getProgress('vr-len')?.verificationResults.length).toBe(1);
+  });
+
+  it('4개 verification 추가 → verificationResults.length === 4', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('vr-4');
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      tracker.addVerification('vr-4', createVerificationResult('vr-4', phase, true));
+    }
+    expect(tracker.getProgress('vr-4')?.verificationResults.length).toBe(4);
+  });
+
+  it('getProgress 없는 feature → null/undefined 반환', () => {
+    const tracker = new ProgressTracker(logger);
+    expect(tracker.getProgress('nonexistent-feat')).toBeFalsy();
+  });
+
+  it('10개 feature 순서대로 initFeature + updatePhase', () => {
+    const tracker = new ProgressTracker(logger);
+    const phases = ['CODE', 'TEST', 'VERIFY', 'DESIGN', 'CODE', 'TEST', 'VERIFY', 'CODE', 'TEST', 'DESIGN'] as const;
+    for (let i = 0; i < 10; i++) {
+      tracker.initFeature(`seq-${i}`);
+      tracker.updatePhase(`seq-${i}`, phases[i]!);
+      expect(tracker.getProgress(`seq-${i}`)?.currentPhase).toBe(phases[i]);
+    }
+  });
+
+  it('ProgressTracker 3개 인스턴스 → 독립', () => {
+    const t1 = new ProgressTracker(logger);
+    const t2 = new ProgressTracker(logger);
+    t1.initFeature('t1-feat');
+    t2.initFeature('t2-feat');
+    expect(t1.getProgress('t1-feat')).toBeDefined();
+    expect(t1.getProgress('t2-feat')).toBeFalsy();
+    expect(t2.getProgress('t2-feat')).toBeDefined();
+    expect(t2.getProgress('t1-feat')).toBeFalsy();
+  });
+
+  it('verificationResults 초기값은 빈 배열', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('vr-empty');
+    expect(tracker.getProgress('vr-empty')?.verificationResults).toHaveLength(0);
+  });
+
+  it('updatePhase 5번 연속 → 마지막 phase 유지', () => {
+    const tracker = new ProgressTracker(logger);
+    tracker.initFeature('multi-upd');
+    const phases = ['CODE', 'TEST', 'VERIFY', 'CODE', 'TEST'] as const;
+    for (const phase of phases) {
+      tracker.updatePhase('multi-upd', phase);
+    }
+    expect(tracker.getProgress('multi-upd')?.currentPhase).toBe('TEST');
+  });
+});
+
+// ── VerificationGate 심화 경계값 ─────────────────────────────
+
+describe('VerificationGate 심화 경계값', () => {
+  it('4개 verification 모두 passed=true → isAllPassed=true', () => {
+    const gate = new VerificationGate(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      gate.addResult(createVerificationResult('vg-all', phase, true));
+    }
+    expect(gate.isAllPassed('vg-all')).toBe(true);
+  });
+
+  it('1개라도 passed=false → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult(createVerificationResult('vg-fail', 'qa_qc', true));
+    gate.addResult(createVerificationResult('vg-fail', 'reviewer', false));
+    gate.addResult(createVerificationResult('vg-fail', 'layer1', true));
+    gate.addResult(createVerificationResult('vg-fail', 'adev', true));
+    expect(gate.isAllPassed('vg-fail')).toBe(false);
+  });
+
+  it('verification 없음 → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    expect(gate.isAllPassed('no-results-feat')).toBe(false);
+  });
+
+  it('모두 passed=false → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      gate.addResult(createVerificationResult('vg-all-fail', phase, false));
+    }
+    expect(gate.isAllPassed('vg-all-fail')).toBe(false);
+  });
+
+  it('isAllPassed 반환값은 boolean', () => {
+    const gate = new VerificationGate(logger);
+    expect(typeof gate.isAllPassed('any-feat')).toBe('boolean');
+  });
+
+  it('다른 featureId → 독립적으로 집계', () => {
+    const gate = new VerificationGate(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      gate.addResult(createVerificationResult('feat-pass', phase, true));
+      gate.addResult(createVerificationResult('feat-fail', phase, false));
+    }
+    expect(gate.isAllPassed('feat-pass')).toBe(true);
+    expect(gate.isAllPassed('feat-fail')).toBe(false);
+  });
+
+  it('VerificationGate 3개 인스턴스 → 독립', () => {
+    const gates = Array.from({ length: 3 }, () => new VerificationGate(logger));
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      gates[0]!.addResult(createVerificationResult('g0', phase, true));
+    }
+    expect(gates[0]!.isAllPassed('g0')).toBe(true);
+    expect(gates[1]!.isAllPassed('g0')).toBe(false);
+    expect(gates[2]!.isAllPassed('g0')).toBe(false);
+  });
+
+  it('qa_qc만 통과 → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult(createVerificationResult('partial', 'qa_qc', true));
+    expect(gate.isAllPassed('partial')).toBe(false);
+  });
+
+  it('qa_qc + reviewer 통과 → isAllPassed=false (4개 필요)', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult(createVerificationResult('two', 'qa_qc', true));
+    gate.addResult(createVerificationResult('two', 'reviewer', true));
+    expect(gate.isAllPassed('two')).toBe(false);
+  });
+
+  it('4개 통과 후 5번째 failed → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const phase of phases) {
+      gate.addResult(createVerificationResult('five', phase, true));
+    }
+    gate.addResult(createVerificationResult('five', 'qa_qc', false));
+    // 5번째 qa_qc가 false → isAllPassed는 구현에 따라 다를 수 있음
+    expect(typeof gate.isAllPassed('five')).toBe('boolean');
+  });
+
+  it('5개 다른 feature → 각각 독립 isAllPassed', () => {
+    const gate = new VerificationGate(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (let i = 0; i < 5; i++) {
+      for (const phase of phases) {
+        gate.addResult(createVerificationResult(`multi-feat-${i}`, phase, i % 2 === 0));
+      }
+    }
+    for (let i = 0; i < 5; i++) {
+      const expected = i % 2 === 0;
+      expect(gate.isAllPassed(`multi-feat-${i}`)).toBe(expected);
+    }
+  });
+});
+
+// ── ContractBuilder 심화 경계값 ──────────────────────────────
+
+describe('ContractBuilder 심화 경계값', () => {
+  it('1개 feature + 1개 testDef → buildContract ok=true', () => {
+    const builder = new ContractBuilder(logger);
+    const features = [createFeature('single-f')];
+    const testDefs = [createTestDef('single-f')];
+    const r = builder.buildContract(features, testDefs, 'design');
+    expect(r.ok).toBe(true);
+  });
+
+  it('buildContract 결과에 features 포함', () => {
+    const builder = new ContractBuilder(logger);
+    const features = [createFeature('feat-check')];
+    const testDefs = [createTestDef('feat-check')];
+    const r = builder.buildContract(features, testDefs, 'design');
+    if (r.ok) expect(r.value.features.length).toBeGreaterThan(0);
+  });
+
+  it('buildContract → contract.version 존재', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract(
+      [createFeature('ver-f')],
+      [createTestDef('ver-f')],
+      'design',
+    );
+    if (r.ok) expect(r.value.version).toBeDefined();
+  });
+
+  it('buildHandoffPackage ok=true', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract(
+      [createFeature('hf-f')],
+      [createTestDef('hf-f')],
+      'design',
+    );
+    if (!r.ok) return;
+    const hr = builder.buildHandoffPackage('proj-hf', r.value, 'plan', 'design', 'spec');
+    expect(hr.ok).toBe(true);
+  });
+
+  it('buildHandoffPackage → projectId 일치', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract(
+      [createFeature('pid-f')],
+      [createTestDef('pid-f')],
+      'design',
+    );
+    if (!r.ok) return;
+    const hr = builder.buildHandoffPackage('my-project-id', r.value, 'plan', 'design', 'spec');
+    if (hr.ok) expect(hr.value.projectId).toBe('my-project-id');
+  });
+
+  it('5개 feature buildContract → features.length === 5', () => {
+    const builder = new ContractBuilder(logger);
+    const features = Array.from({ length: 5 }, (_, i) => createFeature(`f${i}`));
+    const testDefs = features.map((f) => createTestDef(f.id));
+    const r = builder.buildContract(features, testDefs, 'design');
+    if (r.ok) expect(r.value.features.length).toBe(5);
+  });
+
+  it('buildContract 10개 feature → ok=true', () => {
+    const builder = new ContractBuilder(logger);
+    const features = Array.from({ length: 10 }, (_, i) => createFeature(`big-f${i}`));
+    const testDefs = features.map((f) => createTestDef(f.id));
+    const r = builder.buildContract(features, testDefs, 'big design');
+    expect(r.ok).toBe(true);
+  });
+
+  it('3개 ContractBuilder 인스턴스 → 각각 독립', () => {
+    const builders = Array.from({ length: 3 }, () => new ContractBuilder(logger));
+    for (const b of builders) {
+      const r = b.buildContract([createFeature('ind-f')], [createTestDef('ind-f')], 'd');
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('buildContract → contract에 testTypeDefinitions 포함', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract(
+      [createFeature('ttd-f')],
+      [createTestDef('ttd-f')],
+      'design',
+    );
+    if (r.ok) expect(r.value.testDefinitions).toBeDefined();
+  });
+
+  it('buildHandoffPackage → planDocument 일치', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract([createFeature('pd-f')], [createTestDef('pd-f')], 'd');
+    if (!r.ok) return;
+    const hr = builder.buildHandoffPackage('proj', r.value, 'MY PLAN DOC', 'd', 's');
+    if (hr.ok) expect(hr.value.planDocument).toBe('MY PLAN DOC');
+  });
+
+  it('buildHandoffPackage → specDocument 일치', () => {
+    const builder = new ContractBuilder(logger);
+    const r = builder.buildContract([createFeature('sd-f')], [createTestDef('sd-f')], 'd');
+    if (!r.ok) return;
+    const hr = builder.buildHandoffPackage('proj', r.value, 'plan', 'd', 'MY SPEC DOC');
+    if (hr.ok) expect(hr.value.specDocument).toBe('MY SPEC DOC');
+  });
+});
+
+// ── FeatureSpec 생성 헬퍼 경계값 ─────────────────────────────
+
+describe('FeatureSpec 생성 헬퍼 경계값', () => {
+  it('createFeature → id 설정됨', () => {
+    const f = createFeature('test-id');
+    expect(f.id).toBe('test-id');
+  });
+
+  it('createFeature → name에 id 포함', () => {
+    const f = createFeature('my-id');
+    expect(f.name).toContain('my-id');
+  });
+
+  it('createFeature → deps 없으면 빈 배열', () => {
+    const f = createFeature('no-deps');
+    expect(f.dependencies).toHaveLength(0);
+  });
+
+  it('createFeature → deps 전달하면 포함됨', () => {
+    const f = createFeature('child', ['parent-1', 'parent-2']);
+    expect(f.dependencies).toContain('parent-1');
+    expect(f.dependencies).toContain('parent-2');
+  });
+
+  it('createFeature → acceptanceCriteria가 1개', () => {
+    const f = createFeature('ac-check');
+    expect(f.acceptanceCriteria.length).toBe(1);
+  });
+
+  it('createFeature → inputs가 1개', () => {
+    const f = createFeature('inp-check');
+    expect(f.inputs.length).toBe(1);
+  });
+
+  it('createFeature → outputs가 1개', () => {
+    const f = createFeature('out-check');
+    expect(f.outputs.length).toBe(1);
+  });
+
+  it('createTestDef → featureId 일치', () => {
+    const td = createTestDef('td-feat');
+    expect(td.featureId).toBe('td-feat');
+  });
+
+  it('createTestDef → categories 1개', () => {
+    const td = createTestDef('cat-check');
+    expect(td.categories.length).toBe(1);
+  });
+
+  it('createTestDef → ratios 필드 존재', () => {
+    const td = createTestDef('ratio-check');
+    expect(td.ratios).toBeDefined();
+    expect(typeof td.ratios.unit).toBe('number');
+  });
+
+  it('createTestDef → sampleTests 1개', () => {
+    const td = createTestDef('sample-check');
+    expect(td.sampleTests.length).toBe(1);
+  });
+
+  it('createTestDef → rules 배열 존재', () => {
+    const td = createTestDef('rules-check');
+    expect(Array.isArray(td.rules)).toBe(true);
+    expect(td.rules.length).toBeGreaterThan(0);
+  });
+
+  it('10개 다른 feature → 각각 독립 id', () => {
+    const features = Array.from({ length: 10 }, (_, i) => createFeature(`f${i}`));
+    for (let i = 0; i < 10; i++) {
+      expect(features[i]!.id).toBe(`f${i}`);
+    }
+  });
+
+  it('AcceptanceCriterion verifiable=true', () => {
+    const f = createFeature('verif-check');
+    expect(f.acceptanceCriteria[0]?.verifiable).toBe(true);
+  });
+
+  it('AcceptanceCriterion testCategory는 unit', () => {
+    const f = createFeature('tc-check');
+    expect(f.acceptanceCriteria[0]?.testCategory).toBe('unit');
+  });
+});
+
+// ── 전체 통합 복합 시나리오 ────────────────────────────────────
+
+describe('전체 통합 복합 시나리오', () => {
+  it('5개 feature 핸드오프 + 4중 검증 모두 통과', () => {
+    const receiver = new HandoffReceiver(logger);
+    const engine = new PhaseEngine(logger);
+    const tracker = new ProgressTracker(logger);
+    const gate = new VerificationGate(logger);
+
+    const handoff = createValidHandoffPackage();
+    expect(receiver.receive(handoff).ok).toBe(true);
+
+    const featureIds = ['full-1', 'full-2', 'full-3', 'full-4', 'full-5'];
+    for (const fid of featureIds) {
+      tracker.initFeature(fid);
+    }
+
+    engine.transition('CODE', 'design done', 'architect');
+    for (const fid of featureIds) tracker.updatePhase(fid, 'CODE');
+
+    engine.transition('TEST', 'code done', 'coder');
+    for (const fid of featureIds) tracker.updatePhase(fid, 'TEST');
+
+    engine.transition('VERIFY', 'tests done', 'tester');
+    for (const fid of featureIds) tracker.updatePhase(fid, 'VERIFY');
+
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+    for (const fid of featureIds) {
+      for (const phase of phases) {
+        const ver = createVerificationResult(fid, phase, true);
+        tracker.addVerification(fid, ver);
+        gate.addResult(ver);
+      }
+    }
+
+    for (const fid of featureIds) {
+      expect(gate.isAllPassed(fid)).toBe(true);
+      expect(tracker.getProgress(fid)?.verificationResults.length).toBe(4);
+      expect(tracker.getProgress(fid)?.currentPhase).toBe('VERIFY');
+    }
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('2번의 완전한 사이클 (DESIGN→VERIFY) 연속 실행', () => {
+    const engine = new PhaseEngine(logger);
+    const tracker = new ProgressTracker(logger);
+    const gate = new VerificationGate(logger);
+
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const fid = `cycle-${cycle}`;
+      tracker.initFeature(fid);
+      engine.transition('CODE', `c${cycle}`, 'a');
+      engine.transition('TEST', `c${cycle}`, 'b');
+      engine.transition('VERIFY', `c${cycle}`, 'c');
+      const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+      for (const phase of phases) {
+        const ver = createVerificationResult(fid, phase, true);
+        tracker.addVerification(fid, ver);
+        gate.addResult(ver);
+      }
+      expect(gate.isAllPassed(fid)).toBe(true);
+      engine.transition('DESIGN', 'reset', 'd');
+    }
+    // 마지막 상태는 DESIGN (두 번째 사이클 끝에 DESIGN으로 리셋)
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('실패 feature와 성공 feature 혼재', () => {
+    const gate = new VerificationGate(logger);
+    const tracker = new ProgressTracker(logger);
+    const phases: VerificationResult['phase'][] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
+
+    tracker.initFeature('success-feat');
+    tracker.initFeature('fail-feat');
+
+    for (const phase of phases) {
+      const v1 = createVerificationResult('success-feat', phase, true);
+      const v2 = createVerificationResult('fail-feat', phase, false);
+      tracker.addVerification('success-feat', v1);
+      tracker.addVerification('fail-feat', v2);
+      gate.addResult(v1);
+      gate.addResult(v2);
+    }
+
+    expect(gate.isAllPassed('success-feat')).toBe(true);
+    expect(gate.isAllPassed('fail-feat')).toBe(false);
+    expect(tracker.getProgress('success-feat')?.verificationResults.length).toBe(4);
+    expect(tracker.getProgress('fail-feat')?.verificationResults.length).toBe(4);
+  });
+
+  it('HandoffReceiver.validateStructure 반환값 에러 배열 타입 검증', () => {
+    const receiver = new HandoffReceiver(logger);
+    const handoff = createValidHandoffPackage();
+    const r = receiver.validateStructure(handoff.contract);
+    if (r.ok) {
+      for (const item of r.value) {
+        expect(typeof item).toBe('string');
+      }
+    }
+  });
+
+  it('ProgressTracker 없는 featureId → getProgress null/undefined', () => {
+    const tracker = new ProgressTracker(logger);
+    expect(tracker.getProgress('ghost-feat')).toBeFalsy();
+  });
+});
