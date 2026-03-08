@@ -17,52 +17,17 @@ import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { DocCollaborator } from 'layer3/doc-collaborator.js';
+import type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
 import type {
   BusinessDeliverable,
-  BusinessDeliverableType,
   Deliverable,
   DeliverableBuildOptions,
   DeliverableMetadata,
-  DocumentTemplate,
-  IntegratedDocument,
-} from 'layer3/types.js';
+} from 'layer3/deliverable-types.js';
+import type { BusinessDeliverableType, DocumentTemplate, IntegratedDocument } from 'layer3/doc-types.js';
+import { DEFAULT_BUSINESS_TEMPLATES } from 'layer3/deliverable-types.js';
 
-/**
- * 기본 비즈니스 산출물 템플릿 목록 / Default business deliverable templates
- */
-const DEFAULT_BUSINESS_TEMPLATES: readonly BusinessDeliverableType[] = [
-  'portfolio',
-  'business-plan',
-  'investment-proposal',
-  'presentation',
-] as const;
-
-/**
- * 산출물 빌더 인터페이스 / Deliverable builder interface
- */
-export interface IDeliverableBuilder {
-  /**
-   * 비즈니스 산출물을 생성한다 / Build a business deliverable
-   *
-   * @param options - 빌드 옵션 / Build options
-   * @returns 생성된 산출물 / Generated deliverable
-   */
-  build(options: DeliverableBuildOptions): Promise<Result<BusinessDeliverable>>;
-
-  /**
-   * 모든 기본 산출물을 생성한다 / Build all default deliverables
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @param metadata - 산출물 메타데이터 / Deliverable metadata
-   * @param outputDir - 출력 디렉토리 / Output directory
-   * @returns 생성된 산출물 목록 / Generated deliverables
-   */
-  buildAll(
-    projectId: string,
-    metadata: DeliverableMetadata,
-    outputDir: string,
-  ): Promise<Result<readonly BusinessDeliverable[]>>;
-}
+export type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
 
 /**
  * DeliverableBuilder 구현 클래스 / DeliverableBuilder implementation

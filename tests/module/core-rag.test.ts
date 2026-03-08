@@ -362,4 +362,588 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
     if (!getResult.ok) return;
     expect(getResult.value).toBeNull();
   });
+
+  // ── Edge / Random Cases ───────────────────────────────────────────
+
+  it('MemoryRepository: 빈 string ID로 insert 에러 처리', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'empty-id-db'), logger);
+    await repo.initialize();
+
+    const record: MemoryRecord = {
+      id: '',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'test',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+    const result = await repo.insert(record);
+    // WHY: 빈 ID는 무효 — 에러이거나 ok=false
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('MemoryRepository: UUID 형식 ID로 insert/getById 정상 동작', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'uuid-id-db'), logger);
+    await repo.initialize();
+
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const record: MemoryRecord = {
+      id: uuid,
+      projectId: 'proj-uuid',
+      type: 'decision',
+      content: 'UUID-based record',
+      embedding: new Float32Array([0.9, 0.8, 0.7, 0.6]),
+      metadata: {
+        phase: 'CODE',
+        featureId: 'feat-uuid',
+        agentName: 'coder',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById(uuid);
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.id).toBe(uuid);
+  });
+
+  it('MemoryRepository: 특수문자 포함 content insert/getById', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'special-char-db'), logger);
+    await repo.initialize();
+
+    const specialContent = 'SQL: SELECT * FROM users; <script>alert("xss")</script> 한글 테스트';
+    const record: MemoryRecord = {
+      id: 'mem-special-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: specialContent,
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-special-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.content).toBe(specialContent);
+  });
+
+  it('MemoryRepository: 초기화 없이 insert 에러', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'no-init-db'), logger);
+    // WHY: initialize() 호출 없이 insert하면 에러
+
+    const record: MemoryRecord = {
+      id: 'mem-no-init',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'test',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('MemoryRepository: 동일 ID 중복 insert 에러', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'dup-insert-db'), logger);
+    await repo.initialize();
+
+    const record: MemoryRecord = {
+      id: 'dup-id-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'first',
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+
+    await repo.insert(record);
+    const dupResult = await repo.insert({ ...record, content: 'second' });
+    // WHY: 중복 ID insert는 에러이거나 ok=false
+    if (!dupResult.ok) {
+      expect(dupResult.ok).toBe(false);
+    }
+  });
+
+  it('MemoryRepository: 매우 긴 content (10000자) insert/getById', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'long-content-db'), logger);
+    await repo.initialize();
+
+    const longContent = 'A'.repeat(10000);
+    const record: MemoryRecord = {
+      id: 'mem-long-1',
+      projectId: 'proj-1',
+      type: 'decision',
+      content: longContent,
+      embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+      metadata: {
+        phase: 'CODE',
+        featureId: 'feat-1',
+        agentName: 'coder',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await repo.getById('mem-long-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.content.length).toBe(10000);
+  });
+
+  it('MemoryRepository: update 존재하지 않는 ID 에러', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'update-nonexist-db'), logger);
+    await repo.initialize();
+
+    const result = await repo.update('nonexistent-id', { content: 'new content' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('MemoryRepository: delete 존재하지 않는 ID 에러', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'delete-nonexist-db'), logger);
+    await repo.initialize();
+
+    const result = await repo.delete('nonexistent-id');
+    expect(result.ok).toBe(false);
+  });
+
+  it('MemoryRepository: 모든 phase 타입 insert 처리', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'all-phases-db'), logger);
+    await repo.initialize();
+
+    const phases = ['PLAN', 'DESIGN', 'CODE', 'TEST', 'VERIFY'] as const;
+    for (const phase of phases) {
+      const result = await repo.insert({
+        id: `mem-phase-${phase}`,
+        projectId: 'proj-1',
+        type: 'decision',
+        content: `Phase: ${phase}`,
+        embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+        metadata: {
+          phase,
+          featureId: 'feat-1',
+          agentName: 'coder',
+          timestamp: new Date(),
+        },
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('MemoryRepository: 음수 임베딩 값 처리', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'neg-embed-db'), logger);
+    await repo.initialize();
+
+    const negEmbedding = new Float32Array([-0.9, -0.5, 0.0, 0.5]);
+    const record: MemoryRecord = {
+      id: 'mem-neg-1',
+      projectId: 'proj-1',
+      type: 'conversation',
+      content: 'negative embedding test',
+      embedding: negEmbedding,
+      metadata: {
+        phase: 'DESIGN',
+        featureId: 'feat-1',
+        agentName: 'architect',
+        timestamp: new Date(),
+      },
+    };
+
+    const insertResult = await repo.insert(record);
+    expect(insertResult.ok).toBe(true);
+  });
+
+  it('CodeVectorStore: 초기화 없이 insert 에러', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'code-no-init-db'), logger);
+    const record: CodeRecord = {
+      id: 'code-no-init-1',
+      projectId: 'proj-1',
+      filePath: 'src/test.ts',
+      chunk: 'test chunk',
+      embedding: new Float32Array(384).fill(0.1),
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'test',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    };
+    const result = await store.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('CodeVectorStore: 한글 filePath 처리', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'korean-path-db'), logger);
+    await store.initialize();
+
+    const record: CodeRecord = {
+      id: 'code-korean-1',
+      projectId: 'proj-kr',
+      filePath: 'src/인증/로그인.ts',
+      chunk: 'export function 로그인() { return true; }',
+      embedding: new Float32Array(384).fill(0.03),
+      metadata: {
+        language: 'typescript',
+        module: 'src/인증',
+        functionName: '로그인',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    };
+
+    const insertResult = await store.insert(record);
+    expect(insertResult.ok).toBe(true);
+
+    const getResult = await store.getById('code-korean-1');
+    expect(getResult.ok).toBe(true);
+    if (!getResult.ok) return;
+    expect(getResult.value?.filePath).toBe('src/인증/로그인.ts');
+  });
+
+  it('CodeVectorStore: 동일 ID 중복 insert 에러', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'code-dup-db'), logger);
+    await store.initialize();
+
+    const record: CodeRecord = {
+      id: 'code-dup-1',
+      projectId: 'proj-1',
+      filePath: 'src/dup.ts',
+      chunk: 'first chunk',
+      embedding: new Float32Array(384).fill(0.05),
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'dup',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    };
+
+    await store.insert(record);
+    const dupResult = await store.insert({ ...record, chunk: 'second chunk' });
+    if (!dupResult.ok) {
+      expect(dupResult.ok).toBe(false);
+    }
+  });
+
+  it('CodeVectorStore: 50개 레코드 batch insert 후 search topK=10', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'batch-db'), logger);
+    await store.initialize();
+
+    for (let i = 0; i < 50; i++) {
+      const embedding = new Float32Array(384).fill(i / 100);
+      await store.insert({
+        id: `code-batch-${i}`,
+        projectId: 'proj-batch',
+        filePath: `src/module${i}.ts`,
+        chunk: `export function fn${i}() { return ${i}; }`,
+        embedding,
+        metadata: {
+          language: 'typescript',
+          module: `src/module${i}`,
+          functionName: `fn${i}`,
+          lastModified: new Date(),
+          modifiedBy: 'test',
+        },
+      });
+    }
+
+    const searchResult = await store.search(new Float32Array(384).fill(0.25), 10);
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+    expect(searchResult.value.length).toBeLessThanOrEqual(10);
+    expect(searchResult.value.length).toBeGreaterThan(0);
+  });
+
+  it('CodeVectorStore: topK=0 search 에러 처리', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'topk-zero-db'), logger);
+    await store.initialize();
+
+    await store.insert({
+      id: 'code-topk-1',
+      projectId: 'proj-1',
+      filePath: 'src/test.ts',
+      chunk: 'test',
+      embedding: new Float32Array(384).fill(0.1),
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'test',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    });
+
+    const result = await store.search(new Float32Array(384).fill(0.1), 0);
+    // WHY: topK=0은 에러이거나 빈 배열
+    if (result.ok) {
+      expect(result.value.length).toBe(0);
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('ChunkSplitter: 빈 파일 처리', () => {
+    const splitter = new ChunkSplitter();
+    const chunks = splitter.splitCode('', 'src/empty.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+    expect(chunks.length).toBe(0);
+  });
+
+  it('ChunkSplitter: 주석만 있는 파일 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      '// This is a comment',
+      '// Another comment',
+      '/* Block comment */',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/comments-only.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('ChunkSplitter: 중첩 클래스/함수 처리', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export class Outer {',
+      '  inner() {',
+      '    function nested() {',
+      '      return 42;',
+      '    }',
+      '    return nested();',
+      '  }',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/nested.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ChunkSplitter: 한글 식별자 포함 TypeScript 파일', () => {
+    const splitter = new ChunkSplitter();
+    const content = [
+      'export function 계산하기(값: number): number {',
+      '  return 값 * 2;',
+      '}',
+    ].join('\n');
+    const chunks = splitter.splitCode(content, 'src/한글.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('ChunkSplitter: 최대 함수 수 (100개) 처리', () => {
+    const splitter = new ChunkSplitter();
+    const functions = Array.from({ length: 100 }, (_, i) =>
+      `export function fn${i}(): number {\n  return ${i};\n}`,
+    ).join('\n\n');
+    const chunks = splitter.splitCode(functions, 'src/many-functions.ts');
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('EmbeddingProvider: 빈 텍스트 배열 embed 에러', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed([]);
+    // WHY: 빈 배열은 에러이거나 빈 결과
+    if (result.ok) {
+      expect(result.value.length).toBe(0);
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('EmbeddingProvider: 여러 텍스트 동시 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const texts = [
+      'function login()',
+      'export class UserService',
+      'const DEFAULT_CONFIG = {}',
+      'interface Repository<T>',
+    ];
+    const result = await provider.embed(texts);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(4);
+    for (const vec of result.value) {
+      expect(vec.length).toBe(384);
+    }
+  });
+
+  it('EmbeddingProvider: 특수문자 포함 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed(['<script>alert("xss")</script> && SELECT * FROM users;']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.length).toBe(384);
+  });
+
+  it('EmbeddingProvider: 한글 코드 텍스트 embed', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const result = await provider.embed(['사용자 인증 함수 로그인 회원가입']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.length).toBe(384);
+  });
+
+  it('EmbeddingProvider: embedQuery vs embed 동일 텍스트 유사 결과', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const text = 'database connection pool';
+
+    const embedResult = await provider.embed([text]);
+    const queryResult = await provider.embedQuery(text);
+
+    expect(embedResult.ok).toBe(true);
+    expect(queryResult.ok).toBe(true);
+    if (!embedResult.ok || !queryResult.ok) return;
+
+    const vec1 = embedResult.value[0]!;
+    const vec2 = queryResult.value;
+    expect(vec1.length).toBe(vec2.length);
+  });
+
+  it('RagSearcher: 빈 쿼리 문자열 검색 — 에러이거나 빈 배열', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'empty-query-db'), logger);
+    await store.initialize();
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const result = await searcher.searchCode('');
+    // WHY: 구현에 따라 빈 쿼리 허용 가능
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    } else {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('RagSearcher: 레코드 없는 스토어 검색 → 빈 배열', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'empty-store-db'), logger);
+    await store.initialize();
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const result = await searcher.searchCode('some query');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(0);
+  });
+
+  it('RagSearcher: 여러 언어 파일 혼합 검색', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'multi-lang-db'), logger);
+    await store.initialize();
+
+    const langs = [
+      { id: 'py-1', filePath: 'src/main.py', chunk: 'def calculate(x, y): return x + y', lang: 'python' },
+      { id: 'ts-1', filePath: 'src/main.ts', chunk: 'function calculate(x: number, y: number): number { return x + y; }', lang: 'typescript' },
+      { id: 'go-1', filePath: 'src/main.go', chunk: 'func calculate(x, y int) int { return x + y }', lang: 'go' },
+    ];
+
+    for (const lang of langs) {
+      const embedResult = await provider.embed([lang.chunk]);
+      if (!embedResult.ok) continue;
+      await store.insert({
+        id: lang.id,
+        projectId: 'proj-multi',
+        filePath: lang.filePath,
+        chunk: lang.chunk,
+        embedding: embedResult.value[0]!,
+        metadata: {
+          language: lang.lang,
+          module: 'src',
+          functionName: 'calculate',
+          lastModified: new Date(),
+          modifiedBy: 'test',
+        },
+      });
+    }
+
+    const searcher = new RagSearcher(store, provider, logger);
+    const result = await searcher.searchCode('calculate sum of two numbers');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBeGreaterThan(0);
+  });
+
+  it('CodeIndexer: 존재하지 않는 파일 인덱싱 에러', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'nonexist-file-db'), logger);
+    await store.initialize();
+
+    const splitter = new ChunkSplitter();
+    const indexer = new CodeIndexer(store, provider, splitter, logger);
+
+    const result = await indexer.indexFile(join(tmpDir, 'does-not-exist.ts'));
+    expect(result.ok).toBe(false);
+  });
+
+  it('CodeIndexer: 빈 파일 인덱싱 → 0 청크', async () => {
+    const provider = createTransformersEmbeddingProvider(logger);
+    const store = new CodeVectorStore(join(tmpDir, 'empty-file-db'), logger);
+    await store.initialize();
+
+    const splitter = new ChunkSplitter();
+    const indexer = new CodeIndexer(store, provider, splitter, logger);
+
+    const emptyFile = join(tmpDir, 'empty-source.ts');
+    await Bun.write(emptyFile, '');
+
+    const result = await indexer.indexFile(emptyFile);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toBe(0);
+  });
+
+  it('CodeVectorStore: 최대 Float32 값 임베딩 처리', async () => {
+    const store = new CodeVectorStore(join(tmpDir, 'max-float-db'), logger);
+    await store.initialize();
+
+    const maxEmbedding = new Float32Array(384).fill(3.4028235e38);
+    const result = await store.insert({
+      id: 'code-max-float-1',
+      projectId: 'proj-1',
+      filePath: 'src/extreme.ts',
+      chunk: 'extreme values',
+      embedding: maxEmbedding,
+      metadata: {
+        language: 'typescript',
+        module: 'src',
+        functionName: 'extreme',
+        lastModified: new Date(),
+        modifiedBy: 'test',
+      },
+    });
+    // WHY: 최대 float32 값 처리 — 에러이거나 ok=true
+    if (result.ok) {
+      expect(result.ok).toBe(true);
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
 });

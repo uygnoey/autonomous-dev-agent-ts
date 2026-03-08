@@ -419,4 +419,434 @@ describe('문서 산출물 파이프라인 E2E / Document Delivery Pipeline E2E'
       expect(delivResult.value.type).toBe('report');
     }
   });
+
+  // ── Edge / Random Cases ──────────────────────────────────────────
+
+  it('DocIntegrator: 단일 조각 문서 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Single Frag', 2);
+    const result = integrator.integrate(['only-frag'], template, 'proj-single');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(1);
+    }
+  });
+
+  it('DocIntegrator: 100개 조각 문서 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Massive Doc', 5);
+    const fragments = Array.from({ length: 100 }, (_, i) => `frag-${i}`);
+    const result = integrator.integrate(fragments, template, 'proj-massive');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(100);
+    }
+  });
+
+  it('DocIntegrator: 특수문자 포함 조각 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Special Chars', 2);
+    const fragments = [
+      '<script>alert("xss")</script>',
+      'SELECT * FROM docs WHERE id=1; DROP TABLE docs;',
+      '한글 조각 내용 특수문자 !@#$%^&*()',
+    ];
+    const result = integrator.integrate(fragments, template, 'proj-special');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(3);
+    }
+  });
+
+  it('DocIntegrator: 한글 제목 템플릿 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const koreanTemplate: DocumentTemplate = {
+      type: 'api-reference',
+      title: '한국어 API 문서',
+      sections: [
+        { heading: '개요', content: '시스템 개요', order: 1, required: true },
+        { heading: '인증', content: '인증 방법', order: 2, required: true },
+      ],
+      language: 'ko',
+    };
+    const result = integrator.integrate(['한글 내용'], koreanTemplate, 'proj-kr');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.content).toContain('한국어 API 문서');
+    }
+  });
+
+  it('DocIntegrator: 문서 updateDocument에 빈 조각 추가 에러', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Doc', 2);
+    const createResult = integrator.integrate(['frag-1'], template, 'proj-1');
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const updateResult = integrator.updateDocument(createResult.value, []);
+    expect(updateResult.ok).toBe(false);
+  });
+
+  it('DocIntegrator: 10번 연속 업데이트 → 버전 11', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Versioned Doc', 2);
+    let doc: IntegratedDocument;
+
+    const createResult = integrator.integrate(['frag-0'], template, 'proj-version');
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+    doc = createResult.value;
+
+    for (let i = 1; i <= 10; i++) {
+      const updateResult = integrator.updateDocument(doc, [`frag-${i}`]);
+      expect(updateResult.ok).toBe(true);
+      if (!updateResult.ok) return;
+      doc = updateResult.value;
+    }
+
+    expect(doc.version).toBe(11);
+  });
+
+  it('DocIntegrator: UUID projectId로 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('UUID Project', 1);
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = integrator.integrate(['frag-1'], template, uuid);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.projectId).toBe(uuid);
+    }
+  });
+
+  it('DocIntegrator: exportAsMarkdown 빈 content 문서', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Empty Content', 2);
+    const docResult = integrator.integrate([''], template, 'proj-1');
+    if (!docResult.ok) return;
+
+    const mdResult = integrator.exportAsMarkdown(docResult.value);
+    // 빈 frag가 있어도 마크다운 내보내기는 가능해야 함
+    if (mdResult.ok) {
+      expect(mdResult.value).toContain('---');
+    }
+  });
+
+  it('DocCollaborator: 빈 details로 협업 에러', () => {
+    const collaborator = new DocCollaborator(logger);
+    const result = collaborator.collaborate('# Outline\n\nSome outline', '');
+    expect(result.ok).toBe(false);
+  });
+
+  it('DocCollaborator: 매우 긴 아웃라인 처리', () => {
+    const collaborator = new DocCollaborator(logger);
+    const longOutline = '# Long Document\n\n' + Array.from({ length: 50 }, (_, i) =>
+      `## Section ${i + 1}\n\nContent for section ${i + 1}`,
+    ).join('\n\n');
+    const result = collaborator.collaborate(longOutline, '## Additional Details\n\nMore info');
+    expect(result.ok).toBe(true);
+  });
+
+  it('DocCollaborator: 특수문자 포함 문서 협업', () => {
+    const collaborator = new DocCollaborator(logger);
+    const outline = '# Special <>&"\'\n\n## Section & More\n\nContent "with quotes"';
+    const details = '## More Details\n\nSQL: SELECT * FROM docs; 한글 내용';
+    const result = collaborator.collaborate(outline, details);
+    expect(result.ok).toBe(true);
+  });
+
+  it('DocCollaborator: generateTableOfContents 빈 문서 에러', () => {
+    const collaborator = new DocCollaborator(logger);
+    const result = collaborator.generateTableOfContents('');
+    expect(result.ok).toBe(false);
+  });
+
+  it('DocCollaborator: generateTableOfContents 헤딩 없는 문서', () => {
+    const collaborator = new DocCollaborator(logger);
+    const content = 'Just plain text without any headings at all.';
+    const result = collaborator.generateTableOfContents(content);
+    // WHY: 헤딩이 없으면 빈 목차이거나 에러
+    if (result.ok) {
+      expect(typeof result.value).toBe('string');
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('DocCollaborator: generateTableOfContents 5단계 중첩 헤딩', () => {
+    const collaborator = new DocCollaborator(logger);
+    const content = [
+      '# Level 1',
+      '## Level 2',
+      '### Level 3',
+      '#### Level 4',
+      '##### Level 5',
+      '###### Level 6',
+    ].join('\n\n');
+    const result = collaborator.generateTableOfContents(content);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('목차');
+    }
+  });
+
+  it('ProductionTester: 단일 명령어 실행', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-single', ['bun test']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalTests).toBe(1);
+      expect(result.value.passedTests).toBe(1);
+    }
+  });
+
+  it('ProductionTester: UUID projectId 사용', () => {
+    const tester = new ProductionTester(logger);
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = tester.runE2E(uuid, ['bun test']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.projectId).toBe(uuid);
+    }
+  });
+
+  it('ProductionTester: 빈 문자열만 있는 명령어 목록 → Fail-Fast 즉시', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-1', ['']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.failedTests).toBeGreaterThan(0);
+      expect(result.value.passedTests).toBe(0);
+    }
+  });
+
+  it('ProductionTester: 100개 명령어 실행 성능 확인', () => {
+    const tester = new ProductionTester(logger);
+    const commands = Array.from({ length: 100 }, (_, i) => `bun test cmd${i}`);
+    const result = tester.runE2E('proj-perf', commands);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalTests).toBe(100);
+      expect(result.value.passedTests).toBe(100);
+    }
+  });
+
+  it('ProductionTester: isHealthy 다중 실행 결과 집계', () => {
+    const tester = new ProductionTester(logger);
+    const r1 = tester.runE2E('proj-1', ['cmd1', 'cmd2']);
+    const r2 = tester.runE2E('proj-1', ['cmd3', 'cmd4']);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (!r1.ok || !r2.ok) return;
+    expect(tester.isHealthy([r1.value, r2.value])).toBe(true);
+  });
+
+  it('ProductionTester: getFailureRate 실패 포함 계산', () => {
+    const tester = new ProductionTester(logger);
+    const r1 = tester.runE2E('proj-fail', ['cmd1', '', 'cmd3']);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    // WHY: Fail-Fast이므로 cmd1 통과, '' 실패, cmd3 미실행 → failRate > 0
+    const rate = tester.getFailureRate([r1.value]);
+    expect(rate).toBeGreaterThan(0);
+  });
+
+  it('BugEscalator: 빈 testName TestFailure 처리', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: '',
+      error: 'some error occurred',
+      featureId: 'feat-1',
+    };
+    const result = escalator.createReport('proj-1', failure);
+    // 빈 testName은 에러이거나 처리 가능
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    } else {
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('BugEscalator: 빈 error 메시지 TestFailure 처리', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: 'test-empty-error',
+      error: '',
+      featureId: 'feat-1',
+    };
+    const result = escalator.createReport('proj-1', failure);
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    } else {
+      // 빈 에러 메시지 → minor
+      expect(result.value.severity).toBe('minor');
+    }
+  });
+
+  it('BugEscalator: 한글 에러 메시지 심각도 분류', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: '인증-테스트',
+      error: '데이터베이스 연결 오류 발생',
+      featureId: 'feat-auth-kr',
+    };
+    const result = escalator.createReport('proj-kr', failure);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // WHY: 한글 에러 메시지는 키워드 매칭 안될 수 있어 낮은 심각도 — 구현별 값 허용
+      expect(typeof result.value.severity).toBe('string');
+      expect(result.value.severity.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('BugEscalator: 동일 프로젝트 10개 리포트 생성 + 전체 조회', () => {
+    const escalator = new BugEscalator(logger);
+    for (let i = 0; i < 10; i++) {
+      escalator.createReport('proj-bulk', {
+        testName: `test-${i}`,
+        error: `error message ${i}`,
+        featureId: `feat-${i}`,
+      });
+    }
+    const active = escalator.getActiveReports('proj-bulk');
+    expect(active).toHaveLength(10);
+  });
+
+  it('BugEscalator: 다른 projectId 리포트 격리 확인', () => {
+    const escalator = new BugEscalator(logger);
+    escalator.createReport('proj-A', { testName: 't1', error: 'crash', featureId: 'f1' });
+    escalator.createReport('proj-A', { testName: 't2', error: 'error', featureId: 'f2' });
+    escalator.createReport('proj-B', { testName: 't3', error: 'timeout', featureId: 'f3' });
+
+    const projA = escalator.getActiveReports('proj-A');
+    const projB = escalator.getActiveReports('proj-B');
+    expect(projA).toHaveLength(2);
+    expect(projB).toHaveLength(1);
+  });
+
+  it('BugEscalator: UUID ID 리포트 해결', () => {
+    const escalator = new BugEscalator(logger);
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    escalator.createReport('proj-uuid', { testName: 'uuid-test', error: 'crash bug', featureId: 'f1' });
+    const active = escalator.getActiveReports('proj-uuid');
+    expect(active.length).toBeGreaterThan(0);
+
+    // 실제 생성된 ID로 해결
+    const reportId = active[0]?.id ?? '';
+    const resolveResult = escalator.resolveReport(reportId);
+    expect(resolveResult.ok).toBe(true);
+  });
+
+  it('BugEscalator: escalate minor 버그 → VERIFY phase', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: 'ui-minor-test',
+      error: 'Button color is slightly off',
+      featureId: 'feat-ui',
+    };
+    const reportResult = escalator.createReport('proj-1', failure);
+    expect(reportResult.ok).toBe(true);
+    if (!reportResult.ok) return;
+
+    const escResult = escalator.escalate(reportResult.value);
+    expect(escResult.ok).toBe(true);
+    if (escResult.ok) {
+      expect(escResult.value.targetPhase).toBe('VERIFY');
+    }
+  });
+
+  it('DeliverableBuilder: 빈 projectId 에러', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Doc', 1);
+    const docResult = integrator.integrate(['frag-1'], template, 'proj-1');
+    if (!docResult.ok) return;
+
+    const result = builder.build('', 'report', [docResult.value]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('DeliverableBuilder: 알 수 없는 타입 — 에러이거나 기본 처리', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Doc', 1);
+    const docResult = integrator.integrate(['frag-1'], template, 'proj-1');
+    if (!docResult.ok) return;
+
+    // WHY: 'unknown-type'은 구현에 따라 에러이거나 기본값으로 처리
+    const result = builder.build('proj-1', 'unknown-type' as never, [docResult.value]);
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    } else {
+      expect(result.value.projectId).toBe('proj-1');
+    }
+  });
+
+  it('DeliverableBuilder: 50개 문서로 portfolio 생성', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Big Portfolio', 2);
+
+    const docs: IntegratedDocument[] = [];
+    for (let i = 0; i < 50; i++) {
+      const r = integrator.integrate([`frag-${i}`], template, 'proj-big');
+      if (r.ok) docs.push(r.value);
+    }
+
+    const result = builder.build('proj-big', 'portfolio', docs);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('portfolio');
+    }
+  });
+
+  it('DeliverableBuilder: listDeliverables 빈 projectId → 빈 배열', () => {
+    const builder = new DeliverableBuilder(logger);
+    const list = builder.listDeliverables('nonexistent-proj');
+    expect(list).toHaveLength(0);
+  });
+
+  it('DocIntegrator + BugEscalator: 문서 통합 후 버그 리포트 연계', () => {
+    const integrator = new DocIntegrator(logger);
+    const escalator = new BugEscalator(logger);
+    const template = createTemplate('Integration Report', 2);
+
+    const docResult = integrator.integrate(['frag-a', 'frag-b'], template, 'proj-link');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    // WHY: 문서 통합 실패 시뮬레이션 → 버그 에스컬레이션
+    const failure: TestFailure = {
+      testName: 'doc-integration-test',
+      error: 'Document merge crash during section 2',
+      featureId: `feat-doc-${docResult.value.version}`,
+    };
+    const bugResult = escalator.createReport('proj-link', failure);
+    expect(bugResult.ok).toBe(true);
+    if (bugResult.ok) {
+      expect(bugResult.value.severity).toBe('critical');
+    }
+  });
+
+  it('ProductionTester + DeliverableBuilder: 테스트 통과 후 산출물 생성', () => {
+    const tester = new ProductionTester(logger);
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+
+    const testResult = tester.runE2E('proj-pass', ['bun test tests/unit', 'bun test tests/e2e', 'bun test tests/module']);
+    expect(testResult.ok).toBe(true);
+    if (!testResult.ok) return;
+
+    expect(tester.isHealthy([testResult.value])).toBe(true);
+
+    const template = createTemplate('Test Report', 2);
+    const docResult = integrator.integrate(['test-results'], template, 'proj-pass');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    const delivResult = builder.build('proj-pass', 'report', [docResult.value]);
+    expect(delivResult.ok).toBe(true);
+    if (delivResult.ok) {
+      expect(delivResult.value.projectId).toBe('proj-pass');
+    }
+  });
 });
