@@ -183,6 +183,6 @@ export class PhaseEngine {
    * @returns 전환 이력 배열 (읽기 전용) / Transition history array (readonly)
    */
   getHistory(): readonly PhaseTransition[] {
-    return [...this.history];
+    return this.history.map((t) => ({ ...t }));
   }
 }

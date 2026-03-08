@@ -1291,3 +1291,483 @@ describe('PhaseEngine 복합 엣지 시나리오', () => {
     }
   });
 });
+
+// ── 추가 getParticipants 일관성 검증 ───────────────────────────
+
+describe('PhaseEngine getParticipants 일관성 추가 검증', () => {
+  it('DESIGN getParticipants — lead는 architect', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('DESIGN');
+    expect(p.lead[0]).toBe('architect');
+  });
+
+  it('CODE getParticipants — lead는 coder', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('CODE');
+    expect(p.lead[0]).toBe('coder');
+  });
+
+  it('TEST getParticipants — lead는 tester', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('TEST');
+    expect(p.lead[0]).toBe('tester');
+  });
+
+  it('VERIFY getParticipants — lead는 빈 배열', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('VERIFY').lead).toHaveLength(0);
+  });
+
+  it('DESIGN active에 documenter 없음', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('DESIGN');
+    expect(p.active).not.toContain('documenter');
+  });
+
+  it('CODE active에 documenter 없음', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('CODE');
+    expect(p.active).not.toContain('documenter');
+  });
+
+  it('TEST active에 documenter 없음', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('TEST');
+    expect(p.active).not.toContain('documenter');
+  });
+
+  it('VERIFY active에 documenter 없음', () => {
+    const engine = makeEngine();
+    const p = engine.getParticipants('VERIFY');
+    expect(p.active).not.toContain('documenter');
+  });
+
+  it('DESIGN: lead에 coder 없음', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('DESIGN').lead).not.toContain('coder');
+  });
+
+  it('CODE: lead에 architect 없음', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('CODE').lead).not.toContain('architect');
+  });
+
+  it('TEST: lead에 qc 없음', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('TEST').lead).not.toContain('qc');
+  });
+
+  it('TEST active에 qc 포함', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('TEST').active).toContain('qc');
+  });
+
+  it('CODE active에 qa 없음', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('CODE').active).not.toContain('qa');
+  });
+
+  it('DESIGN inactive에 qc 포함', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('DESIGN').inactive).toContain('qc');
+  });
+
+  it('CODE inactive에 qc 포함', () => {
+    const engine = makeEngine();
+    expect(engine.getParticipants('CODE').inactive).toContain('qc');
+  });
+
+  it('lead + active + inactive는 중복 없음', () => {
+    const engine = makeEngine();
+    for (const phase of ALL_PHASES) {
+      const p = engine.getParticipants(phase);
+      const combined = [...p.lead, ...p.active, ...p.inactive];
+      const unique = new Set(combined);
+      expect(unique.size).toBe(combined.length);
+    }
+  });
+
+  it('getParticipants 결과가 Phase 변경에 영향받지 않음', () => {
+    const engine = makeEngine();
+    const beforeTransition = engine.getParticipants('DESIGN');
+    engine.transition('CODE', 'r', 'qa');
+    const afterTransition = engine.getParticipants('DESIGN');
+    expect(beforeTransition.lead).toEqual(afterTransition.lead);
+    expect(beforeTransition.active).toEqual(afterTransition.active);
+  });
+});
+
+// ── 추가 transition 세부 edge ───────────────────────────────────
+
+describe('PhaseEngine transition 세부 edge 추가', () => {
+  it('DESIGN→CODE 후 CODE→TEST 후 TEST→VERIFY → history[2].triggeredBy가 qc', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r1', 'qa');
+    engine.transition('TEST', 'r2', 'architect');
+    engine.transition('VERIFY', 'r3', 'qc');
+    expect(engine.getHistory()[2]?.triggeredBy).toBe('qc');
+  });
+
+  it('VERIFY→DESIGN 롤백 이력 triggeredBy가 adev', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('DESIGN', 'r', 'adev');
+    const history = engine.getHistory();
+    expect(history[history.length - 1]?.triggeredBy).toBe('adev');
+  });
+
+  it('VERIFY→CODE 롤백 이력 reason 보존', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('CODE', '코드 결함 수정 필요', 'adev');
+    const history = engine.getHistory();
+    expect(history[history.length - 1]?.reason).toBe('코드 결함 수정 필요');
+  });
+
+  it('VERIFY→TEST 롤백 이력 timestamp는 Date', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('TEST', 'r', 'adev');
+    const history = engine.getHistory();
+    expect(history[history.length - 1]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('transition 결과 value의 triggeredBy가 adev인 경우', () => {
+    const engine = makeEngine();
+    const result = engine.transition('CODE', 'adev triggered', 'adev');
+    if (result.ok) expect(result.value.triggeredBy).toBe('adev');
+  });
+
+  it('무효 전환 에러 message가 비어있지 않음', () => {
+    const engine = makeEngine();
+    const result = engine.transition('VERIFY', 'invalid', 'qa');
+    if (!result.ok) expect(result.error.message.length).toBeGreaterThan(0);
+  });
+
+  it('무효 전환 에러 code가 비어있지 않음', () => {
+    const engine = makeEngine();
+    const result = engine.transition('TEST', 'invalid', 'qa');
+    if (!result.ok) expect(result.error.code.length).toBeGreaterThan(0);
+  });
+
+  it('transition reason null 문자 포함 → 이력에 보존', () => {
+    const engine = makeEngine();
+    const reason = 'reason\u0000with\u0000nulls';
+    engine.transition('CODE', reason, 'qa');
+    expect(engine.getHistory()[0]?.reason).toBe(reason);
+  });
+
+  it('DESIGN→CODE 전환 후 currentPhase는 CODE이고 canTransition(CODE)=false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    expect(engine.currentPhase).toBe('CODE');
+    expect(engine.canTransition('CODE')).toBe(false);
+  });
+
+  it('CODE→TEST 전환 후 currentPhase는 TEST이고 canTransition(TEST)=false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    engine.transition('TEST', 'r2', 'architect');
+    expect(engine.currentPhase).toBe('TEST');
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+
+  it('TEST→VERIFY 전환 후 currentPhase는 VERIFY이고 canTransition(VERIFY)=false', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    expect(engine.currentPhase).toBe('VERIFY');
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('모든 triggeredBy에 대해 DESIGN→CODE 가능', () => {
+    for (const trigger of ALL_TRIGGERS) {
+      const engine = makeEngine();
+      const result = engine.transition('CODE', 'r', trigger);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('모든 triggeredBy에 대해 VERIFY→DESIGN 롤백 가능', () => {
+    for (const trigger of ALL_TRIGGERS) {
+      const engine = makeEngine();
+      advanceToVerify(engine);
+      const result = engine.transition('DESIGN', 'r', trigger);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('5번 독립 full cycle → 각 엔진 phase DESIGN', () => {
+    for (let i = 0; i < 5; i++) {
+      const engine = makeEngine();
+      advanceToVerify(engine);
+      engine.transition('DESIGN', 'r', 'adev');
+      expect(engine.currentPhase).toBe('DESIGN');
+    }
+  });
+});
+
+// ── 추가 canTransition 완전성 검증 ─────────────────────────────
+
+describe('PhaseEngine canTransition 완전성 검증', () => {
+  it('DESIGN 상태: CODE만 true, 나머지 모두 false', () => {
+    const engine = makeEngine();
+    expect(engine.canTransition('DESIGN')).toBe(false);
+    expect(engine.canTransition('CODE')).toBe(true);
+    expect(engine.canTransition('TEST')).toBe(false);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('CODE 상태: TEST만 true, 나머지 모두 false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    expect(engine.canTransition('DESIGN')).toBe(false);
+    expect(engine.canTransition('CODE')).toBe(false);
+    expect(engine.canTransition('TEST')).toBe(true);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('TEST 상태: VERIFY만 true, 나머지 모두 false', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    engine.transition('TEST', 'r2', 'architect');
+    expect(engine.canTransition('DESIGN')).toBe(false);
+    expect(engine.canTransition('CODE')).toBe(false);
+    expect(engine.canTransition('TEST')).toBe(false);
+    expect(engine.canTransition('VERIFY')).toBe(true);
+  });
+
+  it('VERIFY 상태: DESIGN/CODE/TEST true, VERIFY false', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    expect(engine.canTransition('DESIGN')).toBe(true);
+    expect(engine.canTransition('CODE')).toBe(true);
+    expect(engine.canTransition('TEST')).toBe(true);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('초기 상태에서 canTransition 결과는 일관됨 (10번 반복)', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 10; i++) {
+      expect(engine.canTransition('CODE')).toBe(true);
+      expect(engine.canTransition('VERIFY')).toBe(false);
+    }
+  });
+
+  it('VERIFY 후 롤백 전 CODE 상태 → canTransition 결과 확인', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('CODE', 'rollback', 'adev');
+    // CODE 상태로 돌아왔으므로
+    expect(engine.canTransition('TEST')).toBe(true);
+    expect(engine.canTransition('DESIGN')).toBe(false);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('VERIFY 후 롤백 전 TEST 상태 → canTransition 결과 확인', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('TEST', 'rollback', 'adev');
+    // TEST 상태로 돌아왔으므로
+    expect(engine.canTransition('VERIFY')).toBe(true);
+    expect(engine.canTransition('CODE')).toBe(false);
+    expect(engine.canTransition('DESIGN')).toBe(false);
+  });
+
+  it('VERIFY 후 롤백 전 DESIGN 상태 → canTransition 결과 확인', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('DESIGN', 'rollback', 'adev');
+    // DESIGN 상태로 돌아왔으므로
+    expect(engine.canTransition('CODE')).toBe(true);
+    expect(engine.canTransition('TEST')).toBe(false);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+});
+
+// ── 추가 history 불변성 검증 ───────────────────────────────────
+
+describe('PhaseEngine history 불변성 추가 검증', () => {
+  it('getHistory 결과 배열에 push 해도 내부 불변', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    const h = engine.getHistory();
+    (h as unknown[]).push({ fake: 'data' });
+    expect(engine.getHistory()).toHaveLength(1);
+  });
+
+  it('getHistory 결과 첫 요소 수정해도 내부 불변', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'original', 'qa');
+    const h = engine.getHistory();
+    if (h[0]) {
+      // TypeScript에서 read-only일 수 있으므로 우회
+      try {
+        (h[0] as Record<string, unknown>)['reason'] = 'modified';
+      } catch {
+        // read-only면 무시
+      }
+    }
+    // 내부 이력에는 original이 유지되어야 함
+    const h2 = engine.getHistory();
+    expect(h2[0]?.reason).toBe('original');
+  });
+
+  it('transition 3개 후 getHistory length 3 — 각 호출 독립', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    const h1 = engine.getHistory();
+    const h2 = engine.getHistory();
+    expect(h1.length).toBe(h2.length);
+    expect(h1).not.toBe(h2); // 복사본이므로 다른 참조
+  });
+
+  it('5번 full cycle 후 이력 20개 (3+1 per cycle)', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 5; i++) {
+      advanceToVerify(engine);
+      engine.transition('DESIGN', `rb-${i}`, 'adev');
+    }
+    expect(engine.getHistory()).toHaveLength(20);
+  });
+
+  it('rollback 후 재진행 이력 타임스탬프 순서 유지', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('DESIGN', 'rb', 'adev');
+    engine.transition('CODE', 're', 'coder');
+    const history = engine.getHistory();
+    for (let i = 1; i < history.length; i++) {
+      const prev = history[i - 1]?.timestamp.getTime() ?? 0;
+      const curr = history[i]?.timestamp.getTime() ?? 0;
+      expect(curr).toBeGreaterThanOrEqual(prev);
+    }
+  });
+
+  it('단순 3개 전환 후 getHistory()[0].triggeredBy = qa', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r1', 'qa');
+    engine.transition('TEST', 'r2', 'tester');
+    engine.transition('VERIFY', 'r3', 'qc');
+    expect(engine.getHistory()[0]?.triggeredBy).toBe('qa');
+  });
+
+  it('단순 3개 전환 후 getHistory()[1].triggeredBy = tester', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r1', 'qa');
+    engine.transition('TEST', 'r2', 'tester');
+    engine.transition('VERIFY', 'r3', 'qc');
+    expect(engine.getHistory()[1]?.triggeredBy).toBe('tester');
+  });
+
+  it('단순 3개 전환 후 getHistory()[2].triggeredBy = qc', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r1', 'qa');
+    engine.transition('TEST', 'r2', 'tester');
+    engine.transition('VERIFY', 'r3', 'qc');
+    expect(engine.getHistory()[2]?.triggeredBy).toBe('qc');
+  });
+});
+
+// ── 추가 복합 엣지: 롤백 체인 ──────────────────────────────────
+
+describe('PhaseEngine 롤백 체인 복합 시나리오', () => {
+  it('VERIFY→CODE 후 CODE→TEST→VERIFY 재진행 → phase VERIFY', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('CODE', 'rb', 'adev');
+    engine.transition('TEST', 're-test', 'tester');
+    engine.transition('VERIFY', 're-verify', 'qa');
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('VERIFY→DESIGN 후 전체 재진행 → phase VERIFY', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.transition('DESIGN', 'full-rb', 'adev');
+    engine.transition('CODE', 're-code', 'coder');
+    engine.transition('TEST', 're-test', 'tester');
+    engine.transition('VERIFY', 're-verify', 'qc');
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('3번 연속 VERIFY→DESIGN 롤백 재진행 → phase VERIFY', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 3; i++) {
+      advanceToVerify(engine);
+      engine.transition('DESIGN', `rb-${i}`, 'adev');
+    }
+    advanceToVerify(engine);
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('VERIFY→TEST 후 TEST→VERIFY 재진행 → history 증가', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine); // 3개
+    engine.transition('TEST', 'rb', 'adev'); // 4개
+    engine.transition('VERIFY', 're', 'qa'); // 5개
+    expect(engine.getHistory()).toHaveLength(5);
+  });
+
+  it('VERIFY→CODE 후 CODE→TEST→VERIFY 2회 반복 → history 누적', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine); // 3
+    engine.transition('CODE', 'rb', 'adev'); // 4
+    engine.transition('TEST', 're1', 'tester'); // 5
+    engine.transition('VERIFY', 're2', 'qa'); // 6
+    engine.transition('CODE', 'rb2', 'adev'); // 7
+    engine.transition('TEST', 're3', 'tester'); // 8
+    engine.transition('VERIFY', 're4', 'qa'); // 9
+    expect(engine.getHistory()).toHaveLength(9);
+  });
+
+  it('무효 전환 100번 + 유효 1번 → history 1개', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 100; i++) {
+      engine.transition('VERIFY', 'inv', 'qa');
+    }
+    engine.transition('CODE', 'valid', 'qa');
+    expect(engine.getHistory()).toHaveLength(1);
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('독립 엔진 10개 동시 사용 → 각각 다른 phase 진행', () => {
+    const engines = Array.from({ length: 10 }, () => makeEngine());
+    // 홀수 인덱스는 CODE, 짝수는 DESIGN
+    for (let i = 0; i < 10; i++) {
+      if (i % 2 === 1) {
+        engines[i]!.transition('CODE', 'r', 'qa');
+      }
+    }
+    for (let i = 0; i < 10; i++) {
+      const expected = i % 2 === 1 ? 'CODE' : 'DESIGN';
+      expect(engines[i]!.currentPhase).toBe(expected);
+    }
+  });
+
+  it('canTransition과 transition 결과 일치성 (20번 반복)', () => {
+    for (let i = 0; i < 20; i++) {
+      const engine = makeEngine();
+      const canCode = engine.canTransition('CODE');
+      const result = engine.transition('CODE', 'r', 'qa');
+      expect(result.ok).toBe(canCode);
+    }
+  });
+
+  it('DESIGN에서 모든 무효 전환 후 phase 여전히 DESIGN', () => {
+    const engine = makeEngine();
+    const invalid: Phase[] = ['DESIGN', 'TEST', 'VERIFY'];
+    for (const p of invalid) {
+      engine.transition(p, 'inv', 'qa');
+    }
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('5번 빠른 사이클 후 phase 항상 DESIGN (매 사이클 rollback)', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 5; i++) {
+      advanceToVerify(engine);
+      engine.transition('DESIGN', 'rb', 'adev');
+    }
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+});

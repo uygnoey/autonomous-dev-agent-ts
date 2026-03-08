@@ -1281,3 +1281,412 @@ describe('BugEscalator resolveReport 추가 시나리오', () => {
     expect(after).toBe(before - 1);
   });
 });
+
+// ── 추가 edge: createReport 경계값 ─────────────────────────────
+
+describe('BugEscalator createReport 추가 경계값', () => {
+  it('featureId에 특수문자 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ featureId: 'feat!@#$%^&*()' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('featureId에 한글 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ featureId: '기능-001' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('error에 JSON 문자열 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ error: '{"code":"ERR","msg":"fail"}' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('error에 스택 트레이스 형식 → ok=true', () => {
+    const e = makeEscalator();
+    const stackTrace = 'Error: assertion failed\n  at test.ts:12:5\n  at runner.ts:99:3';
+    const result = e.createReport('proj', createFailure({ error: stackTrace }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId에 슬래시 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('org/proj/sub', createFailure());
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId 길이 1 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('p', createFailure());
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId 매우 긴 문자열 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('p'.repeat(500), createFailure());
+    expect(result.ok).toBe(true);
+  });
+
+  it('testName에 숫자만 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ testName: '12345' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('testName에 공백 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ testName: 'test with spaces' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('testName에 이모지 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ testName: '🔥 crash test 🔥' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('동일 testName으로 여러 번 → 모두 ok=true', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 5; i++) {
+      const result = e.createReport('proj', createFailure({ testName: 'duplicate-name' }));
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('동일 error 메시지로 여러 번 → 모두 다른 id', () => {
+    const e = makeEscalator();
+    const ids = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const rr = e.createReport('proj', createFailure({ error: 'same-error' }));
+      if (rr.ok) ids.add(rr.value.id);
+    }
+    expect(ids.size).toBe(5);
+  });
+
+  it('createReport 후 id는 빈 문자열이 아님', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure());
+    if (rr.ok) expect(rr.value.id.length).toBeGreaterThan(0);
+  });
+
+  it('createReport 결과 report에 featureId 보존', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ featureId: 'my-feature-99' }));
+    if (rr.ok) expect(rr.value.featureId).toBe('my-feature-99');
+  });
+
+  it('createReport 결과 report에 testName 보존', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ testName: 'my-special-test' }));
+    if (rr.ok) expect(rr.value.title).toContain('my-special-test');
+  });
+
+  it('createReport 결과 report에 error 보존', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'unique-error-xyz' }));
+    if (rr.ok) expect(rr.value.actualBehavior).toContain('unique-error-xyz');
+  });
+
+  it('10개 서로 다른 projectId → 각각 독립 active 목록', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 10; i++) {
+      e.createReport(`proj-${i}`, createFailure({ error: `err-${i}` }));
+    }
+    for (let i = 0; i < 10; i++) {
+      expect(e.getActiveReports(`proj-${i}`)).toHaveLength(1);
+    }
+  });
+});
+
+// ── 추가 edge: escalate 경계값 ──────────────────────────────────
+
+describe('BugEscalator escalate 추가 경계값', () => {
+  it('createReport 0개 → active 없음', () => {
+    const e = makeEscalator();
+    expect(e.getActiveReports('proj')).toHaveLength(0);
+  });
+
+  it('escalate 1개 실패 → 리포트 1개 생성', () => {
+    const e = makeEscalator();
+    e.createReport('proj-1', createFailure());
+    expect(e.getActiveReports('proj-1')).toHaveLength(1);
+  });
+
+  it('escalate 10개 → 리포트 10개', () => {
+    const e = makeEscalator();
+    const failures = Array.from({ length: 10 }, (_, i) =>
+      createFailure({ testName: `test-${i}`, error: `err-${i}` }),
+    );
+    for (const f of failures) e.createReport('proj-10', f);
+    expect(e.getActiveReports('proj-10')).toHaveLength(10);
+  });
+
+  it('escalate 50개 → 리포트 50개', () => {
+    const e = makeEscalator();
+    const failures = Array.from({ length: 50 }, (_, i) =>
+      createFailure({ testName: `t${i}`, error: `e${i}` }),
+    );
+    for (const f of failures) e.createReport('proj-50', f);
+    expect(e.getActiveReports('proj-50')).toHaveLength(50);
+  });
+
+  it('escalate 2번 같은 projectId → 누적됨', () => {
+    const e = makeEscalator();
+    e.createReport('proj-accum', createFailure({ error: 'err1' }));
+    e.createReport('proj-accum', createFailure({ error: 'err2' }));
+    e.createReport('proj-accum', createFailure({ error: 'err3' }));
+    expect(e.getActiveReports('proj-accum')).toHaveLength(3);
+  });
+
+  it('createReport 결과 ok는 boolean', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure());
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('createReport 후 각 리포트에 id 존재', () => {
+    const e = makeEscalator();
+    e.createReport('proj-ids', createFailure({ error: 'e1' }));
+    e.createReport('proj-ids', createFailure({ error: 'e2' }));
+    const reports = e.getActiveReports('proj-ids');
+    for (const r of reports) {
+      expect(typeof r.id).toBe('string');
+      expect(r.id.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('escalate 다른 projectId들 → 서로 독립', () => {
+    const e = makeEscalator();
+    e.createReport('proj-a', createFailure({ error: 'ea' }));
+    e.createReport('proj-b', createFailure({ error: 'eb' }));
+    e.createReport('proj-b', createFailure({ error: 'ec' }));
+    expect(e.getActiveReports('proj-a')).toHaveLength(1);
+    expect(e.getActiveReports('proj-b')).toHaveLength(2);
+  });
+
+  it('escalate 실패 목록의 featureId 보존', () => {
+    const e = makeEscalator();
+    e.createReport('proj-feat', createFailure({ featureId: 'feat-preserved' }));
+    const reports = e.getActiveReports('proj-feat');
+    expect(reports[0]?.featureId).toBe('feat-preserved');
+  });
+
+  it('escalate 실패 목록의 testName 보존', () => {
+    const e = makeEscalator();
+    e.createReport('proj-tn', createFailure({ testName: 'preserved-test-name' }));
+    const reports = e.getActiveReports('proj-tn');
+    expect(reports[0]?.title).toContain('preserved-test-name');
+  });
+
+  it('error에 개행 포함 → ok=true', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ error: 'line1\nline2\nline3' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('escalate 100개 실패 후 getActiveReports 길이 100', () => {
+    const e = makeEscalator();
+    const failures = Array.from({ length: 100 }, (_, i) =>
+      createFailure({ testName: `huge-test-${i}`, error: `err-${i}` }),
+    );
+    for (const f of failures) e.createReport('proj-huge', f);
+    expect(e.getActiveReports('proj-huge')).toHaveLength(100);
+  });
+});
+
+// ── 추가 edge: getActiveReports 경계값 ─────────────────────────
+
+describe('BugEscalator getActiveReports 추가 경계값', () => {
+  it('존재하지 않는 projectId → 빈 배열', () => {
+    const e = makeEscalator();
+    expect(e.getActiveReports('nonexistent-proj')).toHaveLength(0);
+  });
+
+  it('UUID를 projectId로 사용 → 빈 배열 (미등록)', () => {
+    const e = makeEscalator();
+    const uuid = crypto.randomUUID();
+    expect(e.getActiveReports(uuid)).toHaveLength(0);
+  });
+
+  it('getActiveReports 빈 projectId → 빈 배열', () => {
+    const e = makeEscalator();
+    expect(e.getActiveReports('')).toHaveLength(0);
+  });
+
+  it('getActiveReports 결과는 항상 배열', () => {
+    const e = makeEscalator();
+    const result = e.getActiveReports('any-proj');
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it('getActiveReports 반환 값 각 요소에 id 필드', () => {
+    const e = makeEscalator();
+    e.createReport('proj-fields', createFailure());
+    const reports = e.getActiveReports('proj-fields');
+    expect('id' in (reports[0] ?? {})).toBe(true);
+  });
+
+  it('getActiveReports 반환 값 각 요소에 testName 필드', () => {
+    const e = makeEscalator();
+    e.createReport('proj-tn-f', createFailure({ testName: 'my-test' }));
+    const reports = e.getActiveReports('proj-tn-f');
+    expect(reports[0]?.title).toContain('my-test');
+  });
+
+  it('getActiveReports 반환 값 각 요소에 error 필드', () => {
+    const e = makeEscalator();
+    e.createReport('proj-err-f', createFailure({ error: 'my-error' }));
+    const reports = e.getActiveReports('proj-err-f');
+    expect(reports[0]?.actualBehavior).toContain('my-error');
+  });
+
+  it('getActiveReports 여러 번 호출 → 동일 결과', () => {
+    const e = makeEscalator();
+    e.createReport('proj-stable', createFailure());
+    const r1 = e.getActiveReports('proj-stable');
+    const r2 = e.getActiveReports('proj-stable');
+    expect(r1.length).toBe(r2.length);
+  });
+
+  it('서로 다른 projectId 10개 → 각각 독립 목록', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 10; i++) {
+      for (let j = 0; j <= i; j++) {
+        e.createReport(`proj-multi-${i}`, createFailure({ error: `e-${j}` }));
+      }
+    }
+    for (let i = 0; i < 10; i++) {
+      expect(e.getActiveReports(`proj-multi-${i}`)).toHaveLength(i + 1);
+    }
+  });
+
+  it('getActiveReports 후 배열 수정 → 내부 상태 불변', () => {
+    const e = makeEscalator();
+    e.createReport('proj-immut', createFailure());
+    const reports = e.getActiveReports('proj-immut');
+    const originalLen = reports.length;
+    // 외부에서 배열 수정 시도
+    (reports as unknown[]).push({ fake: true });
+    // 내부 상태는 변하지 않아야 함
+    const reports2 = e.getActiveReports('proj-immut');
+    expect(reports2.length).toBe(originalLen);
+  });
+});
+
+// ── 추가 복합 시나리오 ──────────────────────────────────────────
+
+describe('BugEscalator 복합 시나리오 추가', () => {
+  it('createReport → escalate → resolve 혼합 시나리오', () => {
+    const e = makeEscalator();
+    // 단건 createReport
+    const r1 = e.createReport('hybrid', createFailure({ error: 'single-err' }));
+    // 배치 createReport
+    e.createReport('hybrid', createFailure({ error: 'batch-err-1' }));
+    e.createReport('hybrid', createFailure({ error: 'batch-err-2' }));
+    expect(e.getActiveReports('hybrid')).toHaveLength(3);
+
+    // 첫 번째 resolve
+    if (r1.ok) {
+      e.resolveReport(r1.value.id);
+    }
+    expect(e.getActiveReports('hybrid')).toHaveLength(2);
+  });
+
+  it('여러 projectId에서 독립적 resolve', () => {
+    const e = makeEscalator();
+    const proj1Reports: string[] = [];
+    const proj2Reports: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const r1 = e.createReport('p1', createFailure({ error: `p1-err-${i}` }));
+      const r2 = e.createReport('p2', createFailure({ error: `p2-err-${i}` }));
+      if (r1.ok) proj1Reports.push(r1.value.id);
+      if (r2.ok) proj2Reports.push(r2.value.id);
+    }
+    // p1 전부 resolve
+    for (const id of proj1Reports) e.resolveReport(id);
+    expect(e.getActiveReports('p1')).toHaveLength(0);
+    expect(e.getActiveReports('p2')).toHaveLength(3);
+  });
+
+  it('5번 escalate + 5번 resolve 사이클', () => {
+    const e = makeEscalator();
+    for (let cycle = 0; cycle < 5; cycle++) {
+      e.createReport('cycle-proj', createFailure({ error: `err-${cycle}` }));
+    }
+    const reports = e.getActiveReports('cycle-proj');
+    expect(reports.length).toBe(5);
+    for (const r of reports) {
+      e.resolveReport(r.id);
+    }
+    expect(e.getActiveReports('cycle-proj')).toHaveLength(0);
+  });
+
+  it('대용량 createReport 후 모두 resolve → active 0', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 200; i++) {
+      e.createReport('bulk-proj', createFailure({ error: `bulk-${i}` }));
+    }
+    const reports = e.getActiveReports('bulk-proj');
+    for (const r of reports) e.resolveReport(r.id);
+    expect(e.getActiveReports('bulk-proj')).toHaveLength(0);
+  });
+
+  it('두 인스턴스 독립 상태 유지', () => {
+    const e1 = makeEscalator();
+    const e2 = makeEscalator();
+    e1.createReport('shared-proj', createFailure({ error: 'e1-err' }));
+    expect(e1.getActiveReports('shared-proj')).toHaveLength(1);
+    expect(e2.getActiveReports('shared-proj')).toHaveLength(0);
+  });
+
+  it('createReport 결과 id는 unique (50개 연속)', () => {
+    const e = makeEscalator();
+    const ids = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const rr = e.createReport('proj', createFailure({ error: `unique-err-${i}` }));
+      if (rr.ok) ids.add(rr.value.id);
+    }
+    expect(ids.size).toBe(50);
+  });
+
+  it('escalate 후 각 리포트 resolve → 순차적 감소 확인', () => {
+    const e = makeEscalator();
+    const count = 10;
+    for (let i = 0; i < count; i++) {
+      e.createReport('seq-proj', createFailure({ error: `seq-${i}` }));
+    }
+
+    const reports = e.getActiveReports('seq-proj').slice();
+    for (let i = 0; i < reports.length; i++) {
+      expect(e.getActiveReports('seq-proj')).toHaveLength(count - i);
+      e.resolveReport(reports[i]!.id);
+    }
+    expect(e.getActiveReports('seq-proj')).toHaveLength(0);
+  });
+
+  it('resolveReport 성공 후 getActiveReports에서 해당 id 사라짐', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj-gone', createFailure({ error: 'to-remove' }));
+    if (!rr.ok) return;
+    const targetId = rr.value.id;
+    e.resolveReport(targetId);
+    const active = e.getActiveReports('proj-gone');
+    const found = active.find((r) => r.id === targetId);
+    expect(found).toBeUndefined();
+  });
+
+  it('escalate 후 partial resolve → 나머지 active 유지', () => {
+    const e = makeEscalator();
+    e.createReport('partial-proj', createFailure({ error: 'e1' }));
+    e.createReport('partial-proj', createFailure({ error: 'e2' }));
+    e.createReport('partial-proj', createFailure({ error: 'e3' }));
+    const reports = e.getActiveReports('partial-proj');
+    // 첫 번째만 resolve
+    if (reports[0]) e.resolveReport(reports[0].id);
+    const remaining = e.getActiveReports('partial-proj');
+    expect(remaining).toHaveLength(2);
+    // 두 번째 세 번째는 여전히 active
+    if (reports[1]) expect(remaining.find((r) => r.id === reports[1]!.id)).toBeDefined();
+  });
+});

@@ -1292,3 +1292,420 @@ describe('install.sh e2e — 최종 경계값 모음', () => {
     expect(result).toContain('darwin');
   });
 });
+
+// ── 추가 edge: simulateAuthChoice 심층 검증 ─────────────────────
+
+describe('install.sh e2e — simulateAuthChoice 심층 검증', () => {
+  it('choice=1, key가 한 글자 → 저장됨', () => {
+    const result = simulateAuthChoice('1', 'a', '');
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=a');
+  });
+
+  it('choice=2, key가 한 글자 → 저장됨', () => {
+    const result = simulateAuthChoice('2', 'b', '');
+    expect(result.envContent).toContain('CLAUDE_CODE_OAUTH_TOKEN=b');
+  });
+
+  it('choice=1, key에 @ 포함 → 저장됨', () => {
+    const key = 'sk-ant-user@example.com';
+    const result = simulateAuthChoice('1', key, '');
+    expect(result.envContent).toContain(`ANTHROPIC_API_KEY=${key}`);
+  });
+
+  it('choice=2, key에 @ 포함 → 저장됨', () => {
+    const key = 'oauth@company.org';
+    const result = simulateAuthChoice('2', key, '');
+    expect(result.envContent).toContain(`CLAUDE_CODE_OAUTH_TOKEN=${key}`);
+  });
+
+  it('choice=1, env에 기존 OTHER_VAR 보존됨', () => {
+    const env = 'OTHER_VAR=preserved\nANTHROPIC_API_KEY=old';
+    const result = simulateAuthChoice('1', 'new-key', env);
+    expect(result.envContent).toContain('OTHER_VAR=preserved');
+  });
+
+  it('choice=2, env에 기존 OTHER_VAR 보존됨', () => {
+    const env = 'OTHER_VAR=preserved\nCLAUDE_CODE_OAUTH_TOKEN=old';
+    const result = simulateAuthChoice('2', 'new-token', env);
+    expect(result.envContent).toContain('OTHER_VAR=preserved');
+  });
+
+  it('choice=3, 빈 env → 빈 env 반환', () => {
+    const result = simulateAuthChoice('3', 'anything', '');
+    expect(result.envContent).toBe('');
+  });
+
+  it('choice=invalid, 빈 env → 빈 env 반환', () => {
+    const result = simulateAuthChoice('abc', 'key', '');
+    expect(result.envContent).toBe('');
+  });
+
+  it('choice=1, 다중 기존 변수 있음 → 삽입 후 키 중복 없음', () => {
+    const env = 'A=1\nB=2\nANTHROPIC_API_KEY=old\nC=3';
+    const result = simulateAuthChoice('1', 'new-key', env);
+    const count = (result.envContent.match(/ANTHROPIC_API_KEY=/g) ?? []).length;
+    expect(count).toBe(1);
+    expect(result.envContent).toContain('A=1');
+    expect(result.envContent).toContain('B=2');
+    expect(result.envContent).toContain('C=3');
+  });
+
+  it('choice=2, 다중 기존 변수 있음 → 삽입 후 토큰 중복 없음', () => {
+    const env = 'X=10\nCLAUDE_CODE_OAUTH_TOKEN=old\nY=20';
+    const result = simulateAuthChoice('2', 'new-token', env);
+    const count = (result.envContent.match(/CLAUDE_CODE_OAUTH_TOKEN=/g) ?? []).length;
+    expect(count).toBe(1);
+    expect(result.envContent).toContain('X=10');
+    expect(result.envContent).toContain('Y=20');
+  });
+
+  it('choice=1, 공백 key (탭만) → 입력 없음', () => {
+    const result = simulateAuthChoice('1', '\t\t\t', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('입력 없음');
+  });
+
+  it('choice=2, 공백 key (여러 공백) → 입력 없음', () => {
+    const result = simulateAuthChoice('2', '     ', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('입력 없음');
+  });
+
+  it('choice에 NULL 문자 → 잘못된 입력', () => {
+    const result = simulateAuthChoice('\u0000', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('choice 숫자 문자열 "01" → 잘못된 입력', () => {
+    const result = simulateAuthChoice('01', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('choice 숫자 문자열 "001" → 잘못된 입력', () => {
+    const result = simulateAuthChoice('001', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('choice=1, key에 CRLF → 저장됨 (그대로)', () => {
+    const key = 'sk-ant-key\r\nwith-crlf';
+    const result = simulateAuthChoice('1', key, '');
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=');
+    expect(typeof result.envContent).toBe('string');
+  });
+
+  it('choice=3, key가 있어도 env 불변', () => {
+    const env = 'SPECIAL=value';
+    const result = simulateAuthChoice('3', 'secret-key-ignored', env);
+    expect(result.envContent).toBe(env);
+  });
+
+  it('choice=1 연속 3회 다른 키 → 마지막 키만 남음', () => {
+    const env1 = simulateAuthChoice('1', 'key-1', '');
+    const env2 = simulateAuthChoice('1', 'key-2', env1.envContent);
+    const env3 = simulateAuthChoice('1', 'key-3', env2.envContent);
+    expect(env3.envContent).toContain('ANTHROPIC_API_KEY=key-3');
+    expect(env3.envContent).not.toContain('key-1');
+    expect(env3.envContent).not.toContain('key-2');
+    const count = (env3.envContent.match(/ANTHROPIC_API_KEY=/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it('choice=2 연속 3회 다른 토큰 → 마지막 토큰만 남음', () => {
+    const env1 = simulateAuthChoice('2', 'token-1', '');
+    const env2 = simulateAuthChoice('2', 'token-2', env1.envContent);
+    const env3 = simulateAuthChoice('2', 'token-3', env2.envContent);
+    expect(env3.envContent).toContain('CLAUDE_CODE_OAUTH_TOKEN=token-3');
+    expect(env3.envContent).not.toContain('token-1');
+    expect(env3.envContent).not.toContain('token-2');
+    const count = (env3.envContent.match(/CLAUDE_CODE_OAUTH_TOKEN=/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+});
+
+// ── 추가 edge: simulatePathAdd 심층 검증 ──────────────────────
+
+describe('install.sh e2e — simulatePathAdd 심층 검증', () => {
+  it('binDir에 숫자만 포함 → 추가됨', () => {
+    const binDir = '/12345/bin';
+    const result = simulatePathAdd('', binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('binDir에 점(.) 포함 → 추가됨', () => {
+    const binDir = '/usr/local/.hidden/bin';
+    const result = simulatePathAdd('', binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('binDir에 틸드(~) 포함 → 추가됨', () => {
+    const binDir = '~/.local/bin';
+    const result = simulatePathAdd('', binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('RC 파일에 binDir가 부분적으로 있지만 완전 일치 아님 → 추가됨', () => {
+    const binDir = '/usr/local/bin/adev';
+    const rcContent = '/usr/local/bin'; // 완전 일치 아님
+    const result = simulatePathAdd(rcContent, binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('RC 파일이 이미 binDir를 포함 → 내용 변경 없음', () => {
+    const binDir = '/opt/adev/bin';
+    const rc = `export PATH="${binDir}:$PATH"\n`;
+    const result = simulatePathAdd(rc, binDir);
+    expect(result).toBe(rc);
+  });
+
+  it('빈 RC + 짧은 binDir → 결과에 adev 주석 포함', () => {
+    const result = simulatePathAdd('', '/a');
+    expect(result).toContain('adev');
+  });
+
+  it('RC 파일에 여러 export 구문 존재 → binDir 1번만 추가', () => {
+    const binDir = '/new/bin/adev';
+    const rc = 'export PATH="/other1:$PATH"\nexport PATH="/other2:$PATH"\n';
+    const result = simulatePathAdd(rc, binDir);
+    const count = (result.match(new RegExp(binDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it('binDir 동일한데 대소문자 다름 → 추가됨 (대소문자 구분)', () => {
+    const binDir = '/usr/LOCAL/bin';
+    const rcWithLower = 'export PATH="/usr/local/bin:$PATH"\n';
+    const result = simulatePathAdd(rcWithLower, binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('여러 binDir 순차 추가 → 각각 1번씩 포함', () => {
+    const dirs = ['/dir1', '/dir2', '/dir3'];
+    let rc = '';
+    for (const d of dirs) rc = simulatePathAdd(rc, d);
+    for (const d of dirs) {
+      const count = (rc.match(new RegExp(d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length;
+      expect(count).toBe(1);
+    }
+  });
+
+  it('추가 결과는 개행으로 끝남 (export PATH 뒤)', () => {
+    const result = simulatePathAdd('', '/my/bin');
+    expect(result.endsWith('\n')).toBe(true);
+  });
+
+  it('이미 있는 binDir 10번 반복 추가 → 항상 같은 결과', () => {
+    const binDir = '/stable/bin';
+    let rc = simulatePathAdd('', binDir);
+    const firstResult = rc;
+    for (let i = 0; i < 9; i++) {
+      rc = simulatePathAdd(rc, binDir);
+    }
+    expect(rc).toBe(firstResult);
+  });
+});
+
+// ── 추가 property-based: platform detection (5,000 cases) ──────
+
+describe('install.sh e2e — platform detection 추가 (5,000 cases)', () => {
+  const N = 5_000;
+
+  const EXTRA_PLATFORMS = [
+    { os: 'Darwin', arch: 'arm64', expected: 'adev-darwin-arm64' },
+    { os: 'Linux', arch: 'x86_64', expected: 'adev-linux-x64' },
+    { os: 'Linux', arch: 'aarch64', expected: 'adev-linux-arm64' },
+    { os: 'Linux', arch: 'arm64', expected: 'adev-linux-arm64' },
+    { os: 'Darwin', arch: 'x86_64', expected: null },
+    { os: 'Windows', arch: 'x86_64', expected: null },
+    { os: 'FreeBSD', arch: 'x86_64', expected: null },
+    { os: '', arch: '', expected: null },
+  ] as const;
+
+  for (let i = 0; i < N; i++) {
+    const isKnown = Math.random() < 0.3;
+    const platform = isKnown
+      ? { ...EXTRA_PLATFORMS[i % EXTRA_PLATFORMS.length] }
+      : { os: randomString(8), arch: randomString(6), expected: null as string | null };
+
+    it(`[extra-plat-${i}] os="${platform.os.substring(0, 8)}" arch="${platform.arch.substring(0, 6)}"`, () => {
+      const result = simulatePlatform(platform.os, platform.arch);
+      expect(result).toBe(platform.expected);
+      if (result !== null) {
+        expect(result).toMatch(/^adev-(darwin|linux)-(arm64|x64)$/);
+      }
+    });
+  }
+});
+
+// ── 추가 TTY branch 케이스 (5,000 cases) ──────────────────────
+
+describe('install.sh e2e — TTY branch 추가 (5,000 cases)', () => {
+  const N = 5_000;
+
+  for (let i = 0; i < N; i++) {
+    const ttyOk = Math.random() < 0.5;
+
+    it(`[extra-tty-${i}] ttyOk=${ttyOk}`, () => {
+      const result = simulateTtyBranch(ttyOk);
+      expect(result).toBe(ttyOk ? 'prompt' : 'skip');
+      expect(['prompt', 'skip']).toContain(result);
+    });
+  }
+});
+
+// ── 추가 경계값 모음 (빠른 단건 케이스) ──────────────────────
+
+describe('install.sh e2e — 추가 경계값 빠른 단건 모음', () => {
+  it('simulateAuthChoice: choice="1", key=단일 공백 → 입력 없음', () => {
+    const result = simulateAuthChoice('1', ' ', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('입력 없음');
+  });
+
+  it('simulateAuthChoice: choice="2", key=단일 공백 → 입력 없음', () => {
+    const result = simulateAuthChoice('2', ' ', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('입력 없음');
+  });
+
+  it('simulateAuthChoice: choice="1", key=newline-only → 입력 없음', () => {
+    const result = simulateAuthChoice('1', '\n', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('입력 없음');
+  });
+
+  it('simulateAuthChoice: choice="2", key=tab-only → 입력 없음', () => {
+    const result = simulateAuthChoice('2', '\t', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('simulateAuthChoice: message는 항상 문자열 (10가지 입력)', () => {
+    const inputs = [
+      ['1', 'key', ''],
+      ['2', 'tok', ''],
+      ['3', 'ignored', ''],
+      ['4', 'key', ''],
+      ['0', 'key', ''],
+      ['-1', 'key', ''],
+      ['', 'key', ''],
+      [' ', 'key', ''],
+      ['abc', 'key', ''],
+      ['1.0', 'key', ''],
+    ];
+    for (const [c, k, e] of inputs) {
+      const result = simulateAuthChoice(c ?? '', k ?? '', e ?? '');
+      expect(typeof result.message).toBe('string');
+      expect(typeof result.envContent).toBe('string');
+    }
+  });
+
+  it('simulatePathAdd: 결과에 binDir 정확히 1번 포함 (알려진 케이스)', () => {
+    const cases: Array<[string, string]> = [
+      ['', '/path/a'],
+      ['content without path', '/path/b'],
+      ['export PATH="/path/c:$PATH"\n', '/path/c'],
+    ];
+    for (const [rc, dir] of cases) {
+      const result = simulatePathAdd(rc, dir);
+      const escaped = dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const count = (result.match(new RegExp(escaped, 'g')) ?? []).length;
+      expect(count).toBe(1);
+    }
+  });
+
+  it('simulatePlatform: Darwin+arm64 결과는 adev-darwin-arm64', () => {
+    expect(simulatePlatform('Darwin', 'arm64')).toBe('adev-darwin-arm64');
+  });
+
+  it('simulatePlatform: Linux+x86_64 결과는 adev-linux-x64', () => {
+    expect(simulatePlatform('Linux', 'x86_64')).toBe('adev-linux-x64');
+  });
+
+  it('simulatePlatform: Linux+aarch64 결과는 adev-linux-arm64', () => {
+    expect(simulatePlatform('Linux', 'aarch64')).toBe('adev-linux-arm64');
+  });
+
+  it('simulatePlatform: Linux+arm64 결과는 adev-linux-arm64', () => {
+    expect(simulatePlatform('Linux', 'arm64')).toBe('adev-linux-arm64');
+  });
+
+  it('simulatePlatform: 알 수 없는 OS → null', () => {
+    const unknownOSes = ['Haiku', 'Plan9', 'iOS', 'Android', 'WebAssembly'];
+    for (const os of unknownOSes) {
+      expect(simulatePlatform(os, 'x86_64')).toBeNull();
+    }
+  });
+
+  it('simulatePlatform: 알 수 없는 arch → null', () => {
+    const unknownArchs = ['mips', 'riscv64', 'ppc64', 's390x', 'ia64'];
+    for (const arch of unknownArchs) {
+      expect(simulatePlatform('Linux', arch)).toBeNull();
+    }
+  });
+
+  it('simulateTtyBranch: true를 10번 → 모두 prompt', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(simulateTtyBranch(true)).toBe('prompt');
+    }
+  });
+
+  it('simulateTtyBranch: false를 10번 → 모두 skip', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(simulateTtyBranch(false)).toBe('skip');
+    }
+  });
+
+  it('simulateAuthChoice: choice=1 + key에 공백포함 비공백 → 저장됨', () => {
+    const key = 'sk-ant-key with spaces inside';
+    const result = simulateAuthChoice('1', key, '');
+    // key.trim() > 0 이므로 저장됨
+    expect(result.envContent).toContain(`ANTHROPIC_API_KEY=${key}`);
+  });
+
+  it('simulateAuthChoice: choice=2 + key에 공백포함 비공백 → 저장됨', () => {
+    const key = 'oauth token with spaces';
+    const result = simulateAuthChoice('2', key, '');
+    expect(result.envContent).toContain(`CLAUDE_CODE_OAUTH_TOKEN=${key}`);
+  });
+
+  it('simulatePathAdd: binDir에 환경변수 참조 포함 → 처리됨', () => {
+    const binDir = '$HOME/.local/bin/adev';
+    const result = simulatePathAdd('', binDir);
+    expect(typeof result).toBe('string');
+    expect(result).toContain(binDir);
+  });
+
+  it('simulateAuthChoice: env에 주석 줄 포함 → 보존됨', () => {
+    const env = '# comment\nOTHER=val\nANTHROPIC_API_KEY=old';
+    const result = simulateAuthChoice('1', 'new-key', env);
+    expect(result.envContent).toContain('# comment');
+    expect(result.envContent).toContain('OTHER=val');
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=new-key');
+  });
+
+  it('simulateAuthChoice: env에 빈 줄 포함 → 처리됨', () => {
+    const env = 'A=1\n\nB=2\n\nANTHROPIC_API_KEY=old';
+    const result = simulateAuthChoice('1', 'fresh', env);
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=fresh');
+    expect(typeof result.envContent).toBe('string');
+  });
+
+  it('simulatePathAdd: RC 내용에 binDir 부분 문자열 있어도 완전 일치 없음 → 추가됨', () => {
+    const binDir = '/usr/local/bin/adev-tool';
+    const partial = '/usr/local/bin/adev'; // partial match, not full
+    const result = simulatePathAdd(partial, binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('simulatePlatform: 같은 입력 5번 반복 → 동일 결과', () => {
+    for (let i = 0; i < 5; i++) {
+      expect(simulatePlatform('Linux', 'x86_64')).toBe('adev-linux-x64');
+    }
+  });
+
+  it('simulateAuthChoice: 동일 입력 5번 반복 → 동일 결과 (순수 함수)', () => {
+    const env = 'EXISTING=val';
+    for (let i = 0; i < 5; i++) {
+      const result = simulateAuthChoice('1', 'stable-key', env);
+      expect(result.envContent).toBe(`EXISTING=val\nANTHROPIC_API_KEY=stable-key`);
+    }
+  });
+});
