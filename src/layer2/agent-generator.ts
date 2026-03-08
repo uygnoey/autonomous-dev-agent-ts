@@ -74,14 +74,16 @@ export class AgentGenerator {
    * @param agentName - 에이전트 이름 / Agent name
    * @param projectSpec - 프로젝트 스펙 / Project specification
    * @param featureId - 기능 ID / Feature ID
+   * @param ragContext - RAG 검색 결과 컨텍스트 (선택) / RAG search context (optional)
    * @returns 생성된 AgentConfig / Generated AgentConfig
    */
   generateAgentConfig(
     agentName: AgentName,
     projectSpec: string,
     featureId: string,
+    ragContext?: string,
   ): Result<AgentConfig> {
-    const systemPrompt = this.buildSystemPrompt(agentName, projectSpec);
+    const systemPrompt = this.buildSystemPrompt(agentName, projectSpec, ragContext);
     const prompt = this.buildPrompt(agentName, featureId);
     const tools = AGENT_TOOLS[agentName];
     const maxTurns = AGENT_MAX_TURNS[agentName];
@@ -106,9 +108,14 @@ export class AgentGenerator {
    *
    * @param agentName - 에이전트 이름 / Agent name
    * @param projectSpec - 프로젝트 스펙 / Project specification
+   * @param ragContext - RAG 검색 결과 컨텍스트 (선택) / RAG search context (optional)
    * @returns 시스템 프롬프트 / System prompt
    */
-  private buildSystemPrompt(agentName: AgentName, projectSpec: string): string {
+  private buildSystemPrompt(
+    agentName: AgentName,
+    projectSpec: string,
+    ragContext?: string,
+  ): string {
     const roleDescriptions: Readonly<Record<AgentName, string>> = {
       architect: '당신은 기술 설계자입니다. 코드를 직접 작성하지 않고, 구조와 설계를 결정합니다.',
       qa: '당신은 QA 예방 Gate입니다. 코딩 전 스펙 대비 설계 완성도를 검증합니다.',
@@ -120,7 +127,14 @@ export class AgentGenerator {
       documenter: '당신은 문서 생성자입니다. Phase 경계에서 트리거되어 문서를 생성합니다.',
     };
 
-    return `${roleDescriptions[agentName]}\n\n프로젝트 스펙:\n${projectSpec}`;
+    let prompt = `${roleDescriptions[agentName]}\n\n프로젝트 스펙:\n${projectSpec}`;
+
+    // WHY: RAG 검색 결과를 시스템 프롬프트에 주입하여 과거 설계결정/실패이력을 활용
+    if (ragContext?.trim()) {
+      prompt += `\n\n## 관련 과거 컨텍스트 (RAG)\n${ragContext}`;
+    }
+
+    return prompt;
   }
 
   /**

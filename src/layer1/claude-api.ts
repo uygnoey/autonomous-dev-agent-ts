@@ -82,12 +82,18 @@ export class ClaudeApi {
     // WHY: baseURL과 apiKey는 Anthropic SDK 초기화 시 필요하지만,
     //      실제 인증은 요청마다 authProvider.getAuthHeader()로 처리한다.
     const headers = this.authProvider.getAuthHeader();
-    const apiKey = headers['x-api-key'] || 'placeholder';
+    const rawApiKey = headers['x-api-key'] as string | undefined;
+    // WHY: OAuth 모드에서는 x-api-key가 없으므로 'sk-placeholder'를 사용하고
+    //      defaultHeaders에서 x-api-key를 빈 값으로 덮어써 API 충돌을 방지한다.
+    const apiKey = rawApiKey ?? 'sk-placeholder';
+    const sdkHeaders = rawApiKey
+      ? headers // API key mode: use headers as-is
+      : { ...headers, 'x-api-key': '' }; // OAuth mode: clear x-api-key header
 
     this.client = new Anthropic({
       apiKey,
       // WHY: custom headers를 통해 OAuth 토큰도 지원
-      defaultHeaders: headers,
+      defaultHeaders: sdkHeaders,
     });
   }
 

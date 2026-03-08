@@ -19,6 +19,7 @@ import type { SessionManager } from 'layer2/session-manager.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { VerificationGate } from 'layer2/verification-gate.js';
+import type { RagSearcher } from 'rag/search.js';
 
 /**
  * 팀 리더 의존성 / Team Leader dependencies
@@ -41,4 +42,6 @@ export interface TeamLeaderDeps {
   readonly verificationGate: VerificationGate;
   readonly integrationTester: IntegrationTester;
   readonly logger: Logger;
+  /** RAG 검색기 (선택) — 에이전트 컨텍스트 주입에 사용 / RAG searcher (optional) for context injection */
+  readonly ragSearcher?: RagSearcher;
 }

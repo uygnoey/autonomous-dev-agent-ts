@@ -56,6 +56,7 @@ export class TeamLeader {
   private readonly verificationGate: TeamLeaderDeps['verificationGate'];
   private readonly integrationTester: TeamLeaderDeps['integrationTester'];
   private readonly logger: TeamLeaderDeps['logger'];
+  private readonly ragSearcher: TeamLeaderDeps['ragSearcher'];
   private currentFeatureId: string | null = null;
 
   /**
@@ -75,6 +76,7 @@ export class TeamLeader {
     this.verificationGate = deps.verificationGate;
     this.integrationTester = deps.integrationTester;
     this.logger = deps.logger.child({ module: 'team-leader' });
+    this.ragSearcher = deps.ragSearcher;
   }
 
   /**
@@ -127,7 +129,11 @@ export class TeamLeader {
       if (currentPhase === 'VERIFY') {
         if (this.verificationGate.isAllPassed(featureId)) {
           this.progressTracker.updateStatus(featureId, 'complete');
-          this.logger.info('기능 구현 완료', { featureId, iterations: iteration });
+          this.logger.info('기능 구현 완료 — documenter 트리거', {
+            featureId,
+            iterations: iteration,
+          });
+          yield* this.spawnDocumenter(featureId, handoffPackage);
           yield this.createEvent('done', `기능 '${featureId}' 구현 완료`);
           return;
         }
@@ -212,10 +218,14 @@ export class TeamLeader {
         continue;
       }
 
+      // WHY: RAG 검색으로 과거 설계 결정 / 실패 이력을 컨텍스트로 주입
+      const ragContext = await this.queryRagContext(featureId, agentName);
+
       const configResult = this.agentGenerator.generateAgentConfig(
         agentName,
         handoffPackage.specDocument,
         featureId,
+        ragContext,
       );
 
       if (!configResult.ok) {
@@ -278,6 +288,78 @@ export class TeamLeader {
       VERIFY: 'verifying',
     };
     this.progressTracker.updateStatus(featureId, statusMap[phase]);
+  }
+
+  /**
+   * documenter 에이전트를 스폰한다 / Spawns the documenter agent
+   *
+   * @description
+   * KR: VERIFY 통과 후 자동으로 문서화를 트리거한다.
+   *     설정 생성 실패 시 경고만 남기고 문서화는 생략한다.
+   * EN: Automatically triggers documentation after VERIFY passes.
+   *     On config failure, warns and skips documentation.
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param handoffPackage - 인수 패키지 / Handoff package
+   */
+  private async *spawnDocumenter(
+    featureId: string,
+    handoffPackage: HandoffPackage,
+  ): AsyncIterable<AgentEvent> {
+    const configResult = this.agentGenerator.generateAgentConfig(
+      'documenter',
+      handoffPackage.specDocument,
+      featureId,
+    );
+
+    if (!configResult.ok) {
+      this.logger.warn('documenter 설정 생성 실패 — 문서화 생략', {
+        featureId,
+        error: configResult.error.message,
+      });
+      return;
+    }
+
+    const config = {
+      ...configResult.value,
+      projectId: handoffPackage.projectId,
+      phase: 'VERIFY' as const,
+    };
+
+    this.logger.info('documenter 트리거 — 문서화 시작', { featureId });
+    for await (const event of this.agentSpawner.spawn(config)) {
+      yield event;
+    }
+    this.logger.info('documenter 완료', { featureId });
+  }
+
+  /**
+   * RAG 검색으로 컨텍스트를 조회한다 / Queries RAG context
+   *
+   * @description
+   * KR: RAG 검색 실패해도 에이전트 실행은 계속된다.
+   *     ragSearcher가 없으면 undefined를 반환한다.
+   * EN: Agent execution continues even if RAG search fails.
+   *     Returns undefined if ragSearcher is not provided.
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param agentName - 에이전트 이름 / Agent name
+   * @returns RAG 컨텍스트 문자열 또는 undefined / RAG context string or undefined
+   */
+  private async queryRagContext(featureId: string, agentName: string): Promise<string | undefined> {
+    if (!this.ragSearcher) return undefined;
+    try {
+      const query = `${featureId} ${agentName}`;
+      const result = await this.ragSearcher.searchCode(query, 5);
+      if (!result.ok || result.value.length === 0) return undefined;
+      // WHY: SearchResult 배열을 읽기 쉬운 컨텍스트 문자열로 변환
+      return result.value
+        .map((r, i) => `[${i + 1}] ${r.record.filePath}\n${r.record.chunk}`)
+        .join('\n\n');
+    } catch {
+      // WHY: RAG 검색 실패해도 에이전트 실행은 계속
+      return undefined;
+    }
   }
 
   /**
