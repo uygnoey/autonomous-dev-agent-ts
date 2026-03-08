@@ -15,7 +15,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import type { AuthProvider } from 'auth/types.js';
-import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
+import { type AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type Result, ok } from 'core/types.js';
 import {
@@ -124,34 +124,38 @@ export class ClaudeApi {
       ...(options.system ? { system: options.system } : {}),
     };
 
-    return withRetry(async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return withRetry(
+      async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        const response = await this.client.messages.create(params, {
-          signal: controller.signal,
-        });
+          const response = await this.client.messages.create(params, {
+            signal: controller.signal,
+          });
 
-        clearTimeout(timeoutId);
+          clearTimeout(timeoutId);
 
-        await this.updateRateLimitFromResponse(response);
+          await this.updateRateLimitFromResponse(response);
 
-        const content = extractTextContent(response);
-        const metadata = buildMetadata(response);
+          const content = extractTextContent(response);
+          const metadata = buildMetadata(response);
 
-        this.logger.info('메시지 생성 완료 / Message created', {
-          model: metadata.model,
-          inputTokens: metadata.inputTokens,
-          outputTokens: metadata.outputTokens,
-          stopReason: metadata.stopReason,
-        });
+          this.logger.info('메시지 생성 완료 / Message created', {
+            model: metadata.model,
+            inputTokens: metadata.inputTokens,
+            outputTokens: metadata.outputTokens,
+            stopReason: metadata.stopReason,
+          });
 
-        return ok({ content, metadata });
-      } catch (error: unknown) {
-        return handleApiError(error, 'createMessage', this.logger);
-      }
-    }, this.retryPolicy, this.logger);
+          return ok({ content, metadata });
+        } catch (error: unknown) {
+          return handleApiError(error, 'createMessage', this.logger);
+        }
+      },
+      this.retryPolicy,
+      this.logger,
+    );
   }
 
   /**
@@ -191,38 +195,42 @@ export class ClaudeApi {
       ...(options.system ? { system: options.system } : {}),
     };
 
-    return withRetry(async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return withRetry(
+      async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        const stream = await this.client.messages.create(params, {
-          signal: controller.signal,
-        });
-
-        let inputTokens = 0;
-        let outputTokens = 0;
-
-        for await (const event of stream) {
-          handleStreamEvent(event, onEvent, (input, output) => {
-            inputTokens = input;
-            outputTokens = output;
+          const stream = await this.client.messages.create(params, {
+            signal: controller.signal,
           });
+
+          let inputTokens = 0;
+          let outputTokens = 0;
+
+          for await (const event of stream) {
+            handleStreamEvent(event, onEvent, (input, output) => {
+              inputTokens = input;
+              outputTokens = output;
+            });
+          }
+
+          clearTimeout(timeoutId);
+
+          this.logger.info('스트리밍 완료 / Streaming completed', {
+            model,
+            inputTokens,
+            outputTokens,
+          });
+
+          return ok(undefined);
+        } catch (error: unknown) {
+          return handleApiError(error, 'streamMessage', this.logger);
         }
-
-        clearTimeout(timeoutId);
-
-        this.logger.info('스트리밍 완료 / Streaming completed', {
-          model,
-          inputTokens,
-          outputTokens,
-        });
-
-        return ok(undefined);
-      } catch (error: unknown) {
-        return handleApiError(error, 'streamMessage', this.logger);
-      }
-    }, this.retryPolicy, this.logger);
+      },
+      this.retryPolicy,
+      this.logger,
+    );
   }
 
   /**

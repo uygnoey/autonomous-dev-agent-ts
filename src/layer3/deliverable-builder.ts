@@ -16,7 +16,6 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
-import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
 import type {
   BusinessDeliverable,
@@ -24,8 +23,13 @@ import type {
   DeliverableBuildOptions,
   DeliverableMetadata,
 } from 'layer3/deliverable-types.js';
-import type { BusinessDeliverableType, DocumentTemplate, IntegratedDocument } from 'layer3/doc-types.js';
 import { DEFAULT_BUSINESS_TEMPLATES } from 'layer3/deliverable-types.js';
+import type { DocCollaborator } from 'layer3/doc-collaborator.js';
+import type {
+  BusinessDeliverableType,
+  DocumentTemplate,
+  IntegratedDocument,
+} from 'layer3/doc-types.js';
 
 export type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
 

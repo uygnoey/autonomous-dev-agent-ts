@@ -6,8 +6,14 @@
  * EN: Types for collaboration phases, states, and request/response used by DocCollaborator.
  */
 
-import type { BusinessDeliverableType, CollaborativeDocOptions, CollaborativeDocResult, DocumentFragment, ProjectDocumentType } from 'layer3/doc-types.js';
 import type { Result } from 'core/types.js';
+import type {
+  BusinessDeliverableType,
+  CollaborativeDocOptions,
+  CollaborativeDocResult,
+  DocumentFragment,
+  ProjectDocumentType,
+} from 'layer3/doc-types.js';
 
 /**
  * 협업 문서 생성 단계 / Collaborative document generation phase

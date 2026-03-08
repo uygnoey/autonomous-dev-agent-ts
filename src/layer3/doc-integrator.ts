@@ -20,7 +20,6 @@ import type {
   ProjectDocumentType,
 } from 'layer3/types.js';
 export type { IntegrateOptions, IDocIntegrator } from 'layer3/doc-integrator-types.js';
-import type { IDocIntegrator, IntegrateOptions } from 'layer3/doc-integrator-types.js';
 import {
   buildMarkdownExport,
   buildUpdatedDocument,
@@ -29,6 +28,7 @@ import {
   parseFragmentFromMarkdown,
   readTemplateSourceFile,
 } from 'layer3/doc-integrator-fragment.js';
+import type { IDocIntegrator, IntegrateOptions } from 'layer3/doc-integrator-types.js';
 
 /**
  * DocIntegrator 구현 클래스 / DocIntegrator implementation

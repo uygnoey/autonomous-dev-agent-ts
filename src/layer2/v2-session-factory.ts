@@ -9,7 +9,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AgentName } from 'core/types.js';
 import type { AgentEvent } from 'layer2/types.js';
-import type { V2PromptOptions, V2Session, V2SessionEvent, V2SessionFactory } from 'layer2/v2-session-executor-types.js';
+import type {
+  V2PromptOptions,
+  V2Session,
+  V2SessionEvent,
+  V2SessionFactory,
+} from 'layer2/v2-session-executor-types.js';
 
 /**
  * Anthropic SDK 스트림을 V2SessionEvent 스트림으로 변환한다.

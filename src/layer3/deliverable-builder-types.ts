@@ -7,7 +7,11 @@
  */
 
 import type { Result } from 'core/types.js';
-import type { BusinessDeliverable, DeliverableBuildOptions, DeliverableMetadata } from 'layer3/deliverable-types.js';
+import type {
+  BusinessDeliverable,
+  DeliverableBuildOptions,
+  DeliverableMetadata,
+} from 'layer3/deliverable-types.js';
 
 /**
  * 산출물 빌더 인터페이스 / Deliverable builder interface

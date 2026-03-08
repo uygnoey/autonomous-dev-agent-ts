@@ -20,7 +20,6 @@ import { err, ok } from 'core/types.js';
 import type { ClaudeApi } from 'layer1/claude-api.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { AgentConfig } from 'layer2/types.js';
-import type { CollaborativeDocOptions, CollaborativeDocResult } from 'layer3/doc-types.js';
 import type {
   CollabDocState,
   IDocCollaborator,
@@ -29,6 +28,7 @@ import type {
   Layer2Request,
   Layer2Response,
 } from 'layer3/doc-collaborator-types.js';
+import type { CollaborativeDocOptions, CollaborativeDocResult } from 'layer3/doc-types.js';
 
 export type {
   CollabDocState,

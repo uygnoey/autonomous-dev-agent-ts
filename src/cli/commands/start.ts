@@ -13,6 +13,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { createAuthProvider } from '../../auth/index.js';
+import type { AuthProvider } from '../../auth/types.js';
 import { loadConfig } from '../../core/config.js';
 import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
@@ -26,7 +27,8 @@ import { Designer } from '../../layer1/designer.js';
 import { Planner } from '../../layer1/planner.js';
 import { SpecBuilder } from '../../layer1/spec-builder.js';
 import { TestTypeDesigner } from '../../layer1/test-type-designer.js';
-import type { ConversationMessage } from '../../layer1/types.js';
+import type { ConversationMessage, HandoffPackage } from '../../layer1/types.js';
+import { Layer2Bootstrap } from '../../layer2/layer2-bootstrap.js';
 import { createChatUi } from '../tui/chat.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { GlobalCliOptions, ProjectInfo } from '../types.js';
@@ -69,6 +71,8 @@ export interface StartOptions extends GlobalCliOptions {
 interface Layer1SessionState {
   /** 프로젝트 정보 / Project info */
   readonly projectInfo: ProjectInfo;
+  /** 인증 공급자 / Auth provider */
+  readonly authProvider: AuthProvider;
   /** Claude API 클라이언트 / Claude API client */
   readonly claudeApi: ClaudeApi;
   /** 대화 관리자 / Conversation manager */
@@ -262,6 +266,7 @@ export class StartCommand {
 
       const session: Layer1SessionState = {
         projectInfo,
+        authProvider: authResult.value,
         claudeApi,
         conversationManager,
         contractBuilder,
@@ -345,6 +350,23 @@ export class StartCommand {
             }
             const contractPath = resolve(session.projectInfo.path, '.adev', 'contract.json');
             chat.showContractComplete(contractPath);
+
+            // WHY: Contract 생성 완료 후 Layer2 자율 개발 시작 여부 유저에게 확인
+            chat.system('Layer2 자율 개발을 시작하려면 "yes"를 입력하세요. (건너뛰려면 Enter)');
+            const confirmEvent = await chat.waitForInput();
+            if (
+              confirmEvent.type === 'message' &&
+              (confirmEvent.text.toLowerCase() === 'yes' ||
+                confirmEvent.text.toLowerCase() === 'y' ||
+                confirmEvent.text === '네' ||
+                confirmEvent.text === '예')
+            ) {
+              const layer2Result = await this.runLayer2(session, contractResult.value, chat);
+              if (!layer2Result.ok) {
+                chat.error(`Layer2 실행 실패: ${layer2Result.error.message}`);
+              }
+            }
+
             return ok(undefined);
           }
 
@@ -393,9 +415,7 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(userMessage);
 
-      // Claude API 호출 (스피너 표시)
-      chat.startSpinner('생각 중...');
-
+      // WHY: 스트리밍으로 토큰별 출력 — 더 빠른 UX 제공
       const messages = [
         { role: 'user' as const, content: LAYER1_SYSTEM_PROMPT },
         ...session.messages.map((m) => ({
@@ -405,25 +425,31 @@ export class StartCommand {
         { role: 'user' as const, content: userInput },
       ];
 
-      const responseResult = await session.claudeApi.createMessage(messages, {
-        maxTokens: 4096,
-        temperature: 0.7,
-      });
+      chat.showStreamingStart();
+      let assistantContent = '';
 
-      if (!responseResult.ok) {
-        chat.failSpinner('API 호출 실패');
+      const streamResult = await session.claudeApi.streamMessage(
+        messages,
+        (event) => {
+          if (event.type === 'content_delta') {
+            chat.showStreamingDelta(event.text);
+            assistantContent += event.text;
+          }
+        },
+        { maxTokens: 4096, temperature: 0.7 },
+      );
+
+      chat.showStreamingEnd();
+
+      if (!streamResult.ok) {
         return err(
           new AdevError(
             'cli_start_api_failed',
-            `Claude API 호출 실패 / Claude API call failed: ${responseResult.error.message}`,
-            responseResult.error,
+            `Claude API 호출 실패 / Claude API call failed: ${streamResult.error.message}`,
+            streamResult.error,
           ),
         );
       }
-
-      chat.succeedSpinner();
-
-      const assistantContent = responseResult.value.content;
 
       // 어시스턴트 메시지 저장
       const assistantMessage: ConversationMessage = {
@@ -458,17 +484,18 @@ export class StartCommand {
    * Contract 생성 / Generate Contract
    *
    * @description
-   * KR: Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder 파이프라인으로 Contract를 생성한다.
-   * EN: Generates Contract via Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder pipeline.
+   * KR: Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder 파이프라인으로
+   *     Contract와 HandoffPackage를 생성한다.
+   * EN: Generates Contract and HandoffPackage via the full Layer1 pipeline.
    *
    * @param session - Layer1 세션 상태 / Layer1 session state
    * @param chat - TUI 채팅 인터페이스 / TUI chat interface
-   * @returns 성공 시 ok(void), 실패 시 err(AdevError)
+   * @returns 성공 시 ok(HandoffPackage), 실패 시 err(AdevError)
    */
   private async generateContract(
     session: Layer1SessionState,
     chat: ChatUi,
-  ): Promise<Result<void, AdevError>> {
+  ): Promise<Result<HandoffPackage, AdevError>> {
     try {
       chat.startSpinner('기획 문서 분석 중...');
 
@@ -535,9 +562,29 @@ export class StartCommand {
       }
 
       chat.succeedSpinner('테스트 정의 완성');
+      chat.startSpinner('스펙 문서 생성 중...');
+
+      // 5. SpecBuilder: 스펙 문서 생성
+      const specResult = session.specBuilder.buildSpec(
+        planResult.value,
+        designResult.value,
+        featuresResult.value,
+      );
+      if (!specResult.ok) {
+        chat.failSpinner('스펙 문서 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `스펙 문서 생성 실패 / Spec build failed: ${specResult.error.message}`,
+            specResult.error,
+          ),
+        );
+      }
+
+      chat.succeedSpinner('스펙 문서 완성');
       chat.startSpinner('Contract 생성 중...');
 
-      // 5. ContractBuilder: Contract 생성
+      // 6. ContractBuilder: ContractSchema 생성
       const contractResult = session.contractBuilder.buildContract(
         featuresResult.value,
         testDefsResult.value,
@@ -554,21 +601,118 @@ export class StartCommand {
         );
       }
 
+      // 7. HandoffPackage 생성 (Layer2 전달용)
+      const handoffResult = session.contractBuilder.buildHandoffPackage(
+        session.projectInfo.id,
+        contractResult.value,
+        planResult.value,
+        designResult.value,
+        specResult.value,
+      );
+      if (!handoffResult.ok) {
+        chat.failSpinner('HandoffPackage 생성 실패');
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            `HandoffPackage 생성 실패 / HandoffPackage build failed: ${handoffResult.error.message}`,
+            handoffResult.error,
+          ),
+        );
+      }
+
       chat.succeedSpinner('Contract 생성 완료');
 
-      // 6. Contract 파일 저장
+      // 8. Contract + HandoffPackage 파일 저장
       const contractPath = resolve(session.projectInfo.path, '.adev', 'contract.json');
-      const contractJson = JSON.stringify(contractResult.value, null, 2);
-      await Bun.write(contractPath, contractJson);
+      const handoffPath = resolve(session.projectInfo.path, '.adev', 'handoff.json');
+      await Bun.write(contractPath, JSON.stringify(contractResult.value, null, 2));
+      await Bun.write(handoffPath, JSON.stringify(handoffResult.value, null, 2));
 
-      this.logger.info('Contract 생성 완료', { contractPath });
+      this.logger.info('Contract + HandoffPackage 생성 완료', { contractPath, handoffPath });
 
-      return ok(undefined);
+      return ok(handoffResult.value);
     } catch (error: unknown) {
       return err(
         new AdevError(
           'cli_start_contract_generation_failed',
           `Contract 생성 실패 / Contract generation failed: ${error instanceof Error ? error.message : String(error)}`,
+          error,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Layer2 자율 개발 실행 / Run Layer2 autonomous development
+   *
+   * @description
+   * KR: Layer2Bootstrap으로 TeamLeader를 생성하고,
+   *     Contract의 모든 기능을 순서대로 실행한다.
+   *     에이전트 이벤트를 TUI에 실시간 출력한다.
+   * EN: Creates TeamLeader via Layer2Bootstrap and executes all features
+   *     from the Contract in order. Streams agent events to TUI.
+   *
+   * @param session - Layer1 세션 상태 / Layer1 session state
+   * @param handoff - Layer1→Layer2 인수 패키지 / Handoff package
+   * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+   * @returns 성공 시 ok(void), 실패 시 err(AdevError)
+   */
+  private async runLayer2(
+    session: Layer1SessionState,
+    handoff: HandoffPackage,
+    chat: ChatUi,
+  ): Promise<Result<void, AdevError>> {
+    try {
+      chat.system('Layer2 자율 개발 시작 중...');
+
+      const bootstrap = new Layer2Bootstrap({
+        authProvider: session.authProvider,
+        logger: this.logger,
+        projectCwd: session.projectInfo.path,
+      });
+
+      const teamLeader = bootstrap.createTeamLeader();
+      const features = handoff.contract.implementationOrder;
+
+      this.logger.info('Layer2 실행 시작', {
+        projectId: handoff.projectId,
+        featureCount: features.length,
+      });
+
+      for (const featureId of features) {
+        chat.system(`기능 구현 시작: ${featureId}`);
+
+        for await (const event of teamLeader.executeFeature(featureId, handoff)) {
+          switch (event.type) {
+            case 'message':
+              // WHY: agent 메시지는 system 스타일로 표시 (사용자 입력 아님)
+              chat.system(`[${event.agentName}] ${event.content}`);
+              break;
+            case 'error':
+              chat.error(`[${event.agentName}] ${event.content}`);
+              break;
+            case 'done':
+              chat.system(`기능 완료: ${featureId}`);
+              break;
+            default:
+              // tool_use, tool_result 등은 로그만
+              this.logger.debug('Layer2 이벤트', {
+                type: event.type,
+                agent: event.agentName,
+              });
+          }
+        }
+      }
+
+      chat.system('Layer2 자율 개발 완료!');
+      this.logger.info('Layer2 실행 완료', { featureCount: features.length });
+
+      return ok(undefined);
+    } catch (error: unknown) {
+      return err(
+        new AdevError(
+          'cli_start_layer2_failed',
+          `Layer2 실행 실패 / Layer2 execution failed: ${error instanceof Error ? error.message : String(error)}`,
           error,
         ),
       );

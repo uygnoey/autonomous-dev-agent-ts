@@ -13,12 +13,15 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type AgentName, type Result, err, ok } from 'core/types.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
-import type {
-  V2PromptOptions,
-  V2Session,
+import type { V2PromptOptions, V2Session } from 'layer2/v2-session-executor-types.js';
+export type {
+  V2SessionFactory,
+  V2SessionExecutorOptions,
 } from 'layer2/v2-session-executor-types.js';
-export type { V2SessionFactory, V2SessionExecutorOptions } from 'layer2/v2-session-executor-types.js';
-import type { V2SessionFactory, V2SessionExecutorOptions } from 'layer2/v2-session-executor-types.js';
+import type {
+  V2SessionExecutorOptions,
+  V2SessionFactory,
+} from 'layer2/v2-session-executor-types.js';
 import {
   anthropicSessionFactory,
   createErrorEvent,
@@ -99,7 +102,12 @@ export class V2SessionExecutor implements AgentExecutor {
       }
 
       const session = sessionResult.value;
-      const sessionId = generateSessionId(config.projectId, config.featureId, config.name, config.phase);
+      const sessionId = generateSessionId(
+        config.projectId,
+        config.featureId,
+        config.name,
+        config.phase,
+      );
       this.activeSessions.set(sessionId, session);
 
       try {

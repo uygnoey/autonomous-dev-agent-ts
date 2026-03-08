@@ -11,7 +11,11 @@ import type { Message, MessageStreamEvent } from '@anthropic-ai/sdk/resources/me
 import { AgentError, type RetryPolicy } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type Result, err, ok } from 'core/types.js';
-import type { ClaudeApiResponseMetadata, ClaudeStreamEvent, StreamCallback } from 'layer1/claude-api-types.js';
+import type {
+  ClaudeApiResponseMetadata,
+  ClaudeStreamEvent,
+  StreamCallback,
+} from 'layer1/claude-api-types.js';
 
 /** 재시도 가능한 HTTP 상태 코드 / Retryable HTTP status codes */
 export const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
@@ -195,7 +199,11 @@ export function mapApiErrorToCode(status: number | undefined): string {
  * @param logger - 로거 인스턴스 / Logger instance
  * @returns AgentError로 래핑된 에러 / Wrapped error as AgentError
  */
-export function handleApiError(error: unknown, context: string, logger: Logger): Result<never, AgentError> {
+export function handleApiError(
+  error: unknown,
+  context: string,
+  logger: Logger,
+): Result<never, AgentError> {
   if (error instanceof Anthropic.APIError) {
     const code = mapApiErrorToCode(error.status);
     const message = `Claude API 에러 [${context}]: ${error.message} / Claude API error [${context}]: ${error.message}`;

@@ -1,4 +1,5 @@
 # autonomous-dev-agent (adev)
+이 문서를 읽을떄마다 읽은 년월일을  YYYY-MM-DD HH24:mm:ss 포멧으로 표기하고 아랫줄에다 main-claude.md 읽기시작 이라고 tui에 표시해
 
 Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발을 수행하는 상위 에이전트 시스템.
 
@@ -37,5 +38,4 @@ Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발�
 - **실패 분석**: `qc`만
 - **품질 검증**: `qa` (코딩 전), `reviewer` (코딩 후)
 - **문서화**: `documenter`만
-
-이 문서와 .cluade/CALUDE.md 문서 모두 여기까지 모두 읽었으면 다읽은 시점의 시간을 HH24:mm:ss 포멧으로 표기하고 아랫줄에다 main-claude.md 읽음 이라고 tui에 표시해
+- **관리 감독**: `architect` 와 `qa`, `reviewer` 가 `coder`와 `tester` 가 코딩 및 테스트하는 것을 실시간으로 감독 하여 코드와 테스트가 잘되게 감독
