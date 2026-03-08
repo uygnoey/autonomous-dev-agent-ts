@@ -627,3 +627,69 @@ describe('TeamLeader 성능', () => {
     }
   });
 });
+
+// ── 경계값: 특수 featureId ─────────────────────────────────────
+
+describe('TeamLeader 특수 featureId 경계값', () => {
+  it('빈 문자열 featureId → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('UUID 형식 featureId → 상태 반영', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const uuid = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    await collectEvents(leader.executeFeature(uuid, handoff), 100);
+    expect(leader.getStatus().featureId).toBe(uuid);
+  });
+
+  it('한글 featureId → 상태 반영', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    await collectEvents(leader.executeFeature('기능-1', handoff), 100);
+    expect(leader.getStatus().featureId).toBe('기능-1');
+  });
+
+  it('특수문자 포함 featureId → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const fid = 'feat_v2.0@beta';
+    const events = await collectEvents(leader.executeFeature(fid, handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+    expect(leader.getStatus().featureId).toBe(fid);
+  });
+
+  it('매우 긴 featureId (100자) → 상태 반영', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const longId = 'feat-' + 'x'.repeat(95);
+    await collectEvents(leader.executeFeature(longId, handoff), 100);
+    expect(leader.getStatus().featureId).toBe(longId);
+  });
+
+  it('숫자만으로 된 featureId → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('123456', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('getStatus phase는 실행 후에도 유효한 Phase', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    await collectEvents(leader.executeFeature('feat-phase-check', handoff), 200);
+    const validPhases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    expect(validPhases).toContain(leader.getStatus().phase);
+  });
+
+  it('progress는 실행 후 0 이상 100 이하', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    await collectEvents(leader.executeFeature('feat-progress', handoff), 200);
+    expect(leader.getStatus().progress).toBeGreaterThanOrEqual(0);
+    expect(leader.getStatus().progress).toBeLessThanOrEqual(100);
+  });
+});

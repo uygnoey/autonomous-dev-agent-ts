@@ -630,3 +630,88 @@ describe('Planner 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 경계값 시나리오 ───────────────────────────────────────
+
+describe('Planner 추가 경계값', () => {
+  let planner: Planner;
+
+  beforeEach(() => {
+    planner = new Planner(new ConsoleLogger('error'));
+  });
+
+  it('빈 content user 메시지 → ok', () => {
+    const result = planner.createPlan('proj-empty-msg', [createMessage('user', '')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('매우 긴 assistant 메시지 → ok', () => {
+    const longMsg = 'analysis '.repeat(500);
+    const result = planner.createPlan('proj-long', [
+      createMessage('user', '요청'),
+      createMessage('assistant', longMsg),
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('analysis');
+  });
+
+  it('extractFeatures: ### 뒤 공백만 있는 헤더 → 기능 이름 빈값 처리', () => {
+    const plan = '### \n설명';
+    const result = planner.extractFeatures(plan);
+    // 빈 헤더도 파싱되거나 Main Feature 반환
+    expect(result.ok).toBe(true);
+  });
+
+  it('createPlan 결과 문자열 길이 50자 이상', () => {
+    const result = planner.createPlan('proj-len', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(50);
+  });
+
+  it('extractFeatures 연속 호출 → 상태 독립적', () => {
+    const plan1 = '### Feature X\n설명';
+    const plan2 = '### Feature Y\n### Feature Z\n설명';
+    const r1 = planner.extractFeatures(plan1);
+    const r2 = planner.extractFeatures(plan2);
+    if (r1.ok) expect(r1.value.length).toBe(1);
+    if (r2.ok) expect(r2.value.length).toBe(2);
+  });
+
+  it('한글 projectId → 기획에 포함', () => {
+    const result = planner.createPlan('프로젝트-한글', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('프로젝트-한글');
+  });
+
+  it('음수 아닌 인덱스로 기능 접근 가능', () => {
+    const plan = '### A\n설명\n### B\n설명\n### C\n설명';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      expect(result.value[0]).toBeDefined();
+      expect(result.value[1]).toBeDefined();
+      expect(result.value[2]).toBeDefined();
+    }
+  });
+
+  it('createPlan error.code는 문자열', () => {
+    const result = planner.createPlan('proj-err', []);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+      expect(result.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('extractFeatures 오류 code는 문자열', () => {
+    const result = planner.extractFeatures('');
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('user 메시지 50개 → ok', () => {
+    const msgs = Array.from({ length: 50 }, (_, i) =>
+      createMessage(i % 2 === 0 ? 'user' : 'assistant', `내용 ${i}`),
+    );
+    const result = planner.createPlan('proj-bulk', msgs);
+    expect(result.ok).toBe(true);
+  });
+});

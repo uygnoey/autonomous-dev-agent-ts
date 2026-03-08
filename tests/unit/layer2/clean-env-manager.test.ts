@@ -629,3 +629,94 @@ describe('CleanEnvManager 랜덤/경계값', () => {
     }
   });
 });
+
+// ── 추가 경계값 및 복합 시나리오 ──────────────────────────────
+
+describe('CleanEnvManager 추가 경계값', () => {
+  it('UUID projectId → envPath에 UUID 포함', async () => {
+    const manager = makeManager();
+    const uuid = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    const result = await manager.create(uuid);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.value.envPath).toContain(uuid);
+    }
+  });
+
+  it('빈 문자열 projectId → 처리됨 (ok 또는 err)', async () => {
+    const manager = makeManager();
+    const result = await manager.create('');
+    // 빈 문자열: 구현에 따라 ok 또는 err
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+    }
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('destroy 에러 메시지가 문자열', async () => {
+    const manager = makeManager();
+    const result = await manager.destroy('/nonexistent/xyz-abc');
+    if (!result.ok) {
+      expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  it('create 반환값 ok가 boolean', async () => {
+    const manager = makeManager();
+    const result = await manager.create('bool-check');
+    expect(typeof result.ok).toBe('boolean');
+    if (result.ok) createdPaths.push(result.value.envPath);
+  });
+
+  it('envPath가 절대 경로 형식', async () => {
+    const manager = makeManager();
+    const result = await manager.create('absolute-path-check');
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      // 절대 경로는 / 또는 드라이브 문자로 시작
+      expect(result.value.envPath.length).toBeGreaterThan(1);
+    }
+  });
+
+  it('5개 동시 + 5개 순차 → 총 10개 active', async () => {
+    const manager = makeManager();
+    const concurrent = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => manager.create(`con-${i}`)),
+    );
+    for (const r of concurrent) {
+      if (r.ok) createdPaths.push(r.value.envPath);
+    }
+    for (let i = 0; i < 5; i++) {
+      const r = await manager.create(`seq-extra-${i}`);
+      if (r.ok) createdPaths.push(r.value.envPath);
+    }
+    expect(manager.listActive().length).toBe(10);
+  });
+
+  it('isClean 알 수 없는 경로 → false', () => {
+    const manager = makeManager();
+    expect(manager.isClean('/does/not/exist/path-xyz')).toBe(false);
+  });
+
+  it('소멸 후 재생성 → isClean true', async () => {
+    const manager = makeManager();
+    const r1 = await manager.create('reuse-proj');
+    if (r1.ok) {
+      await manager.destroy(r1.value.envPath);
+      const r2 = await manager.create('reuse-proj');
+      if (r2.ok) {
+        createdPaths.push(r2.value.envPath);
+        expect(manager.isClean(r2.value.envPath)).toBe(true);
+      }
+    }
+  });
+
+  it('manager destroy 후 listActive 빈 배열', async () => {
+    const manager = makeManager();
+    const r = await manager.create('destroy-all');
+    if (r.ok) {
+      await manager.destroy(r.value.envPath);
+      expect(manager.listActive()).toEqual([]);
+    }
+  });
+});

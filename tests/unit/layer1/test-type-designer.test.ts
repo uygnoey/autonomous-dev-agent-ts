@@ -628,3 +628,91 @@ describe('TestTypeDesigner 복합 시나리오', () => {
     }
   });
 });
+
+// ── 경계값: 특수 입력 시나리오 ───────────────────────────────
+
+describe('TestTypeDesigner 특수 입력 경계값', () => {
+  let designer: TestTypeDesigner;
+
+  beforeEach(() => {
+    designer = new TestTypeDesigner(new ConsoleLogger('error'));
+  });
+
+  it('UUID 형식 featureId → ok', () => {
+    const uuid = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    const features = [createFeature({ id: uuid })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.featureId).toBe(uuid);
+  });
+
+  it('한글 featureId → ok', () => {
+    const features = [createFeature({ id: '기능-로그인' })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.featureId).toBe('기능-로그인');
+  });
+
+  it('빈 description feature → ok', () => {
+    const features = [createFeature({ description: '' })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 카테고리 이름 → ok', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'auth-v2.0_beta' },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('acceptanceCriteria 10개 → 비율 합이 1', () => {
+    const features = [createFeature({
+      acceptanceCriteria: Array.from({ length: 10 }, (_, i) => ({
+        id: `ac-${i}`, description: `기준 ${i}`, verifiable: true, testCategory: 'test',
+      })),
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok) {
+      const r = result.value[0]?.ratios;
+      if (r) expect(r.unit + r.module + r.e2e).toBeCloseTo(1.0);
+    }
+  });
+
+  it('validate 반환값의 경고가 배열이다', () => {
+    const features = [createFeature({ id: 'feat-v' })];
+    const result = designer.validate([], features);
+    if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('음수 인덱스 접근 없이 정상 처리', () => {
+    const features = Array.from({ length: 3 }, (_, i) => createFeature({ id: `f-${i}` }));
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (const def of result.value) {
+        expect(def.ratios.unit).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('100개 기능 → ok', () => {
+    const features = Array.from({ length: 100 }, (_, i) => createFeature({ id: `feat-${i}` }));
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(100);
+  });
+
+  it('한글 카테고리 이름 → ok', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-kr', description: '기준', verifiable: true, testCategory: '인증' },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+});
