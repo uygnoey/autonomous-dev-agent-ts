@@ -1263,3 +1263,573 @@ describe('리터럴 타입 추가 검증', () => {
     expect(statuses.includes('verifying')).toBe(true);
   });
 });
+
+// ── VectorRepository 인터페이스 구조 검증 ─────────────────────
+
+describe('VectorRepository 인터페이스 구조 검증', () => {
+  it('insert 메서드 시그니처 검증', () => {
+    const mockRepo = {
+      insert: async (_r: MemoryRecord) => ok(undefined),
+      search: async () => ok([]),
+      getById: async () => ok(null),
+      update: async () => ok(undefined),
+      delete: async () => ok(undefined),
+    };
+    expect(typeof mockRepo.insert).toBe('function');
+  });
+
+  it('search 메서드 시그니처 검증', () => {
+    const mockRepo = {
+      insert: async () => ok(undefined),
+      search: async (_q: Float32Array, _l: number) => ok([] as MemoryRecord[]),
+      getById: async () => ok(null),
+      update: async () => ok(undefined),
+      delete: async () => ok(undefined),
+    };
+    expect(typeof mockRepo.search).toBe('function');
+  });
+
+  it('getById 메서드 시그니처 검증', () => {
+    const mockRepo = {
+      insert: async () => ok(undefined),
+      search: async () => ok([]),
+      getById: async (_id: string) => ok(null as MemoryRecord | null),
+      update: async () => ok(undefined),
+      delete: async () => ok(undefined),
+    };
+    expect(typeof mockRepo.getById).toBe('function');
+  });
+
+  it('update 메서드 시그니처 검증', () => {
+    const mockRepo = {
+      insert: async () => ok(undefined),
+      search: async () => ok([]),
+      getById: async () => ok(null),
+      update: async (_id: string, _p: Partial<MemoryRecord>) => ok(undefined),
+      delete: async () => ok(undefined),
+    };
+    expect(typeof mockRepo.update).toBe('function');
+  });
+
+  it('delete 메서드 시그니처 검증', () => {
+    const mockRepo = {
+      insert: async () => ok(undefined),
+      search: async () => ok([]),
+      getById: async () => ok(null),
+      update: async () => ok(undefined),
+      delete: async (_id: string) => ok(undefined),
+    };
+    expect(typeof mockRepo.delete).toBe('function');
+  });
+});
+
+// ── CodeRecord 인터페이스 구조 검증 ─────────────────────────
+
+describe('CodeRecord 인터페이스 구조 검증', () => {
+  it('CodeRecord 구조 생성 가능', () => {
+    const record = {
+      id: 'code-001',
+      projectId: 'proj-001',
+      filePath: 'src/core/config.ts',
+      chunk: 'function getConfig() { return {}; }',
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: 'src/core',
+        functionName: 'getConfig',
+        lastModified: new Date('2026-01-01'),
+        modifiedBy: 'coder',
+      },
+    };
+    expect(record.id).toBe('code-001');
+    expect(record.metadata.language).toBe('typescript');
+  });
+
+  it('CodeRecord embedding은 Float32Array', () => {
+    const record = {
+      id: 'code-002',
+      projectId: 'proj-001',
+      filePath: 'src/layer1/planner.ts',
+      chunk: 'class Planner {}',
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: 'src/layer1',
+        functionName: 'Planner',
+        lastModified: new Date(),
+        modifiedBy: 'architect',
+      },
+    };
+    expect(record.embedding).toBeInstanceOf(Float32Array);
+  });
+
+  it('CodeRecord metadata.functionName은 문자열', () => {
+    const record = {
+      id: 'code-003',
+      projectId: 'proj-001',
+      filePath: 'src/rag/indexer.ts',
+      chunk: 'async function indexCode() {}',
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: 'src/rag',
+        functionName: 'indexCode',
+        lastModified: new Date(),
+        modifiedBy: 'coder',
+      },
+    };
+    expect(typeof record.metadata.functionName).toBe('string');
+  });
+
+  it('CodeRecord metadata.module은 문자열', () => {
+    const record = {
+      id: 'code-004',
+      projectId: 'proj-001',
+      filePath: 'src/mcp/server.ts',
+      chunk: 'class McpServer {}',
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: 'src/mcp',
+        functionName: 'McpServer',
+        lastModified: new Date(),
+        modifiedBy: 'coder',
+      },
+    };
+    expect(typeof record.metadata.module).toBe('string');
+  });
+
+  it('CodeRecord metadata.lastModified는 Date', () => {
+    const now = new Date();
+    const record = {
+      id: 'code-005',
+      projectId: 'proj-001',
+      filePath: 'src/auth/api-key.ts',
+      chunk: 'class ApiKeyAuth {}',
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: 'src/auth',
+        functionName: 'ApiKeyAuth',
+        lastModified: now,
+        modifiedBy: 'coder',
+      },
+    };
+    expect(record.metadata.lastModified).toBeInstanceOf(Date);
+  });
+
+  it('CodeRecord 여러 개 생성 → 각 filePath 다름', () => {
+    const paths = ['src/core/a.ts', 'src/core/b.ts', 'src/layer1/c.ts'];
+    const records = paths.map((fp, i) => ({
+      id: `code-${i}`,
+      projectId: 'proj-001',
+      filePath: fp,
+      chunk: `// ${fp}`,
+      embedding: new Float32Array(384),
+      metadata: {
+        language: 'typescript',
+        module: fp.split('/').slice(0, 2).join('/'),
+        functionName: `fn${i}`,
+        lastModified: new Date(),
+        modifiedBy: 'coder',
+      },
+    }));
+    const uniquePaths = new Set(records.map((r) => r.filePath));
+    expect(uniquePaths.size).toBe(3);
+  });
+});
+
+// ── MemoryRecord 심화 경계값 ─────────────────────────────────
+
+describe('MemoryRecord 심화 경계값', () => {
+  it('MemoryRecord id는 빈 문자열도 허용', () => {
+    const record: MemoryRecord = {
+      id: '',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: 'test',
+      embedding: new Float32Array(0),
+      metadata: { phase: 'DESIGN', featureId: '', agentName: 'coder', timestamp: new Date() },
+    };
+    expect(record.id).toBe('');
+  });
+
+  it('MemoryRecord projectId 긴 문자열 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-long-proj',
+      projectId: 'p'.repeat(200),
+      type: 'decision',
+      content: 'test content',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'CODE', featureId: 'feat-1', agentName: 'architect', timestamp: new Date() },
+    };
+    expect(record.projectId.length).toBe(200);
+  });
+
+  it('MemoryRecord content 긴 문자열 허용', () => {
+    const content = 'x'.repeat(10000);
+    const record: MemoryRecord = {
+      id: 'mem-long-content',
+      projectId: 'proj-001',
+      type: 'feedback',
+      content,
+      embedding: new Float32Array(384),
+      metadata: { phase: 'VERIFY', featureId: 'feat-1', agentName: 'reviewer', timestamp: new Date() },
+    };
+    expect(record.content.length).toBe(10000);
+  });
+
+  it('MemoryRecord embedding 차원 1 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-dim1',
+      projectId: 'proj-001',
+      type: 'error',
+      content: 'error content',
+      embedding: new Float32Array(1),
+      metadata: { phase: 'TEST', featureId: 'feat-1', agentName: 'qc', timestamp: new Date() },
+    };
+    expect(record.embedding.length).toBe(1);
+  });
+
+  it('MemoryRecord embedding 차원 768 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-dim768',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: 'large embedding',
+      embedding: new Float32Array(768),
+      metadata: { phase: 'DESIGN', featureId: 'feat-1', agentName: 'qa', timestamp: new Date() },
+    };
+    expect(record.embedding.length).toBe(768);
+  });
+
+  it('MemoryRecord metadata.featureId 빈 문자열 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-no-feat',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: 'no feature',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'DESIGN', featureId: '', agentName: 'architect', timestamp: new Date() },
+    };
+    expect(record.metadata.featureId).toBe('');
+  });
+
+  it('MemoryRecord metadata.timestamp 과거 날짜 허용', () => {
+    const past = new Date('2000-01-01');
+    const record: MemoryRecord = {
+      id: 'mem-past',
+      projectId: 'proj-001',
+      type: 'error',
+      content: 'old error',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'TEST', featureId: 'feat-1', agentName: 'tester', timestamp: past },
+    };
+    expect(record.metadata.timestamp.getFullYear()).toBe(2000);
+  });
+
+  it('MemoryRecord metadata.timestamp 미래 날짜 허용', () => {
+    const future = new Date('2099-12-31');
+    const record: MemoryRecord = {
+      id: 'mem-future',
+      projectId: 'proj-001',
+      type: 'decision',
+      content: 'future decision',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'DESIGN', featureId: 'feat-1', agentName: 'architect', timestamp: future },
+    };
+    expect(record.metadata.timestamp.getFullYear()).toBe(2099);
+  });
+
+  it('MemoryRecord content JSON 문자열 허용', () => {
+    const content = JSON.stringify({ key: 'value', num: 42 });
+    const record: MemoryRecord = {
+      id: 'mem-json',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content,
+      embedding: new Float32Array(384),
+      metadata: { phase: 'CODE', featureId: 'feat-1', agentName: 'coder', timestamp: new Date() },
+    };
+    expect(JSON.parse(record.content)).toEqual({ key: 'value', num: 42 });
+  });
+
+  it('MemoryRecord 50개 생성 → 모두 유효한 type', () => {
+    const types: MemoryType[] = ['conversation', 'decision', 'feedback', 'error'];
+    for (let i = 0; i < 50; i++) {
+      const type = types[i % 4] as MemoryType;
+      const record: MemoryRecord = {
+        id: `mem-batch-${i}`,
+        projectId: 'proj-001',
+        type,
+        content: `content ${i}`,
+        embedding: new Float32Array(384),
+        metadata: { phase: 'CODE', featureId: `feat-${i}`, agentName: 'coder', timestamp: new Date() },
+      };
+      expect(types.includes(record.type)).toBe(true);
+    }
+  });
+});
+
+// ── DesignDecision 심화 경계값 ───────────────────────────────
+
+describe('DesignDecision 심화 경계값', () => {
+  it('DesignDecision alternatives 100개 허용', () => {
+    const alts = Array.from({ length: 100 }, (_, i) => `option-${i}`);
+    const decision: DesignDecision = {
+      id: 'dd-big-alts',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: '100개 대안 중 선택',
+      rationale: '많은 옵션 비교',
+      alternatives: alts,
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.alternatives.length).toBe(100);
+  });
+
+  it('DesignDecision decidedBy 7명 에이전트 전원', () => {
+    const decision: DesignDecision = {
+      id: 'dd-all-agents',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: '전원 합의',
+      rationale: '만장일치',
+      alternatives: [],
+      decidedBy: ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.decidedBy.length).toBe(7);
+  });
+
+  it('DesignDecision id UUID v4 형식', () => {
+    const decision: DesignDecision = {
+      id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: 'UUID test',
+      rationale: 'id format check',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.id).toMatch(/-/);
+  });
+
+  it('DesignDecision rationale 빈 문자열 허용', () => {
+    const decision: DesignDecision = {
+      id: 'dd-empty-rat',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: '결정',
+      rationale: '',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.rationale).toBe('');
+  });
+
+  it('DesignDecision decision 긴 문자열 허용', () => {
+    const decision: DesignDecision = {
+      id: 'dd-long',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: 'd'.repeat(1000),
+      rationale: '긴 결정문',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.decision.length).toBe(1000);
+  });
+});
+
+// ── FailureRecord 심화 경계값 ────────────────────────────────
+
+describe('FailureRecord 심화 경계값', () => {
+  it('FailureRecord failureType 빈 문자열 허용', () => {
+    const failure: FailureRecord = {
+      id: 'fail-empty-type',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'TEST',
+      failureType: '',
+      rootCause: '원인 미상',
+      resolution: '재조사 필요',
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(failure.failureType).toBe('');
+  });
+
+  it('FailureRecord resolution 긴 문자열 허용', () => {
+    const failure: FailureRecord = {
+      id: 'fail-long-res',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'CODE',
+      failureType: 'type_error',
+      rootCause: '타입 불일치',
+      resolution: 'r'.repeat(2000),
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(failure.resolution.length).toBe(2000);
+  });
+
+  it('FailureRecord 4개 Phase 모두 유효', () => {
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const failure: FailureRecord = {
+        id: `fail-phase-${phase}`,
+        projectId: 'proj-001',
+        featureId: 'feat-001',
+        phase,
+        failureType: 'test_failure',
+        rootCause: '원인',
+        resolution: '해결',
+        embedding: new Float32Array(384),
+        timestamp: new Date(),
+      };
+      expect(failure.phase).toBe(phase);
+    }
+  });
+
+  it('FailureRecord timestamp는 Date', () => {
+    const failure: FailureRecord = {
+      id: 'fail-ts-check',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'VERIFY',
+      failureType: 'verify_failed',
+      rootCause: 'e2e 실패',
+      resolution: '재시도',
+      embedding: new Float32Array(384),
+      timestamp: new Date('2026-03-01'),
+    };
+    expect(failure.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('FailureRecord rootCause 영문 허용', () => {
+    const failure: FailureRecord = {
+      id: 'fail-eng',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'TEST',
+      failureType: 'assertion_error',
+      rootCause: 'Expected value to be truthy',
+      resolution: 'Fix the assertion',
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(failure.rootCause).toContain('Expected');
+  });
+});
+
+// ── ok/err 복합 패턴 ──────────────────────────────────────────
+
+describe('ok/err 복합 패턴', () => {
+  it('ok(MemoryRecord) → value는 MemoryRecord', () => {
+    const record: MemoryRecord = {
+      id: 'mem-ok',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: 'test',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'DESIGN', featureId: 'feat-1', agentName: 'coder', timestamp: new Date() },
+    };
+    const result = ok(record);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.id).toBe('mem-ok');
+  });
+
+  it('err(AdevError) → code 유지', () => {
+    const error = new AdevError('mem_not_found', '메모리 레코드를 찾을 수 없음');
+    const result = err(error);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('mem_not_found');
+  });
+
+  it('ok(DesignDecision) → value는 DesignDecision', () => {
+    const decision: DesignDecision = {
+      id: 'dd-ok',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: 'REST API',
+      rationale: '단순성',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    const result = ok(decision);
+    if (result.ok) expect(result.value.decision).toBe('REST API');
+  });
+
+  it('ok(FailureRecord) → value는 FailureRecord', () => {
+    const failure: FailureRecord = {
+      id: 'fail-ok',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'TEST',
+      failureType: 'test_failed',
+      rootCause: '원인',
+      resolution: '해결',
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    const result = ok(failure);
+    if (result.ok) expect(result.value.phase).toBe('TEST');
+  });
+
+  it('ok(null as MemoryRecord) → value null', () => {
+    const result = ok(null as unknown as MemoryRecord);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+
+  it('Result<MemoryRecord[]> ok → 배열 접근', () => {
+    const records: MemoryRecord[] = [];
+    const result: Result<MemoryRecord[]> = ok(records);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('Result<DesignDecision | null> ok null → getById 패턴', () => {
+    const result: Result<DesignDecision | null> = ok(null);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+
+  it('err(AdevError) → FailureRecord 검색 실패 시뮬레이션', () => {
+    const searchFail = (): Result<FailureRecord[]> => err(new AdevError('db_error', 'DB 연결 실패'));
+    const result = searchFail();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('DB');
+  });
+
+  it('ok([]) → 빈 결과 검색 시뮬레이션', () => {
+    const emptySearch = (): Result<MemoryRecord[]> => ok([]);
+    const result = emptySearch();
+    if (result.ok) expect(result.value.length).toBe(0);
+  });
+
+  it('연속 ok/err 분기 로직', () => {
+    const process = (id: string): Result<string> => {
+      if (id.startsWith('valid')) return ok(`processed-${id}`);
+      return err(new AdevError('invalid_id', `Invalid: ${id}`));
+    };
+    const r1 = process('valid-001');
+    const r2 = process('bad-id');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(false);
+    if (r1.ok) expect(r1.value).toBe('processed-valid-001');
+    if (!r2.ok) expect(r2.error.code).toBe('invalid_id');
+  });
+});

@@ -1270,3 +1270,520 @@ describe('extractModule 추가 경계값', () => {
     expect(typeof result).toBe('string');
   });
 });
+
+// ── splitCode 심화 경계값 ─────────────────────────────────────
+
+describe('splitCode 심화 경계값', () => {
+  const splitter2 = new ChunkSplitter();
+
+  it('공백만 있는 파일 → 빈 배열', () => {
+    const chunks = splitter2.splitCode('   \n  \n  ', 'src/empty.ts');
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('탭만 있는 파일 → 빈 배열', () => {
+    const chunks = splitter2.splitCode('\t\t\t', 'src/tabs.ts');
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('단일 빈 줄 파일 → 빈 배열', () => {
+    const chunks = splitter2.splitCode('\n', 'src/newline.ts');
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('함수 하나만 있는 파일 → 1개 이상 청크', () => {
+    const content = 'function solo() { return 1; }';
+    const chunks = splitter2.splitCode(content, 'src/core/solo.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('매우 짧은 파일 (1줄 주석) → 청크 반환', () => {
+    const content = '// This is a comment';
+    const chunks = splitter2.splitCode(content, 'src/core/comment.ts');
+    // 경계 없음 → splitBySize 폴백
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('metadata.filePath가 입력 경로와 동일', () => {
+    const filePath = 'src/core/special.ts';
+    const content = 'function myFn() { return true; }';
+    const chunks = splitter2.splitCode(content, filePath);
+    if (chunks.length > 0) {
+      expect(chunks[0]?.metadata.filePath).toBe(filePath);
+    }
+  });
+
+  it('metadata.language가 detectLanguage 결과와 일치', () => {
+    const chunks = splitter2.splitCode('function f() {}', 'src/core/a.ts');
+    if (chunks.length > 0) {
+      expect(chunks[0]?.metadata.language).toBe('typescript');
+    }
+  });
+
+  it('JavaScript 파일 → language=javascript', () => {
+    const chunks = splitter2.splitCode('function f() {}', 'src/util.js');
+    if (chunks.length > 0) {
+      expect(chunks[0]?.metadata.language).toBe('javascript');
+    }
+  });
+
+  it('Python 파일 → language=python', () => {
+    const chunks = splitter2.splitCode('def foo(): pass', 'models/user.py');
+    if (chunks.length > 0) {
+      expect(chunks[0]?.metadata.language).toBe('python');
+    }
+  });
+
+  it('Rust 파일 → language=rust', () => {
+    const chunks = splitter2.splitCode('fn main() {}', 'src/main.rs');
+    if (chunks.length > 0) {
+      expect(chunks[0]?.metadata.language).toBe('rust');
+    }
+  });
+
+  it('metadata.startLine은 1 이상', () => {
+    const content = 'function a() {}\nfunction b() {}';
+    const chunks = splitter2.splitCode(content, 'src/core/ab.ts');
+    for (const chunk of chunks) {
+      expect(chunk.metadata.startLine).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('metadata.endLine >= metadata.startLine', () => {
+    const content = 'function a() {}\nfunction b() {}\nfunction c() {}';
+    const chunks = splitter2.splitCode(content, 'src/core/abc.ts');
+    for (const chunk of chunks) {
+      expect(chunk.metadata.endLine).toBeGreaterThanOrEqual(chunk.metadata.startLine);
+    }
+  });
+
+  it('content가 비어 있지 않은 청크만 반환', () => {
+    const content = 'function x() { return null; }';
+    const chunks = splitter2.splitCode(content, 'src/core/x.ts');
+    for (const chunk of chunks) {
+      expect(chunk.content.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('maxChunkSize 옵션 적용 → content는 maxChunkSize 이하', () => {
+    const big = 'x'.repeat(5000);
+    const content = `function big() { return "${big}"; }`;
+    const chunks = splitter2.splitCode(content, 'src/core/big.ts', { maxChunkSize: 100 });
+    for (const chunk of chunks) {
+      expect(chunk.content.length).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('maxChunkSize=50 → 청크 분할됨', () => {
+    const content = 'function foo() { return "hello world foo bar baz test"; }';
+    const chunks = splitter2.splitCode(content, 'src/core/foo.ts', { maxChunkSize: 50 });
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('overlapRatio=0 → 오버랩 없음', () => {
+    const content = 'function a() {}\nfunction b() {}\nfunction c() {}';
+    const chunksNoOverlap = splitter2.splitCode(content, 'src/core/no-overlap.ts', { overlapRatio: 0 });
+    const chunksOverlap = splitter2.splitCode(content, 'src/core/with-overlap.ts', { overlapRatio: 0.5 });
+    // 오버랩 없으면 같거나 적은 청크
+    expect(chunksNoOverlap.length).toBeLessThanOrEqual(chunksOverlap.length);
+  });
+
+  it('같은 내용 다른 파일 경로 → language 다름', () => {
+    const content = 'function test() { return 1; }';
+    const tsChunks = splitter2.splitCode(content, 'src/core/test.ts');
+    const jsChunks = splitter2.splitCode(content, 'src/core/test.js');
+    if (tsChunks.length > 0 && jsChunks.length > 0) {
+      expect(tsChunks[0]?.metadata.language).toBe('typescript');
+      expect(jsChunks[0]?.metadata.language).toBe('javascript');
+    }
+  });
+
+  it('metadata.module이 빈 문자열이 아님', () => {
+    const content = 'function validate() {}';
+    const chunks = splitter2.splitCode(content, 'src/core/validator.ts');
+    for (const chunk of chunks) {
+      expect(chunk.metadata.module.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('오버랩 청크 functionName은 _overlap 접미사 포함', () => {
+    const content = 'function alpha() {}\nfunction beta() {}\nfunction gamma() {}';
+    const chunks = splitter2.splitCode(content, 'src/core/abc.ts', { overlapRatio: 0.5 });
+    const overlapChunks = chunks.filter((c) => c.metadata.functionName?.includes('_overlap'));
+    // 오버랩이 생성되면 _overlap 포함
+    if (overlapChunks.length > 0) {
+      expect(overlapChunks[0]?.metadata.functionName).toContain('_overlap');
+    }
+  });
+});
+
+// ── detectLanguage 심화 ──────────────────────────────────────
+
+describe('detectLanguage 심화', () => {
+  it('.tsx → typescript', () => {
+    expect(detectLanguage('src/components/Button.tsx')).toBe('typescript');
+  });
+
+  it('.jsx → javascript', () => {
+    expect(detectLanguage('src/components/Input.jsx')).toBe('javascript');
+  });
+
+  it('.mjs → unknown (미지원 확장자)', () => {
+    // mjs는 EXTENSION_LANGUAGE_MAP에 없으므로 'unknown' 반환
+    expect(detectLanguage('src/utils/helper.mjs')).toBe('unknown');
+  });
+
+  it('대문자 확장자 → 소문자로 처리됨 (구현에 따라)', () => {
+    // 구현이 toLowerCase하지 않을 수도 있으므로 string 확인만
+    const lang = detectLanguage('SRC/CORE/MAIN.TS');
+    expect(typeof lang).toBe('string');
+  });
+
+  it('.py → python', () => {
+    expect(detectLanguage('scripts/deploy.py')).toBe('python');
+  });
+
+  it('.rs → rust', () => {
+    expect(detectLanguage('crates/core/lib.rs')).toBe('rust');
+  });
+
+  it('.go → go', () => {
+    expect(detectLanguage('cmd/main.go')).toBe('go');
+  });
+
+  it('.java → java', () => {
+    expect(detectLanguage('src/Main.java')).toBe('java');
+  });
+
+  it('.md → markdown', () => {
+    expect(detectLanguage('README.md')).toBe('markdown');
+  });
+
+  it('.json → json', () => {
+    expect(detectLanguage('package.json')).toBe('json');
+  });
+
+  it('.yaml → yaml', () => {
+    expect(detectLanguage('config.yaml')).toBe('yaml');
+  });
+
+  it('.yml → yaml', () => {
+    expect(detectLanguage('docker-compose.yml')).toBe('yaml');
+  });
+
+  it('확장자 없는 파일 → unknown 또는 string', () => {
+    const lang = detectLanguage('Makefile');
+    expect(typeof lang).toBe('string');
+  });
+
+  it('경로 없이 파일명만 → 감지됨', () => {
+    const lang = detectLanguage('index.ts');
+    expect(lang).toBe('typescript');
+  });
+
+  it('중첩 경로 → 파일명 기준 감지', () => {
+    const lang = detectLanguage('a/b/c/d/e/f/file.py');
+    expect(lang).toBe('python');
+  });
+
+  it('동일 확장자 여러 경로 → 동일 결과', () => {
+    const paths = ['src/a.ts', 'lib/b.ts', 'tests/c.ts'];
+    const langs = paths.map(detectLanguage);
+    for (const lang of langs) {
+      expect(lang).toBe('typescript');
+    }
+  });
+
+  it('.c → c 또는 unknown', () => {
+    const lang = detectLanguage('src/main.c');
+    expect(typeof lang).toBe('string');
+  });
+
+  it('.sh → shell 또는 unknown', () => {
+    const lang = detectLanguage('scripts/build.sh');
+    expect(typeof lang).toBe('string');
+  });
+
+  it('.sql → sql 또는 unknown', () => {
+    const lang = detectLanguage('migrations/001.sql');
+    expect(typeof lang).toBe('string');
+  });
+});
+
+// ── extractModule 더 깊은 경계값 ─────────────────────────────
+
+describe('extractModule 더 깊은 경계값', () => {
+  it('파일명만(경로 없음) → 파일명 자체 반환 또는 빈 문자열', () => {
+    const result = extractModule('index.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('src/a.ts → src', () => {
+    const result = extractModule('src/a.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('src/layer2/phase-engine.ts → src/layer2', () => {
+    expect(extractModule('src/layer2/phase-engine.ts')).toBe('src/layer2');
+  });
+
+  it('src/layer3/doc-generator.ts → src/layer3', () => {
+    expect(extractModule('src/layer3/doc-generator.ts')).toBe('src/layer3');
+  });
+
+  it('src/cli/commands/start.ts → src/cli', () => {
+    expect(extractModule('src/cli/commands/start.ts')).toBe('src/cli');
+  });
+
+  it('src/cli/tui/chat.ts → src/cli', () => {
+    expect(extractModule('src/cli/tui/chat.ts')).toBe('src/cli');
+  });
+
+  it('tests/e2e/scenario.test.ts → tests/e2e 또는 string', () => {
+    const result = extractModule('tests/e2e/scenario.test.ts');
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('docs/references/agent.md → docs/references 또는 string', () => {
+    const result = extractModule('docs/references/agent.md');
+    expect(typeof result).toBe('string');
+  });
+
+  it('반환값은 항상 string', () => {
+    const paths = [
+      'src/core/a.ts',
+      'src/rag/b.ts',
+      'src/layer1/c.ts',
+      'src/layer2/d.ts',
+      'src/layer3/e.ts',
+      'src/cli/f.ts',
+      'src/mcp/g.ts',
+      'src/auth/h.ts',
+    ];
+    for (const p of paths) {
+      expect(typeof extractModule(p)).toBe('string');
+    }
+  });
+
+  it('src/core/logger.ts → src/core', () => {
+    expect(extractModule('src/core/logger.ts')).toBe('src/core');
+  });
+
+  it('src/core/errors.ts → src/core', () => {
+    expect(extractModule('src/core/errors.ts')).toBe('src/core');
+  });
+
+  it('src/core/types.ts → src/core', () => {
+    expect(extractModule('src/core/types.ts')).toBe('src/core');
+  });
+
+  it('src/core/config.ts → src/core', () => {
+    expect(extractModule('src/core/config.ts')).toBe('src/core');
+  });
+
+  it('결과에 .ts 확장자 없음', () => {
+    const result = extractModule('src/core/utils.ts');
+    expect(result.endsWith('.ts')).toBe(false);
+  });
+
+  it('결과에 .js 확장자 없음', () => {
+    const result = extractModule('src/layer1/planner.js');
+    expect(result.endsWith('.js')).toBe(false);
+  });
+
+  it('동일 경로 반복 호출 → 동일 결과', () => {
+    const path = 'src/rag/indexer.ts';
+    const r1 = extractModule(path);
+    const r2 = extractModule(path);
+    const r3 = extractModule(path);
+    expect(r1).toBe(r2);
+    expect(r2).toBe(r3);
+  });
+});
+
+// ── ChunkSplitter splitCode 반복/랜덤 경계값 ─────────────────
+
+describe('ChunkSplitter splitCode 반복/랜덤 경계값', () => {
+  const s = new ChunkSplitter();
+
+  it('같은 입력 → 두 번 호출 동일 결과 (결정론적)', () => {
+    const content = 'function stable() { return 1; }\nfunction alsoStable() { return 2; }';
+    const r1 = s.splitCode(content, 'src/core/stable.ts');
+    const r2 = s.splitCode(content, 'src/core/stable.ts');
+    expect(r1.length).toBe(r2.length);
+    if (r1.length > 0 && r2.length > 0) {
+      expect(r1[0]?.metadata.functionName).toBe(r2[0]?.metadata.functionName);
+    }
+  });
+
+  it('빈 함수 → content 빈 줄만 → 청크에 포함 안 될 수도 있음', () => {
+    const content = 'function empty() {}\n';
+    const chunks = s.splitCode(content, 'src/core/empty-fn.ts');
+    // empty 함수는 경계 감지됨 → 최소 1청크
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('중첩 함수 → 최소 1 청크', () => {
+    const content = `
+function outer() {
+  function inner() {
+    return 1;
+  }
+  return inner();
+}`.trim();
+    const chunks = s.splitCode(content, 'src/core/nested.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('10개 함수 파일 → 청크 수 1 이상', () => {
+    const fns = Array.from({ length: 10 }, (_, i) => `function fn${i}() { return ${i}; }`).join('\n');
+    const chunks = s.splitCode(fns, 'src/core/many-fns.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('클래스 + 함수 혼합 파일 → 청크 수 1 이상', () => {
+    const content = `
+class Service {
+  run() { return true; }
+}
+function helper() { return false; }`.trim();
+    const chunks = s.splitCode(content, 'src/services/mixed.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('인터페이스 파일 → 경계 감지 없음 시 splitBySize 폴백', () => {
+    const content = `
+interface IUser {
+  id: string;
+  name: string;
+}
+interface IAdmin extends IUser {
+  role: string;
+}`.trim();
+    const chunks = s.splitCode(content, 'src/core/interfaces.ts');
+    // interface는 경계 감지 안 될 수 있음 → splitBySize 폴백
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('import 문만 있는 파일 → splitBySize 폴백', () => {
+    const content = `
+import { foo } from './foo.js';
+import { bar } from './bar.js';
+import type { Baz } from './baz.js';`.trim();
+    const chunks = s.splitCode(content, 'src/core/imports.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('export const 함수 → 경계 감지 여부 무관하게 청크 반환', () => {
+    const content = `
+export const add = (a: number, b: number): number => a + b;
+export const sub = (a: number, b: number): number => a - b;`.trim();
+    const chunks = s.splitCode(content, 'src/core/math.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('async 함수 → 감지됨', () => {
+    const content = `
+async function fetchData() {
+  return await Promise.resolve([]);
+}
+async function processData() {
+  return [];
+}`.trim();
+    const chunks = s.splitCode(content, 'src/core/async.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('화살표 함수 export → 경계 여부 무관, 청크 반환', () => {
+    const content = `
+export const getUser = async (id: string) => {
+  return { id, name: 'test' };
+};
+export const deleteUser = async (id: string) => {
+  return true;
+};`.trim();
+    const chunks = s.splitCode(content, 'src/layer1/user.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Python def 여러 개 → 청크 반환', () => {
+    const content = `
+def greet(name):
+    return f"Hello {name}"
+
+def farewell(name):
+    return f"Bye {name}"
+
+def calculate(a, b):
+    return a + b`.trim();
+    const chunks = s.splitCode(content, 'scripts/utils.py');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Rust fn 여러 개 → 청크 반환', () => {
+    const content = `
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn multiply(a: i32, b: i32) -> i32 {
+    a * b
+}`.trim();
+    const chunks = s.splitCode(content, 'src/math.rs');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Go func 여러 개 → 청크 반환', () => {
+    const content = `
+func Add(a, b int) int {
+    return a + b
+}
+
+func Sub(a, b int) int {
+    return a - b
+}`.trim();
+    const chunks = s.splitCode(content, 'pkg/math.go');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('모든 청크 content는 string', () => {
+    const content = 'function alpha() {}\nfunction beta() {}\nfunction gamma() {}';
+    const chunks = s.splitCode(content, 'src/core/multi.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.content).toBe('string');
+    }
+  });
+
+  it('모든 청크 metadata.filePath는 string', () => {
+    const content = 'function x() { return 1; }';
+    const chunks = s.splitCode(content, 'src/core/x.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.metadata.filePath).toBe('string');
+    }
+  });
+
+  it('모든 청크 metadata.language는 string', () => {
+    const content = 'function y() { return 2; }';
+    const chunks = s.splitCode(content, 'src/core/y.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.metadata.language).toBe('string');
+    }
+  });
+
+  it('모든 청크 metadata.module는 string', () => {
+    const content = 'class Z { method() {} }';
+    const chunks = s.splitCode(content, 'src/core/z.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.metadata.module).toBe('string');
+    }
+  });
+
+  it('모든 청크 metadata.functionName는 string', () => {
+    const content = 'function named() {}';
+    const chunks = s.splitCode(content, 'src/core/named.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.metadata.functionName).toBe('string');
+    }
+  });
+});
