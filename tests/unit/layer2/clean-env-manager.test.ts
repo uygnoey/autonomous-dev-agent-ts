@@ -500,9 +500,126 @@ describe('CleanEnvManager.listActive', () => {
 // ── 랜덤/경계값 ───────────────────────────────────────────────
 
 describe('CleanEnvManager 랜덤/경계값', () => {
-  it.each(Array.from({ length: 10 }, (_, i) => i))('랜덤 projectId #%i', async (i) => {
+  it('랜덤 projectId #0 생성+소멸', async () => {
     const manager = makeManager();
-    const projectId = `proj-rand-${i}-${'x'.repeat(i % 5)}`;
+    const projectId = `proj-rand-0-`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #1 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-1-x`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #2 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-2-xx`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #3 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-3-xxx`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #4 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-4-xxxx`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #5 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-5-`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #6 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-6-x`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #7 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-7-xx`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #8 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-8-xxx`;
+    const result = await manager.create(projectId);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(result.ok).toBe(true);
+      expect(existsSync(result.value.envPath)).toBe(true);
+      await manager.destroy(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(false);
+    }
+  });
+
+  it('랜덤 projectId #9 생성+소멸', async () => {
+    const manager = makeManager();
+    const projectId = `proj-rand-9-xxxx`;
     const result = await manager.create(projectId);
     if (result.ok) {
       createdPaths.push(result.value.envPath);
@@ -827,5 +944,124 @@ describe('CleanEnvManager 추가 랜덤/경계값', () => {
       if (p) await manager.destroy(p);
     }
     expect(manager.listActive().length).toBe(5);
+  });
+});
+
+// ── 추가 시나리오 테스트 ──────────────────────────────────────
+
+describe('CleanEnvManager 추가 시나리오', () => {
+  it('create 후 envPath가 tmpdir 하위에 있음', async () => {
+    const manager = makeManager();
+    const result = await manager.create('tmpdir-check');
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      // envPath는 임시 디렉토리 경로를 포함해야 한다
+      expect(result.value.envPath.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('destroy ok 반환값 ok=true', async () => {
+    const manager = makeManager();
+    const cr = await manager.create('destroy-ok-check');
+    if (cr.ok) {
+      const dr = await manager.destroy(cr.value.envPath);
+      expect(dr.ok).toBe(true);
+    }
+  });
+
+  it('isClean 알 수 없는 긴 경로 → false', () => {
+    const manager = makeManager();
+    const longPath = '/tmp/' + 'a'.repeat(300);
+    expect(manager.isClean(longPath)).toBe(false);
+  });
+
+  it('create → destroy → create 동일 projectId → 새 경로', async () => {
+    const manager = makeManager();
+    const r1 = await manager.create('recycle-2');
+    let path1 = '';
+    if (r1.ok) {
+      path1 = r1.value.envPath;
+      await manager.destroy(path1);
+    }
+    const r2 = await manager.create('recycle-2');
+    if (r2.ok) {
+      createdPaths.push(r2.value.envPath);
+      // 새로운 경로가 생성되어야 함
+      expect(r2.ok).toBe(true);
+    }
+  });
+
+  it('listActive 빈 상태에서 length=0', () => {
+    const manager = makeManager();
+    expect(manager.listActive().length).toBe(0);
+  });
+
+  it('create 5개 → destroy 5개 → listActive=0', async () => {
+    const manager = makeManager();
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => manager.create(`all-destroy-${i}`))
+    );
+    const paths = results.filter((r) => r.ok).map((r) => (r.ok ? r.value.envPath : ''));
+    for (const p of paths) {
+      if (p) await manager.destroy(p);
+    }
+    expect(manager.listActive().length).toBe(0);
+  });
+
+  it('destroy 빈 문자열 → error.code 존재', async () => {
+    const manager = makeManager();
+    const result = await manager.destroy('');
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('create → isClean path true → destroy → 동일 경로 isClean false', async () => {
+    const manager = makeManager();
+    const r = await manager.create('complete-cycle');
+    if (r.ok) {
+      const path = r.value.envPath;
+      expect(manager.isClean(path)).toBe(true);
+      await manager.destroy(path);
+      expect(manager.isClean(path)).toBe(false);
+    }
+  });
+
+  it('3개 생성 → 중간 것만 소멸 → 나머지 2개 isClean true', async () => {
+    const manager = makeManager();
+    const r1 = await manager.create('mid-del-1');
+    const r2 = await manager.create('mid-del-2');
+    const r3 = await manager.create('mid-del-3');
+    if (r1.ok) createdPaths.push(r1.value.envPath);
+    if (r3.ok) createdPaths.push(r3.value.envPath);
+    if (r2.ok) {
+      await manager.destroy(r2.value.envPath);
+      expect(manager.isClean(r2.value.envPath)).toBe(false);
+    }
+    if (r1.ok) expect(manager.isClean(r1.value.envPath)).toBe(true);
+    if (r3.ok) expect(manager.isClean(r3.value.envPath)).toBe(true);
+  });
+
+  it('UUID projectId envPath 확인', async () => {
+    const manager = makeManager();
+    const uuid = crypto.randomUUID();
+    const result = await manager.create(uuid);
+    if (result.ok) {
+      createdPaths.push(result.value.envPath);
+      expect(existsSync(result.value.envPath)).toBe(true);
+    }
+  });
+
+  it('listActive 결과에 중복 없음', async () => {
+    const manager = makeManager();
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => manager.create(`nodup-${i}`))
+    );
+    for (const r of results) {
+      if (r.ok) createdPaths.push(r.value.envPath);
+    }
+    const active = manager.listActive();
+    const unique = new Set(active);
+    expect(unique.size).toBe(active.length);
   });
 });

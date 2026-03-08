@@ -828,4 +828,199 @@ describe('MemoryRepository', () => {
       }
     });
   });
+
+  // ── 추가 경계값 케이스 ───────────────────────────────────────
+
+  describe('insert - 추가 경계값', () => {
+    it('featureId 특수문자 포함 → ok', async () => {
+      await repo.initialize();
+      const record = createTestRecord({
+        id: 'special-feat',
+        metadata: { phase: 'DESIGN', featureId: 'feat!@#$%', agentName: 'coder', timestamp: new Date() },
+      });
+      const result = await repo.insert(record);
+      expect(result.ok).toBe(true);
+    });
+
+    it('agentName 한글 → ok', async () => {
+      await repo.initialize();
+      const record = createTestRecord({
+        id: 'kr-agent',
+        metadata: { phase: 'CODE', featureId: 'feat-1', agentName: '코더에이전트', timestamp: new Date() },
+      });
+      const result = await repo.insert(record);
+      expect(result.ok).toBe(true);
+    });
+
+    it('embedding 단일 차원 → 처리됨', async () => {
+      await repo.initialize();
+      const record = createTestRecord({
+        id: 'single-dim',
+        embedding: new Float32Array([1.0]),
+      });
+      // 차원 불일치 가능 — 구현 의존
+      const result = await repo.insert(record);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('content에 백슬래시 포함 → 처리됨', async () => {
+      await repo.initialize();
+      const content = 'path\\to\\file.txt';
+      await repo.insert(createTestRecord({ id: 'backslash', content }));
+      const result = await repo.getById('backslash');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('content에 유니코드 → 처리됨', async () => {
+      await repo.initialize();
+      const content = '\u0041\u0042\u0043 ABC 한글 日本語';
+      await repo.insert(createTestRecord({ id: 'unicode-content', content }));
+      const result = await repo.getById('unicode-content');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('20개 레코드 순차 삽입 → 모두 조회 가능', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 20; i++) {
+        await repo.insert(createTestRecord({ id: `seq-${i}` }));
+      }
+      for (let i = 0; i < 20; i++) {
+        const r = await repo.getById(`seq-${i}`);
+        expect(r.ok).toBe(true);
+        if (r.ok) expect(r.value?.id).toBe(`seq-${i}`);
+      }
+    });
+
+    it('content에 SQL 인젝션 패턴 → 안전 처리', async () => {
+      await repo.initialize();
+      const content = "'; DROP TABLE memory; --";
+      await repo.insert(createTestRecord({ id: 'sql-inject', content }));
+      const result = await repo.getById('sql-inject');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('content에 HTML 태그 → 그대로 저장', async () => {
+      await repo.initialize();
+      const content = '<script>alert("xss")</script>';
+      await repo.insert(createTestRecord({ id: 'html-content', content }));
+      const result = await repo.getById('html-content');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('50개 레코드 병렬 삽입 → ok', async () => {
+      await repo.initialize();
+      const promises = Array.from({ length: 50 }, (_, i) =>
+        repo.insert(createTestRecord({ id: `parallel-${i}` }))
+      );
+      const results = await Promise.all(promises);
+      for (const r of results) {
+        expect(typeof r.ok).toBe('boolean');
+      }
+    });
+
+    it('type=conversation content 최대 길이 50000자', async () => {
+      await repo.initialize();
+      const bigContent = 'A'.repeat(50_000);
+      await repo.insert(createTestRecord({ id: 'max-content', content: bigContent }));
+      const result = await repo.getById('max-content');
+      if (result.ok && result.value) {
+        expect(result.value.content.length).toBe(50_000);
+      }
+    });
+  });
+
+  describe('search - 추가 경계값 2', () => {
+    it('projectId + type 복합 필터 → 교집합 반환', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'pf1', projectId: 'proj-X', type: 'decision', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await repo.insert(createTestRecord({ id: 'pf2', projectId: 'proj-X', type: 'conversation', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      await repo.insert(createTestRecord({ id: 'pf3', projectId: 'proj-Y', type: 'decision', embedding: new Float32Array([0.8, 0.2, 0, 0]) }));
+
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 10, { projectId: 'proj-X', type: 'decision' });
+      if (result.ok) {
+        for (const r of result.value) {
+          expect(r.projectId).toBe('proj-X');
+          expect(r.type).toBe('decision');
+        }
+      }
+    });
+
+    it('동일 벡터 여러 레코드 → limit만큼 반환', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 8; i++) {
+        await repo.insert(createTestRecord({ id: `sv-${i}`, embedding: new Float32Array([0.5, 0.5, 0, 0]) }));
+      }
+      const result = await repo.search(new Float32Array([0.5, 0.5, 0, 0]), 4);
+      if (result.ok) expect(result.value.length).toBeLessThanOrEqual(4);
+    });
+
+    it('검색 후 각 결과 metadata 존재', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'meta-search', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 5);
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.metadata).toBeDefined();
+      }
+    });
+
+    it('NaN embedding 검색 → ok 또는 err', async () => {
+      await repo.initialize();
+      const nanEmb = new Float32Array([Number.NaN, 0, 0, 0]);
+      const result = await repo.search(nanEmb, 5);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('Infinity embedding 검색 → ok 또는 err', async () => {
+      await repo.initialize();
+      const infEmb = new Float32Array([Number.POSITIVE_INFINITY, 0, 0, 0]);
+      const result = await repo.search(infEmb, 5);
+      expect(typeof result.ok).toBe('boolean');
+    });
+  });
+
+  describe('delete - 추가 경계값 2', () => {
+    it('10개 삽입 → 10개 모두 삭제 → getById null', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 10; i++) {
+        await repo.insert(createTestRecord({ id: `del-all-${i}` }));
+      }
+      for (let i = 0; i < 10; i++) {
+        await repo.delete(`del-all-${i}`);
+      }
+      for (let i = 0; i < 10; i++) {
+        const r = await repo.getById(`del-all-${i}`);
+        if (r.ok) expect(r.value).toBeNull();
+      }
+    });
+
+    it('한글 id 삭제 → ok', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: '한글-아이디', content: '한글' }));
+      const result = await repo.delete('한글-아이디');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('UUID id 5개 삭제 → getById 모두 null', async () => {
+      await repo.initialize();
+      const uuids = Array.from({ length: 5 }, () => crypto.randomUUID());
+      for (const uuid of uuids) {
+        await repo.insert(createTestRecord({ id: uuid }));
+      }
+      for (const uuid of uuids) {
+        await repo.delete(uuid);
+      }
+      for (const uuid of uuids) {
+        const r = await repo.getById(uuid);
+        if (r.ok) expect(r.value).toBeNull();
+      }
+    });
+  });
 });

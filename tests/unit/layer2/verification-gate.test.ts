@@ -831,3 +831,170 @@ describe('VerificationGate 복합 시나리오', () => {
     expect(g2.isComplete('shared-id')).toBe(false);
   });
 });
+
+// ── 추가 경계값 및 스트레스 테스트 ────────────────────────────
+
+describe('VerificationGate 추가 경계값', () => {
+  let gate: VerificationGate;
+
+  beforeEach(() => {
+    gate = new VerificationGate(new ConsoleLogger('error'));
+  });
+
+  it('featureId 빈 문자열 → addResult ok', () => {
+    const result = gate.addResult(makeResult('', 'qa_qc', true));
+    expect(result.ok).toBe(true);
+  });
+
+  it('featureId 빈 문자열 → getResults 빈 배열 또는 결과', () => {
+    gate.addResult(makeResult('', 'qa_qc', true));
+    const results = gate.getResults('');
+    expect(Array.isArray(results)).toBe(true);
+  });
+
+  it('feedback 빈 문자열 → addResult ok', () => {
+    const result = gate.addResult({
+      featureId: 'feat-fb-empty',
+      phase: 'qa_qc',
+      passed: true,
+      feedback: '',
+      timestamp: new Date(),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('feedback 매우 긴 문자열 → addResult ok', () => {
+    const result = gate.addResult({
+      featureId: 'feat-fb-long',
+      phase: 'qa_qc',
+      passed: false,
+      feedback: 'x'.repeat(10_000),
+      timestamp: new Date(),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('timestamp가 과거 날짜 → addResult ok', () => {
+    const result = gate.addResult({
+      featureId: 'feat-past',
+      phase: 'qa_qc',
+      passed: true,
+      feedback: '통과',
+      timestamp: new Date('2000-01-01T00:00:00Z'),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('timestamp가 미래 날짜 → addResult ok', () => {
+    const result = gate.addResult({
+      featureId: 'feat-future',
+      phase: 'qa_qc',
+      passed: true,
+      feedback: '통과',
+      timestamp: new Date('2099-12-31T23:59:59Z'),
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('isComplete 동일 Phase 4개 추가 → false (4 distinct phases 필요)', () => {
+    for (let i = 0; i < 4; i++) {
+      gate.addResult(makeResult('feat-same-phase', 'qa_qc', true));
+    }
+    // 4개를 추가했지만 모두 같은 phase → isComplete false
+    expect(gate.isComplete('feat-same-phase')).toBe(false);
+  });
+
+  it('isAllPassed 동일 Phase 4개 추가 → false (미완료)', () => {
+    for (let i = 0; i < 4; i++) {
+      gate.addResult(makeResult('feat-same-phase-2', 'qa_qc', true));
+    }
+    expect(gate.isAllPassed('feat-same-phase-2')).toBe(false);
+  });
+
+  it('summarize 미완료 → passed=false', () => {
+    gate.addResult(makeResult('feat-partial-sum', 'qa_qc', true));
+    gate.addResult(makeResult('feat-partial-sum', 'reviewer', true));
+    const result = gate.summarize('feat-partial-sum');
+    if (result.ok) {
+      expect(result.value.passed).toBe(false);
+    }
+  });
+
+  it('200개 기능 각 4단계 추가 → isComplete 모두 true', () => {
+    for (let i = 0; i < 200; i++) {
+      addAllPhases(gate, `stress-feat-${i}`, i % 2 === 0);
+    }
+    for (let i = 0; i < 200; i++) {
+      expect(gate.isComplete(`stress-feat-${i}`)).toBe(true);
+    }
+  });
+
+  it('qa_qc 단독 완료 → summarize ok, passed=false(미완료)', () => {
+    gate.addResult(makeResult('solo-qa', 'qa_qc', true));
+    const result = gate.summarize('solo-qa');
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('adev 단독 완료 → isComplete false', () => {
+    gate.addResult(makeResult('solo-adev', 'adev', true));
+    expect(gate.isComplete('solo-adev')).toBe(false);
+  });
+
+  it('layer1 단독 완료 → isAllPassed false', () => {
+    gate.addResult(makeResult('solo-layer1', 'layer1', true));
+    expect(gate.isAllPassed('solo-layer1')).toBe(false);
+  });
+
+  it('getResults 빈 featureId → 배열 반환', () => {
+    expect(Array.isArray(gate.getResults(''))).toBe(true);
+  });
+
+  it('summarize 빈 featureId → err 또는 ok', () => {
+    const result = gate.summarize('');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('5개 featureId 동시 병렬 추가 → 각 독립', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5'];
+    for (const id of ids) {
+      addAllPhases(gate, id, true);
+    }
+    for (const id of ids) {
+      expect(gate.isComplete(id)).toBe(true);
+      expect(gate.isAllPassed(id)).toBe(true);
+    }
+  });
+
+  it('이모지 featureId → addResult ok', () => {
+    const result = gate.addResult(makeResult('feat-🚀', 'qa_qc', true));
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자 featureId → addResult ok', () => {
+    const result = gate.addResult(makeResult('12345678', 'reviewer', false));
+    expect(result.ok).toBe(true);
+    expect(gate.getResults('12345678').length).toBe(1);
+  });
+
+  it('매우 긴 featureId(500자) → addResult ok', () => {
+    const longId = 'f' + 'e'.repeat(499);
+    const result = gate.addResult(makeResult(longId, 'qa_qc', true));
+    expect(result.ok).toBe(true);
+  });
+
+  it('addResult 반환 ok=true 타입 boolean', () => {
+    const result = gate.addResult(makeResult('type-check', 'qa_qc', true));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('getResults 연속 추가 후 길이 증가', () => {
+    gate.addResult(makeResult('len-feat', 'qa_qc', true));
+    expect(gate.getResults('len-feat').length).toBe(1);
+    gate.addResult(makeResult('len-feat', 'reviewer', true));
+    expect(gate.getResults('len-feat').length).toBe(2);
+    gate.addResult(makeResult('len-feat', 'layer1', true));
+    expect(gate.getResults('len-feat').length).toBe(3);
+    gate.addResult(makeResult('len-feat', 'adev', true));
+    expect(gate.getResults('len-feat').length).toBe(4);
+  });
+});

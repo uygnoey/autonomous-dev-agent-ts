@@ -828,4 +828,181 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const stopResult = manager.stopAll();
     expect(stopResult.ok).toBe(true);
   });
+
+  it('McpRegistry: 이름에 숫자 포함 서버 등록', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({
+      name: 'server-42',
+      command: 'npx',
+      args: [],
+      enabled: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(registry.getServer('server-42')?.name).toBe('server-42');
+  });
+
+  it('McpRegistry: env 필드 없이 등록 → ok', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({
+      name: 'no-env-server',
+      command: 'node',
+      args: ['index.js'],
+      enabled: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('McpRegistry: args 빈 배열로 등록 → ok', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({
+      name: 'no-args-server',
+      command: 'node',
+      args: [],
+      enabled: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('McpRegistry: args 10개 인자로 등록 → ok', () => {
+    const registry = new McpRegistry(logger);
+    const args = Array.from({ length: 10 }, (_, i) => `--arg${i}`);
+    const result = registry.register({
+      name: 'many-args-server',
+      command: 'node',
+      args,
+      enabled: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(registry.getServer('many-args-server')?.args).toHaveLength(10);
+  });
+
+  it('McpRegistry: 100개 서버 등록 후 listServers 정합성', () => {
+    const registry = new McpRegistry(logger);
+    for (let i = 0; i < 100; i++) {
+      registry.register({
+        name: `srv-${i}`,
+        command: 'node',
+        args: [],
+        enabled: true,
+      });
+    }
+    expect(registry.listServers()).toHaveLength(100);
+  });
+
+  it('McpLoader: mcp.json servers 배열에 혼합(enabled/disabled) → 모두 로드', async () => {
+    const loader = new McpLoader(logger);
+    const mixedDir = join(tmpDir, 'mixed-enabled-mcp');
+    await writeMcpConfig(mixedDir, 'mixed-srv', [
+      { name: 'srv-a', command: 'npx', args: [], enabled: true },
+      { name: 'srv-b', command: 'npx', args: [], enabled: false },
+      { name: 'srv-c', command: 'npx', args: [], enabled: true },
+    ]);
+    const result = await loader.loadFromDirectory(mixedDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBe(3);
+    }
+  });
+
+  it('McpLoader: loadAndMerge 글로벌+프로젝트 모두 비어 있을 때 → 빈 배열', async () => {
+    const loader = new McpLoader(logger);
+    const emptyGlobal = join(tmpDir, 'empty-both-global');
+    const emptyProject = join(tmpDir, 'empty-both-project');
+    await Bun.write(join(emptyGlobal, '.keep'), '');
+    await Bun.write(join(emptyProject, '.keep'), '');
+    const result = await loader.loadAndMerge(emptyGlobal, emptyProject);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('McpManager: startServer 후 listTools는 배열', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'list-tools-after-start-mcp');
+    await writeMcpConfig(mcpDir, 'tool-srv', [
+      { name: 'tool-srv', command: 'npx', args: [], enabled: true },
+    ]);
+    await manager.initialize(mcpDir);
+    manager.startServer('tool-srv');
+    expect(Array.isArray(manager.listTools())).toBe(true);
+  });
+
+  it('McpManager: stopAll 후 healthCheck 모두 stopped', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'stopall-health-mcp');
+    await writeMcpConfig(mcpDir, 'srv-a', [
+      { name: 'srv-a', command: 'npx', args: [], enabled: true },
+    ]);
+    await writeMcpConfig(mcpDir, 'srv-b', [
+      { name: 'srv-b', command: 'npx', args: [], enabled: true },
+    ]);
+    await manager.initialize(mcpDir);
+    manager.startServer('srv-a');
+    manager.startServer('srv-b');
+    manager.stopAll();
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(health.value['srv-a']).toBe('stopped');
+      expect(health.value['srv-b']).toBe('stopped');
+    }
+  });
+
+  it('McpManager: 초기화 후 healthCheck → 모두 stopped', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'init-health-mcp');
+    await writeMcpConfig(mcpDir, 'g-srv', [
+      { name: 'g-srv', command: 'npx', args: [], enabled: true },
+    ]);
+    await manager.initialize(mcpDir);
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(health.value['g-srv']).toBe('stopped');
+    }
+  });
+
+  it('McpRegistry: env에 빈 객체로 등록 → ok', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({
+      name: 'empty-env-srv',
+      command: 'node',
+      args: [],
+      enabled: true,
+      env: {},
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('McpRegistry: 여러 unregister → listServers 정합성', () => {
+    const registry = new McpRegistry(logger);
+    for (let i = 0; i < 10; i++) {
+      registry.register({ name: `multi-unreg-${i}`, command: 'node', args: [], enabled: true });
+    }
+    for (let i = 0; i < 5; i++) {
+      registry.unregister(`multi-unreg-${i}`);
+    }
+    expect(registry.listServers()).toHaveLength(5);
+  });
+
+  it('McpManager: getStatus 초기화 후 등록 서버 stopped', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'status-init-mcp');
+    await writeMcpConfig(mcpDir, 'status-srv', [
+      { name: 'status-srv', command: 'npx', args: [], enabled: true },
+    ]);
+    await manager.initialize(mcpDir);
+    expect(manager.getStatus('status-srv')).toBe('stopped');
+  });
 });
