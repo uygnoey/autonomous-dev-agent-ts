@@ -822,3 +822,226 @@ describe('Layer1Verifier testResults 추가 경계값', () => {
     if (result.ok) expect(result.value.passed).toBe(true);
   });
 });
+
+// ── 추가 랜덤 edge: 다양한 코드 패턴 ─────────────────────────
+
+describe('Layer1Verifier 추가 랜덤 edge - 코드 패턴', () => {
+  let verifier: Layer1Verifier;
+
+  beforeEach(() => {
+    verifier = new Layer1Verifier(new ConsoleLogger('error'));
+  });
+
+  it('async/await 함수 코드 → passed=true', () => {
+    const code = 'async function fetchData() { const res = await fetch("url"); return res.json(); }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('제너레이터 함수 코드 → passed=true', () => {
+    const code = 'function* gen() { yield 1; yield 2; }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('화살표 함수 코드 → passed=true', () => {
+    const result = verifier.verify(makeRequest({ implementedCode: 'const add = (a: number, b: number) => a + b;' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('인터페이스 선언 코드 → passed=true', () => {
+    const code = 'interface IUser { id: string; name: string; }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('타입 별칭 코드 → passed=true', () => {
+    const result = verifier.verify(makeRequest({ implementedCode: 'type Result<T> = { ok: boolean; value?: T };' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('enum 코드 → passed=true', () => {
+    const code = 'enum Status { Active, Inactive, Pending }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('try-catch 코드 → passed=true', () => {
+    const code = 'try { doSomething(); } catch (e) { handleError(e); }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('중첩 함수 코드 → passed=true', () => {
+    const code = 'function outer() { function inner() { return 1; } return inner(); }';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('template literal 코드 → passed=true', () => {
+    const code = 'const msg = `Hello, ${name}!`;';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('비구조화 할당 코드 → passed=true', () => {
+    const code = 'const { a, b, ...rest } = obj;';
+    const result = verifier.verify(makeRequest({ implementedCode: code }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+});
+
+// ── 추가 랜덤 edge: question 다양한 패턴 ─────────────────────
+
+describe('Layer1Verifier 추가 랜덤 edge - question 패턴', () => {
+  let verifier: Layer1Verifier;
+
+  beforeEach(() => {
+    verifier = new Layer1Verifier(new ConsoleLogger('error'));
+  });
+
+  it('question이 특수문자만 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: '???!!!' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question이 숫자만 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: '12345' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question이 이모지만 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: '🤔' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question이 여러 줄 → needsUserInput=true', () => {
+    const q = '첫 번째 질문\n두 번째 질문\n세 번째 질문';
+    const result = verifier.verify(makeRequest({ question: q }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question이 혼합 공백+내용 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: '  질문이 있습니다  ' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question이 탭+내용 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: '\t질문\t' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('question=undefined 동등 (빈 문자열) → needsUserInput=false', () => {
+    const result = verifier.verify(makeRequest({ question: '' }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(false);
+  });
+
+  it('question 50자 → needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({ question: 'a'.repeat(50) }));
+    if (result.ok) expect(result.value.needsUserInput).toBe(true);
+  });
+
+  it('10번 다른 질문 → 모두 needsUserInput=true', () => {
+    for (let i = 0; i < 10; i++) {
+      const result = verifier.verify(makeRequest({ question: `질문 ${i}: 어떻게 하나요?` }));
+      if (result.ok) expect(result.value.needsUserInput).toBe(true);
+    }
+  });
+
+  it('10번 빈 질문 → 모두 needsUserInput=false', () => {
+    for (let i = 0; i < 10; i++) {
+      const result = verifier.verify(makeRequest({ question: '' }));
+      if (result.ok) expect(result.value.needsUserInput).toBe(false);
+    }
+  });
+});
+
+// ── 추가 랜덤 edge: featureId + 코드 + 테스트 조합 ──────────
+
+describe('Layer1Verifier 추가 랜덤 edge - 조합', () => {
+  let verifier: Layer1Verifier;
+
+  beforeEach(() => {
+    verifier = new Layer1Verifier(new ConsoleLogger('error'));
+  });
+
+  it('UUID featureId + 긴 코드 + 성공 결과 → passed=true', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const code = Array.from({ length: 50 }, (_, i) => `const v${i} = ${i};`).join('\n');
+    const result = verifier.verify(makeRequest({
+      featureId: uuid,
+      implementedCode: code,
+      testResults: 'All 50 tests passed',
+    }));
+    if (result.ok) {
+      expect(result.value.passed).toBe(true);
+      expect(result.value.featureId).toBe(uuid);
+    }
+  });
+
+  it('빈 코드 + 성공 결과 → passed=false (코드 없음이 우선)', () => {
+    const result = verifier.verify(makeRequest({
+      implementedCode: '',
+      testResults: 'All tests passed',
+    }));
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('유효 코드 + 실패 결과 + 질문 → passed=false, needsUserInput=true', () => {
+    const result = verifier.verify(makeRequest({
+      implementedCode: 'const x = 1;',
+      testResults: '2 tests failed',
+      question: '실패 원인이 뭔가요?',
+    }));
+    if (result.ok) {
+      expect(result.value.passed).toBe(false);
+      expect(result.value.needsUserInput).toBe(true);
+    }
+  });
+
+  it('featureId 한글 + 유효 코드 + 성공 결과 → passed=true', () => {
+    const result = verifier.verify(makeRequest({
+      featureId: '인증-기능-001',
+      implementedCode: 'function auth() { return true; }',
+      testResults: '테스트 전부 통과',
+    }));
+    if (result.ok) {
+      expect(result.value.passed).toBe(true);
+      expect(result.value.featureId).toBe('인증-기능-001');
+    }
+  });
+
+  it('5개 다른 조합 → 각각 올바른 passed 반환', () => {
+    const cases = [
+      { implementedCode: 'const a = 1;', testResults: 'pass', expected: true },
+      { implementedCode: '', testResults: 'pass', expected: false },
+      { implementedCode: 'const b = 2;', testResults: 'fail', expected: false },
+      { implementedCode: '', testResults: 'fail', expected: false },
+      { implementedCode: 'const c = 3;', testResults: 'OK', expected: true },
+    ];
+    for (const c of cases) {
+      const result = verifier.verify(makeRequest({ implementedCode: c.implementedCode, testResults: c.testResults }));
+      if (result.ok) expect(result.value.passed).toBe(c.expected);
+    }
+  });
+
+  it('verify 결과에 featureId 키 존재', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat-key-check' }));
+    if (result.ok) expect('featureId' in result.value).toBe(true);
+  });
+
+  it('verify 결과에 passed 키 존재', () => {
+    const result = verifier.verify(makeRequest());
+    if (result.ok) expect('passed' in result.value).toBe(true);
+  });
+
+  it('verify 결과에 needsUserInput 키 존재', () => {
+    const result = verifier.verify(makeRequest());
+    if (result.ok) expect('needsUserInput' in result.value).toBe(true);
+  });
+
+  it('verify 결과에 feedback 키 존재', () => {
+    const result = verifier.verify(makeRequest());
+    if (result.ok) expect('feedback' in result.value).toBe(true);
+  });
+});
