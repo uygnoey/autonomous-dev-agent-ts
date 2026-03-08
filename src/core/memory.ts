@@ -109,14 +109,18 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
   }
 
   async insert(record: MemoryRecord): Promise<Result<void>> {
+    const db = this.db;
+    if (this.table === null && db === null) {
+      return err(
+        new RagError('rag_db_error', '초기화되지 않은 상태입니다. initialize()를 먼저 호출하세요.'),
+      );
+    }
     return this.safeExecute('insert', async () => {
       const flat = toFlat(record) as unknown as Record<string, unknown>;
 
       if (this.table === null) {
-        if (this.db === null) {
-          throw new Error('초기화되지 않은 상태입니다. initialize()를 먼저 호출하세요.');
-        }
-        this.table = await this.db.createTable('memory', [flat]);
+        // WHY: db is guaranteed non-null by the guard above
+        this.table = await (db as lancedb.Connection).createTable('memory', [flat]);
       } else {
         await this.table.add([flat]);
       }
@@ -162,11 +166,11 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
   }
 
   async update(id: string, partial: Partial<MemoryRecord>): Promise<Result<void>> {
+    const table = this.table;
+    if (table === null) {
+      return err(new RagError('rag_db_error', '테이블이 초기화되지 않았습니다.'));
+    }
     return this.safeExecute('update', async () => {
-      if (this.table === null) {
-        throw new Error('테이블이 초기화되지 않았습니다.');
-      }
-
       const updates: Record<string, string> = {};
 
       if (partial.content !== undefined) {
@@ -177,7 +181,7 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.table.update(updates, {
+        await table.update(updates, {
           where: `id = '${escapeString(id)}'`,
         });
       }
@@ -185,11 +189,12 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
   }
 
   async delete(id: string): Promise<Result<void>> {
+    const table = this.table;
+    if (table === null) {
+      return err(new RagError('rag_db_error', '테이블이 초기화되지 않았습니다.'));
+    }
     return this.safeExecute('delete', async () => {
-      if (this.table === null) {
-        throw new Error('테이블이 초기화되지 않았습니다.');
-      }
-      await this.table.delete(`id = '${escapeString(id)}'`);
+      await table.delete(`id = '${escapeString(id)}'`);
     });
   }
 

@@ -127,14 +127,18 @@ export class DesignDecisionRepository implements VectorRepository<DesignDecision
    * @param record - 삽입할 DesignDecision / DesignDecision to insert
    */
   async insert(record: DesignDecision): Promise<Result<void>> {
+    const db = this.db;
+    if (this.table === null && db === null) {
+      return err(
+        new RagError('rag_db_error', '초기화되지 않은 상태입니다. initialize()를 먼저 호출하세요.'),
+      );
+    }
     return this.safeExecute('insert', async () => {
       const flat = toFlat(record) as unknown as Record<string, unknown>;
 
       if (this.table === null) {
-        if (this.db === null) {
-          throw new Error('초기화되지 않은 상태입니다. initialize()를 먼저 호출하세요.');
-        }
-        this.table = await this.db.createTable(DESIGN_DECISIONS_TABLE, [flat]);
+        // WHY: db is guaranteed non-null by the guard above
+        this.table = await (db as lancedb.Connection).createTable(DESIGN_DECISIONS_TABLE, [flat]);
       } else {
         await this.table.add([flat]);
       }
@@ -199,11 +203,11 @@ export class DesignDecisionRepository implements VectorRepository<DesignDecision
    * @param partial - 업데이트할 필드 / Fields to update
    */
   async update(id: string, partial: Partial<DesignDecision>): Promise<Result<void>> {
+    const table = this.table;
+    if (table === null) {
+      return err(new RagError('rag_db_error', '테이블이 초기화되지 않았습니다.'));
+    }
     return this.safeExecute('update', async () => {
-      if (this.table === null) {
-        throw new Error('테이블이 초기화되지 않았습니다.');
-      }
-
       const updates: Record<string, string> = {};
 
       if (partial.decision !== undefined) {
@@ -214,7 +218,7 @@ export class DesignDecisionRepository implements VectorRepository<DesignDecision
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.table.update(updates, {
+        await table.update(updates, {
           where: `id = '${escapeString(id)}'`,
         });
       }
@@ -227,11 +231,12 @@ export class DesignDecisionRepository implements VectorRepository<DesignDecision
    * @param id - 삭제할 레코드 ID / Record ID to delete
    */
   async delete(id: string): Promise<Result<void>> {
+    const table = this.table;
+    if (table === null) {
+      return err(new RagError('rag_db_error', '테이블이 초기화되지 않았습니다.'));
+    }
     return this.safeExecute('delete', async () => {
-      if (this.table === null) {
-        throw new Error('테이블이 초기화되지 않았습니다.');
-      }
-      await this.table.delete(`id = '${escapeString(id)}'`);
+      await table.delete(`id = '${escapeString(id)}'`);
     });
   }
 

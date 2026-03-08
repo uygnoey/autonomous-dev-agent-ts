@@ -2,33 +2,27 @@
  * V2 Session API Executor / Claude Agent SDK V2 Session 기반 에이전트 실행기
  *
  * @description
- * KR: @anthropic-ai/claude-code의 unstable_v2_createSession, unstable_v2_prompt를 사용하여
- *     AgentExecutor 인터페이스를 구현한다. Agent Teams 환경변수 설정, 세션 스트림 관리,
- *     이벤트 매핑을 담당한다.
- * EN: Implements AgentExecutor using unstable_v2_createSession and unstable_v2_prompt.
+ * KR: @anthropic-ai/sdk의 Messages API를 사용하여 AgentExecutor 인터페이스를 구현한다.
+ *     Agent Teams 환경변수 설정, 세션 스트림 관리, 이벤트 매핑을 담당한다.
+ * EN: Implements AgentExecutor using @anthropic-ai/sdk Messages API.
  *     Handles Agent Teams environment setup, session stream management, and event mapping.
  */
 
-// WHY: @anthropic-ai/claude-code (v0.2.x)는 CLI 전용 패키지로 programmatic API를 노출하지 않는다.
-//      package.json에 main/module/exports 필드가 없고 bin만 존재한다.
-//      향후 SDK가 programmatic API (unstable_v2_createSession 등)를 export하면
-//      아래 타입 스텁을 실제 import로 교체한다.
-//
-// 교체 시:
-// import {
-//   unstable_v2_createSession,
-//   unstable_v2_prompt,
-//   type V2Session,
-//   type V2SessionEvent,
-//   type V2PromptOptions,
-// } from '@anthropic-ai/claude-code';
+import Anthropic from '@anthropic-ai/sdk';
+import type { AuthProvider } from 'auth/types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { type AgentName, type Result, err, ok } from 'core/types.js';
+import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 
-/** V2 Session 타입 스텁 — SDK가 programmatic API를 export할 때까지 사용 */
+// ── 내부 타입 정의 / Internal type definitions ───────────────────
+
+/** V2 Session 인터페이스 — stream() 기반 이벤트 스트림 */
 type V2Session = {
   stream(prompt: string): AsyncIterable<V2SessionEvent>;
 };
 
-/** SDK 이벤트 타입 스텁 */
+/** SDK 이벤트 타입 */
 type V2SessionEvent = {
   type: string;
   content?: string | unknown[];
@@ -41,7 +35,7 @@ type V2SessionEvent = {
   message?: string;
 };
 
-/** SDK 프롬프트 옵션 타입 스텁 */
+/** SDK 프롬프트 옵션 */
 type V2PromptOptions = {
   systemPrompt: string;
   maxTurns?: number;
@@ -50,38 +44,62 @@ type V2PromptOptions = {
   tools?: string[];
   environment?: Record<string, string>;
 };
-import type { AuthProvider } from 'auth/types.js';
-import { AgentError } from 'core/errors.js';
-import type { Logger } from 'core/logger.js';
-import { type AgentName, type Result, err, ok } from 'core/types.js';
-import type { AgentConfig, AgentEvent, AgentEventType, AgentExecutor } from 'layer2/types.js';
 
-// WHY: SDK가 programmatic API를 export하지 않으므로 스텁 함수로 대체.
-//      SDK가 unstable_v2_createSession을 export하면 이 스텁을 제거하고 import로 교체한다.
-const unstable_v2_createSession = (_options: V2PromptOptions): V2Session => {
-  throw new Error(
-    '@anthropic-ai/claude-code does not export programmatic API. ' +
-      'V2 Session API requires a future SDK version with unstable_v2_createSession export.',
-  );
-};
-
-const unstable_v2_prompt = async (
-  _prompt: string,
-  _options: V2PromptOptions,
-): Promise<V2Session> => {
-  throw new Error(
-    '@anthropic-ai/claude-code does not export programmatic API. ' +
-      'V2 Session API requires a future SDK version with unstable_v2_prompt export.',
-  );
-};
+// ── Anthropic SDK 기반 세션 팩토리 / SDK-based session factory ────
 
 /**
- * V2 Session Executor 구성 옵션 / Configuration for V2SessionExecutor
+ * Anthropic SDK 스트림을 V2SessionEvent 스트림으로 변환한다.
  *
  * @description
- * KR: 세션 생성에 필요한 의존성과 옵션을 담는다.
- * EN: Holds dependencies and options needed for session creation.
+ * KR: 에러를 throw하지 않고 error 이벤트로 yield한다. (Result 패턴 준수)
+ * EN: Yields error events instead of throwing. (Result pattern compliance)
  */
+async function* anthropicMessageStream(
+  client: Anthropic,
+  prompt: string,
+  options: V2PromptOptions,
+): AsyncIterable<V2SessionEvent> {
+  try {
+    const stream = client.messages.stream({
+      model: options.model ?? 'claude-opus-4-6',
+      max_tokens: 8192,
+      system: options.systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+        yield { type: 'message', content: chunk.delta.text };
+      } else if (chunk.type === 'message_stop') {
+        yield { type: 'message_stop', stop_reason: 'end_turn' };
+      }
+    }
+  } catch (error: unknown) {
+    yield { type: 'error', error, message: String(error) };
+  }
+}
+
+/**
+ * @anthropic-ai/sdk의 Messages API를 사용하는 V2Session 팩토리.
+ *
+ * @description
+ * KR: Anthropic client를 생성하고 anthropicMessageStream으로 스트림을 제공한다.
+ *     V2SessionFactory 기본값으로 사용된다.
+ * EN: Creates Anthropic client and provides stream via anthropicMessageStream.
+ *     Used as the default V2SessionFactory.
+ */
+const anthropicSessionFactory: V2SessionFactory = (options) => {
+  // WHY: environment에 API 키가 있으면 해당 값 우선, 없으면 process.env에서 읽음
+  const apiKey = options.environment?.ANTHROPIC_API_KEY;
+  const client = new Anthropic({ apiKey });
+
+  return {
+    stream: (prompt: string) => anthropicMessageStream(client, prompt, options),
+  };
+};
+
+// ── 공개 타입 / Public types ─────────────────────────────────────
+
 /** V2 Session 생성 팩토리 타입 / Session factory type for dependency injection */
 export type V2SessionFactory = (options: {
   readonly systemPrompt: string;
@@ -92,6 +110,13 @@ export type V2SessionFactory = (options: {
   readonly environment?: Record<string, string>;
 }) => V2Session;
 
+/**
+ * V2 Session Executor 구성 옵션 / Configuration for V2SessionExecutor
+ *
+ * @description
+ * KR: 세션 생성에 필요한 의존성과 옵션을 담는다.
+ * EN: Holds dependencies and options needed for session creation.
+ */
 export interface V2SessionExecutorOptions {
   /** 인증 공급자 / Authentication provider */
   readonly authProvider: AuthProvider;
@@ -111,16 +136,14 @@ export interface V2SessionExecutorOptions {
  * V2 Session 기반 에이전트 실행기 / V2 Session-based agent executor
  *
  * @description
- * KR: Claude Agent SDK V2 Session API를 사용하여 에이전트를 실행한다.
+ * KR: @anthropic-ai/sdk Messages API를 사용하여 에이전트를 실행한다.
  *     - Agent Teams 환경변수 설정 (DESIGN Phase)
  *     - session.stream() 호출 및 이벤트 매핑
- *     - unstable_v2_prompt() 호출 (CODE/TEST/VERIFY Phase)
  *     - SDK 이벤트 → AgentEvent 변환
  *     - 에러 처리 및 Result 패턴 적용
- * EN: Executes agents using Claude Agent SDK V2 Session API.
+ * EN: Executes agents using @anthropic-ai/sdk Messages API.
  *     - Sets Agent Teams environment variables (DESIGN Phase)
  *     - Calls session.stream() and maps events
- *     - Calls unstable_v2_prompt() (CODE/TEST/VERIFY Phase)
  *     - Converts SDK events to AgentEvent
  *     - Handles errors with Result pattern
  *
@@ -144,8 +167,8 @@ export class V2SessionExecutor implements AgentExecutor {
     this.logger = options.logger.child({ module: 'V2SessionExecutor' });
     this.defaultOptions = options.defaultOptions;
     this.activeSessions = new Map();
-    // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 SDK 스텁 사용
-    this.sessionFactory = options.sessionFactory ?? unstable_v2_createSession;
+    // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 Anthropic SDK 기반 팩토리 사용
+    this.sessionFactory = options.sessionFactory ?? anthropicSessionFactory;
   }
 
   /**
@@ -328,9 +351,9 @@ export class V2SessionExecutor implements AgentExecutor {
    * @returns 세션 생성 결과 / Session creation result
    *
    * @description
-   * KR: SDK의 unstable_v2_createSession을 호출하여 세션을 생성한다.
+   * KR: sessionFactory를 호출하여 세션을 생성한다.
    *     실패 시 AgentError를 Result로 래핑하여 반환한다.
-   * EN: Calls SDK's unstable_v2_createSession to create a session.
+   * EN: Calls sessionFactory to create a session.
    *     Wraps errors in AgentError and returns as Result.
    */
   private async createSession(
