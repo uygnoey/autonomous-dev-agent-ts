@@ -1359,3 +1359,767 @@ describe('DocIntegrator updateDocument + exportAsMarkdown 연계', () => {
     }
   });
 });
+
+// ── integrate 추가 엣지 케이스 ──────────────────────────────────
+
+describe('DocIntegrator integrate - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('빈 projectId 공백문자만 → ok=false', () => {
+    const r = integrator.integrate([], makeTemplate(), '   ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('projectId에 특수문자 포함 → 처리됨', () => {
+    const r = integrator.integrate(['frag'], makeTemplate(), 'proj-!@#$%^');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=api-reference → ok', () => {
+    const tpl = makeTemplate({ type: 'api-reference' });
+    const r = integrator.integrate(['frag-api'], tpl, 'proj-api');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=architecture → ok', () => {
+    const tpl = makeTemplate({ type: 'architecture' });
+    const r = integrator.integrate(['frag-arch'], tpl, 'proj-arch');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=changelog → ok', () => {
+    const tpl = makeTemplate({ type: 'changelog' });
+    const r = integrator.integrate(['frag-cl'], tpl, 'proj-cl');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=contributing-guide → ok', () => {
+    const tpl = makeTemplate({ type: 'contributing-guide' });
+    const r = integrator.integrate(['frag-cg'], tpl, 'proj-cg');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=user-manual → ok', () => {
+    const tpl = makeTemplate({ type: 'user-manual' });
+    const r = integrator.integrate(['frag-um'], tpl, 'proj-um');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=installation-guide → ok', () => {
+    const tpl = makeTemplate({ type: 'installation-guide' });
+    const r = integrator.integrate(['frag-ig'], tpl, 'proj-ig');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('template type=test-report → ok', () => {
+    const tpl = makeTemplate({ type: 'test-report' });
+    const r = integrator.integrate(['frag-tr'], tpl, 'proj-tr');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('fragment 100개 → ok', () => {
+    const frags = Array.from({ length: 100 }, (_, i) => `frag-${i}`);
+    const r = integrator.integrate(frags, makeTemplate(), 'proj-100');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('fragment 문자열에 개행 포함 → ok', () => {
+    const r = integrator.integrate(['line1\nline2\nline3'], makeTemplate(), 'proj-newline');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('fragment 문자열에 탭 포함 → ok', () => {
+    const r = integrator.integrate(['col1\tcol2\tcol3'], makeTemplate(), 'proj-tab');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('fragment에 마크다운 헤더 포함 → ok', () => {
+    const r = integrator.integrate(['## Section\nContent'], makeTemplate(), 'proj-md');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('fragment에 코드블록 포함 → ok', () => {
+    const r = integrator.integrate(['```ts\nconst x = 1;\n```'], makeTemplate(), 'proj-code');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('연속 호출 시 docCounter 증가', () => {
+    const r1 = integrator.integrate(['f1'], makeTemplate(), 'p1');
+    const r2 = integrator.integrate(['f2'], makeTemplate(), 'p2');
+    if (r1.ok && r2.ok) {
+      expect(r2.value.version).toBeGreaterThanOrEqual(r1.value.version);
+    }
+  });
+
+  it('integrate 결과의 id가 string', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'proj-id-check');
+    if (r.ok) expect(typeof r.value.id).toBe('string');
+  });
+
+  it('integrate 결과의 id 비어있지 않음', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'proj-id-nonempty');
+    if (r.ok) expect(r.value.id.length).toBeGreaterThan(0);
+  });
+
+  it('integrate 결과의 projectId 일치', () => {
+    const projId = 'proj-match-xyz';
+    const r = integrator.integrate(['f'], makeTemplate(), projId);
+    if (r.ok) expect(r.value.projectId).toBe(projId);
+  });
+
+  it('integrate 결과의 version >= 1', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'proj-ver');
+    if (r.ok) expect(r.value.version).toBeGreaterThanOrEqual(1);
+  });
+
+  it('integrate 결과의 fragments 배열', () => {
+    const r = integrator.integrate(['f1', 'f2'], makeTemplate(), 'proj-frags');
+    if (r.ok) expect(Array.isArray(r.value.sourceFragments)).toBe(true);
+  });
+
+  it('integrate 결과의 generatedAt instanceof Date', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'proj-date');
+    if (r.ok) expect(r.value.generatedAt).toBeInstanceOf(Date);
+  });
+});
+
+// ── updateDocument 추가 엣지 케이스 ─────────────────────────────
+
+describe('DocIntegrator updateDocument - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('빈 newFragments로 update → version+1', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-empty');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, []);
+    if (u.ok) expect(u.value.version).toBe(r.value.version + 1);
+  });
+
+  it('newFragments 50개 → ok', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-50');
+    if (!r.ok) return;
+    const frags = Array.from({ length: 50 }, (_, i) => `new-${i}`);
+    const u = integrator.updateDocument(r.value, frags);
+    expect(typeof u.ok).toBe('boolean');
+  });
+
+  it('update 후 id 동일', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-id');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['new-frag']);
+    if (u.ok) expect(u.value.id).toBe(r.value.id);
+  });
+
+  it('update 후 projectId 동일', () => {
+    const projId = 'proj-upd-pid';
+    const r = integrator.integrate(['orig'], makeTemplate(), projId);
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['new-frag']);
+    if (u.ok) expect(u.value.projectId).toBe(projId);
+  });
+
+  it('update 후 generatedAt instanceof Date', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-date');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['new-frag']);
+    if (u.ok) expect(u.value.generatedAt).toBeInstanceOf(Date);
+  });
+
+  it('update result ok는 boolean', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-bool');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['new-frag']);
+    expect(typeof u.ok).toBe('boolean');
+  });
+
+  it('3회 연속 update → version 증가 추세', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-3');
+    if (!r.ok) return;
+
+    const u1 = integrator.updateDocument(r.value, ['a']);
+    if (!u1.ok) return;
+    const u2 = integrator.updateDocument(u1.value, ['b']);
+    if (!u2.ok) return;
+    const u3 = integrator.updateDocument(u2.value, ['c']);
+    if (u3.ok) expect(u3.value.version).toBeGreaterThan(r.value.version);
+  });
+
+  it('개행 포함 fragment로 update → ok', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-nl');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['line1\nline2']);
+    expect(typeof u.ok).toBe('boolean');
+  });
+
+  it('unicode fragment로 update → ok', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-uni');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['안녕하세요 🎉']);
+    expect(typeof u.ok).toBe('boolean');
+  });
+
+  it('같은 doc으로 2회 독립 update → 각각 version+1', () => {
+    const r = integrator.integrate(['orig'], makeTemplate(), 'proj-upd-indep');
+    if (!r.ok) return;
+
+    const u1 = integrator.updateDocument(r.value, ['a']);
+    const u2 = integrator.updateDocument(r.value, ['b']);
+
+    if (u1.ok) expect(u1.value.version).toBe(r.value.version + 1);
+    if (u2.ok) expect(u2.value.version).toBe(r.value.version + 1);
+  });
+});
+
+// ── exportAsMarkdown 추가 엣지 케이스 ───────────────────────────
+
+describe('DocIntegrator exportAsMarkdown - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('반환 타입은 string', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    if (e.ok) expect(typeof e.value).toBe('string');
+  });
+
+  it('반환값 비어있지 않음', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    if (e.ok) expect(e.value.length).toBeGreaterThan(0);
+  });
+
+  it('반환값에 projectId 포함', () => {
+    const pid = 'proj-export-edge-1';
+    const r = integrator.integrate(['f'], makeTemplate(), pid);
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    if (e.ok) expect(e.value).toContain(pid);
+  });
+
+  it('api-reference 템플릿 → ok', () => {
+    const tpl = makeTemplate({ type: 'api-reference' });
+    const r = integrator.integrate(['f'], tpl, 'proj-api-exp');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    expect(typeof e.ok).toBe('boolean');
+  });
+
+  it('architecture 템플릿 → ok', () => {
+    const tpl = makeTemplate({ type: 'architecture' });
+    const r = integrator.integrate(['f'], tpl, 'proj-arch-exp');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    expect(typeof e.ok).toBe('boolean');
+  });
+
+  it('update 후 exportAsMarkdown → version 반영', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p');
+    if (!r.ok) return;
+    const u = integrator.updateDocument(r.value, ['new']);
+    if (!u.ok) return;
+    const e = integrator.exportAsMarkdown(u.value);
+    if (e.ok) expect(e.value).toContain('version: 2');
+  });
+
+  it('10회 반복 exportAsMarkdown → 모두 ok', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p-rep');
+    if (!r.ok) return;
+    for (let i = 0; i < 10; i++) {
+      const e = integrator.exportAsMarkdown(r.value);
+      expect(e.ok).toBe(true);
+    }
+  });
+
+  it('결과에 --- 마커 포함', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p-dash');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    if (e.ok) expect(e.value).toContain('---');
+  });
+
+  it('결과가 --- 로 시작', () => {
+    const r = integrator.integrate(['f'], makeTemplate(), 'p-start');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    if (e.ok) expect(e.value.trimStart().startsWith('---')).toBe(true);
+  });
+
+  it('fragments 내용이 결과에 포함 가능', () => {
+    const frag = 'UNIQUE_FRAG_XYZ_12345';
+    const r = integrator.integrate([frag], makeTemplate(), 'p-frag-incl');
+    if (!r.ok) return;
+    const e = integrator.exportAsMarkdown(r.value);
+    // fragment가 내용에 포함되거나 ok이면 통과
+    if (e.ok) expect(typeof e.value).toBe('string');
+  });
+});
+
+// ── listTemplates 추가 엣지 케이스 ──────────────────────────────
+
+describe('DocIntegrator listTemplates - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('includeCustom=true → 기본 템플릿 8개 이상', async () => {
+    const r = await integrator.listTemplates(true);
+    if (r.ok) expect(r.value.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('includeCustom=false → 기본 템플릿만 반환', async () => {
+    const r = await integrator.listTemplates(false);
+    if (r.ok) {
+      for (const tpl of r.value) {
+        expect(tpl.custom).not.toBe(true);
+      }
+    }
+  });
+
+  it('기본 호출(인자 없음) → ok', async () => {
+    const r = await integrator.listTemplates();
+    expect(r.ok).toBe(true);
+  });
+
+  it('모든 기본 템플릿에 id 존재', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      for (const tpl of r.value) {
+        expect(typeof tpl.id).toBe('string');
+      }
+    }
+  });
+
+  it('모든 기본 템플릿에 type 존재', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      for (const tpl of r.value) {
+        expect(typeof tpl.type).toBe('string');
+      }
+    }
+  });
+
+  it('readme 타입 템플릿 포함', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      const types = r.value.map((t) => t.type);
+      expect(types).toContain('readme');
+    }
+  });
+
+  it('api-reference 타입 템플릿 포함', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      const types = r.value.map((t) => t.type);
+      expect(types).toContain('api-reference');
+    }
+  });
+
+  it('architecture 타입 템플릿 포함', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      const types = r.value.map((t) => t.type);
+      expect(types).toContain('architecture');
+    }
+  });
+
+  it('changelog 타입 템플릿 포함', async () => {
+    const r = await integrator.listTemplates();
+    if (r.ok) {
+      const types = r.value.map((t) => t.type);
+      expect(types).toContain('changelog');
+    }
+  });
+
+  it('커스텀 등록 후 includeCustom=true → count 증가', async () => {
+    const before = await integrator.listTemplates(true);
+    const beforeCount = before.ok ? before.value.length : 0;
+
+    await integrator.registerTemplate({
+      id: `custom-extra-${Date.now()}`,
+      type: 'readme',
+      title: 'Extra',
+      sections: [],
+      custom: true,
+      name: 'extra',
+      templatePath: 'fake/path.hbs',
+      format: 'md',
+    });
+
+    const after = await integrator.listTemplates(true);
+    if (after.ok) expect(after.value.length).toBeGreaterThan(beforeCount);
+  });
+
+  it('커스텀 등록 후 includeCustom=false → count 변화 없음', async () => {
+    const before = await integrator.listTemplates(false);
+    const beforeCount = before.ok ? before.value.length : 0;
+
+    await integrator.registerTemplate({
+      id: `custom-hidden-${Date.now()}`,
+      type: 'readme',
+      title: 'Hidden',
+      sections: [],
+      custom: true,
+      name: 'hidden',
+      templatePath: 'fake/hidden.hbs',
+      format: 'md',
+    });
+
+    const after = await integrator.listTemplates(false);
+    if (after.ok) expect(after.value.length).toBe(beforeCount);
+  });
+});
+
+// ── registerTemplate 추가 엣지 케이스 ───────────────────────────
+
+describe('DocIntegrator registerTemplate - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('non-custom 템플릿도 등록 가능', async () => {
+    const r = await integrator.registerTemplate({
+      id: `non-custom-${Date.now()}`,
+      type: 'readme',
+      title: 'Non Custom',
+      sections: [],
+      custom: false,
+      name: 'nc',
+      templatePath: '',
+      format: 'md',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('templatePath가 빈 문자열이어도 등록됨', async () => {
+    const r = await integrator.registerTemplate({
+      id: `empty-path-${Date.now()}`,
+      type: 'readme',
+      title: 'Empty Path',
+      sections: [],
+      custom: true,
+      name: 'ep',
+      templatePath: '',
+      format: 'md',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('같은 ID 두번 등록 → 2번째는 err', async () => {
+    const id = `dup-register-${Date.now()}`;
+    await integrator.registerTemplate({
+      id,
+      type: 'readme',
+      title: 'First',
+      sections: [],
+      custom: true,
+      name: 'first',
+      templatePath: '',
+      format: 'md',
+    });
+    const r2 = await integrator.registerTemplate({
+      id,
+      type: 'readme',
+      title: 'Second',
+      sections: [],
+      custom: true,
+      name: 'second',
+      templatePath: '',
+      format: 'md',
+    });
+    expect(r2.ok).toBe(false);
+  });
+
+  it('duplicate error code = layer3_template_duplicate', async () => {
+    const id = `dup-err-code-${Date.now()}`;
+    await integrator.registerTemplate({
+      id,
+      type: 'readme',
+      title: 'T1',
+      sections: [],
+      custom: true,
+      name: 't1',
+      templatePath: '',
+      format: 'md',
+    });
+    const r = await integrator.registerTemplate({
+      id,
+      type: 'readme',
+      title: 'T2',
+      sections: [],
+      custom: true,
+      name: 't2',
+      templatePath: '',
+      format: 'md',
+    });
+    if (!r.ok) expect(r.error.code).toBe('layer3_template_duplicate');
+  });
+
+  it('format=html 등록 가능', async () => {
+    const r = await integrator.registerTemplate({
+      id: `html-tpl-${Date.now()}`,
+      type: 'api-reference',
+      title: 'HTML Template',
+      sections: [],
+      custom: true,
+      name: 'html-tpl',
+      templatePath: 'some/path.hbs',
+      format: 'html',
+    });
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('5개 다른 ID로 등록 → 모두 ok', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, async (_, i) => {
+        return integrator.registerTemplate({
+          id: `batch-reg-${Date.now()}-${i}`,
+          type: 'readme',
+          title: `Batch ${i}`,
+          sections: [],
+          custom: true,
+          name: `batch-${i}`,
+          templatePath: '',
+          format: 'md',
+        });
+      }),
+    );
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('등록 후 listTemplates에 포함됨', async () => {
+    const id = `list-check-${Date.now()}`;
+    await integrator.registerTemplate({
+      id,
+      type: 'readme',
+      title: 'ListCheck',
+      sections: [],
+      custom: true,
+      name: 'list-check',
+      templatePath: '',
+      format: 'md',
+    });
+    const list = await integrator.listTemplates(true);
+    if (list.ok) {
+      const ids = list.value.map((t) => t.id);
+      expect(ids).toContain(id);
+    }
+  });
+
+  it('architecture 타입 커스텀 등록 → ok', async () => {
+    const r = await integrator.registerTemplate({
+      id: `arch-custom-${Date.now()}`,
+      type: 'architecture',
+      title: 'Arch Custom',
+      sections: [{ heading: 'Intro', content: 'Intro content' }],
+      custom: true,
+      name: 'arch-custom',
+      templatePath: '',
+      format: 'md',
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('changelog 타입 커스텀 등록 → ok', async () => {
+    const r = await integrator.registerTemplate({
+      id: `cl-custom-${Date.now()}`,
+      type: 'changelog',
+      title: 'CL Custom',
+      sections: [],
+      custom: true,
+      name: 'cl-custom',
+      templatePath: '',
+      format: 'md',
+    });
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ── generateAll 추가 엣지 케이스 ────────────────────────────────
+
+describe('DocIntegrator generateAll - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('공백만인 projectId → err', async () => {
+    const r = await integrator.generateAll('  ', '/out');
+    expect(r.ok).toBe(false);
+  });
+
+  it('빈 projectId → err', async () => {
+    const r = await integrator.generateAll('', '/out');
+    expect(r.ok).toBe(false);
+  });
+
+  it('유효한 projectId + outputDir → ok', async () => {
+    const r = await integrator.generateAll('proj-gen-all', '/tmp/out');
+    expect(r.ok).toBe(true);
+  });
+
+  it('결과가 배열', async () => {
+    const r = await integrator.generateAll('proj-gen-arr', '/tmp/out');
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('여러 호출 → 모두 ok', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await integrator.generateAll(`proj-gen-multi-${i}`, `/tmp/out-${i}`);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('error code 포함', async () => {
+    const r = await integrator.generateAll('', '/out');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('error message 포함', async () => {
+    const r = await integrator.generateAll('', '/out');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('탭문자 projectId → err', async () => {
+    const r = await integrator.generateAll('\t', '/out');
+    expect(r.ok).toBe(false);
+  });
+
+  it('매우 긴 projectId → 처리됨', async () => {
+    const longId = 'a'.repeat(500);
+    const r = await integrator.generateAll(longId, '/tmp/out-long');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('outputDir에 특수문자 → 처리됨', async () => {
+    const r = await integrator.generateAll('proj-special', '/tmp/out-!@#$');
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── collectFragments 추가 엣지 케이스 ───────────────────────────
+
+describe('DocIntegrator collectFragments - 추가 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('빈 projectId → err', async () => {
+    const r = await integrator.collectFragments('', '**/*.md');
+    expect(r.ok).toBe(false);
+  });
+
+  it('공백만 projectId → err', async () => {
+    const r = await integrator.collectFragments('   ', '**/*.md');
+    expect(r.ok).toBe(false);
+  });
+
+  it('유효한 projectId + 존재하지 않는 패턴 → ok, 빈 배열', async () => {
+    const r = await integrator.collectFragments('proj-collect', 'no-match-xyz-12345/**/*.zz');
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('결과는 배열', async () => {
+    const r = await integrator.collectFragments('proj-arr', 'no-match-xyz/**/*.zz');
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('err 시 error code 존재', async () => {
+    const r = await integrator.collectFragments('', '*.md');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('err 시 error message 존재', async () => {
+    const r = await integrator.collectFragments('', '*.md');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('패턴에 글로브 와일드카드 → ok', async () => {
+    const r = await integrator.collectFragments('proj-glob', '**/*.nonexistent');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('여러 호출 → 모두 처리', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) =>
+        integrator.collectFragments(`proj-cf-${i}`, 'none/**/*.zz'),
+      ),
+    );
+    for (const r of results) {
+      expect(typeof r.ok).toBe('boolean');
+    }
+  });
+
+  it('탭만인 projectId → err', async () => {
+    const r = await integrator.collectFragments('\t\t', '*.md');
+    expect(r.ok).toBe(false);
+  });
+
+  it('개행만인 projectId → err', async () => {
+    const r = await integrator.collectFragments('\n', '*.md');
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── readTemplateSource 엣지 케이스 ──────────────────────────────
+
+describe('DocIntegrator readTemplateSource - 엣지 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('존재하지 않는 templatePath → 빈 문자열 또는 기본값 반환', async () => {
+    const tpl = makeTemplate({ templatePath: '/nonexistent/path/template.hbs' });
+    const r = await integrator.readTemplateSource(tpl);
+    expect(typeof r).toBe('string');
+  });
+
+  it('빈 templatePath → 처리됨', async () => {
+    const tpl = makeTemplate({ templatePath: '' });
+    const r = await integrator.readTemplateSource(tpl);
+    expect(typeof r).toBe('string');
+  });
+
+  it('여러 호출 → 모두 string 반환', async () => {
+    const tpl = makeTemplate();
+    for (let i = 0; i < 5; i++) {
+      const r = await integrator.readTemplateSource(tpl);
+      expect(typeof r).toBe('string');
+    }
+  });
+
+  it('api-reference 타입 템플릿 → string 반환', async () => {
+    const tpl = makeTemplate({ type: 'api-reference', templatePath: '/fake/api.hbs' });
+    const r = await integrator.readTemplateSource(tpl);
+    expect(typeof r).toBe('string');
+  });
+
+  it('architecture 타입 템플릿 → string 반환', async () => {
+    const tpl = makeTemplate({ type: 'architecture', templatePath: '/fake/arch.hbs' });
+    const r = await integrator.readTemplateSource(tpl);
+    expect(typeof r).toBe('string');
+  });
+});

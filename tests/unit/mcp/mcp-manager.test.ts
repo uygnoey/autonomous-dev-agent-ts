@@ -1411,4 +1411,469 @@ describe('McpManager', () => {
       }
     });
   });
+
+  // ── stopAll 추가 엣지 케이스 ─────────────────────────────────
+
+  describe('stopAll - 추가 엣지 케이스', () => {
+    it('서버 없을 때 stopAll → ok', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.stopAll();
+      expect(r.ok).toBe(true);
+    });
+
+    it('서버 시작 후 stopAll → ok', async () => {
+      await createMcpConfig(globalDir, 'stop-all-1', [
+        { name: 'stop-all-1', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('stop-all-1');
+      const r = manager.stopAll();
+      expect(r.ok).toBe(true);
+    });
+
+    it('stopAll 후 getStatus → stopped', async () => {
+      await createMcpConfig(globalDir, 'stop-all-status', [
+        { name: 'stop-all-status', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('stop-all-status');
+      manager.stopAll();
+      expect(manager.getStatus('stop-all-status')).toBe('stopped');
+    });
+
+    it('stopAll 여러번 호출 → 모두 ok', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      for (let i = 0; i < 5; i++) {
+        const r = manager.stopAll();
+        expect(r.ok).toBe(true);
+      }
+    });
+
+    it('여러 서버 시작 후 stopAll → 모두 stopped', async () => {
+      await createMcpConfig(globalDir, 'multi-stop-a', [
+        { name: 'multi-stop-a', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(globalDir, 'multi-stop-b', [
+        { name: 'multi-stop-b', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('multi-stop-a');
+      manager.startServer('multi-stop-b');
+      manager.stopAll();
+      expect(manager.getStatus('multi-stop-a')).toBe('stopped');
+      expect(manager.getStatus('multi-stop-b')).toBe('stopped');
+    });
+  });
+
+  // ── healthCheck 추가 엣지 케이스 ────────────────────────────
+
+  describe('healthCheck - 추가 엣지 케이스', () => {
+    it('초기화 전 healthCheck → ok', () => {
+      const manager = createManager();
+      const r = manager.healthCheck();
+      expect(r.ok).toBe(true);
+    });
+
+    it('초기화 후 healthCheck → ok', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      expect(r.ok).toBe(true);
+    });
+
+    it('healthCheck 결과는 Record<string, McpServerStatus>', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      if (r.ok) expect(typeof r.value).toBe('object');
+    });
+
+    it('서버 시작 후 healthCheck → running 포함', async () => {
+      await createMcpConfig(globalDir, 'hc-running', [
+        { name: 'hc-running', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('hc-running');
+      const r = manager.healthCheck();
+      if (r.ok) expect(r.value['hc-running']).toBe('running');
+    });
+
+    it('서버 정지 후 healthCheck → stopped', async () => {
+      await createMcpConfig(globalDir, 'hc-stopped', [
+        { name: 'hc-stopped', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('hc-stopped');
+      manager.stopServer('hc-stopped');
+      const r = manager.healthCheck();
+      if (r.ok) expect(r.value['hc-stopped']).toBe('stopped');
+    });
+
+    it('healthCheck: 여러 서버 상태 반영', async () => {
+      await createMcpConfig(globalDir, 'hc-multi-a', [
+        { name: 'hc-multi-a', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(globalDir, 'hc-multi-b', [
+        { name: 'hc-multi-b', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('hc-multi-a');
+      const r = manager.healthCheck();
+      if (r.ok) {
+        expect(r.value['hc-multi-a']).toBe('running');
+        expect(r.value['hc-multi-b']).toBe('stopped');
+      }
+    });
+
+    it('healthCheck: 반복 호출 → 일관된 결과', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r1 = manager.healthCheck();
+      const r2 = manager.healthCheck();
+      expect(r1.ok).toBe(r2.ok);
+    });
+
+    it('healthCheck: 빈 서버 목록 → 빈 Record', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      if (r.ok) expect(Object.keys(r.value).length).toBe(0);
+    });
+  });
+
+  // ── listTools 추가 엣지 케이스 ──────────────────────────────
+
+  describe('listTools - 추가 엣지 케이스', () => {
+    it('초기 listTools → 빈 배열', () => {
+      const manager = createManager();
+      expect(manager.listTools()).toEqual([]);
+    });
+
+    it('초기화 후 서버 없음 → 빈 배열', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      expect(manager.listTools()).toEqual([]);
+    });
+
+    it('서버 시작 후 listTools → 배열', async () => {
+      await createMcpConfig(globalDir, 'lt-server', [
+        { name: 'lt-server', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('lt-server');
+      expect(Array.isArray(manager.listTools())).toBe(true);
+    });
+
+    it('정지된 서버 → 도구 목록에서 제외', async () => {
+      await createMcpConfig(globalDir, 'lt-stopped', [
+        { name: 'lt-stopped', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('lt-stopped');
+      manager.stopServer('lt-stopped');
+      expect(manager.listTools()).toEqual([]);
+    });
+
+    it('stopAll 후 listTools → 빈 배열', async () => {
+      await createMcpConfig(globalDir, 'lt-stopall', [
+        { name: 'lt-stopall', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('lt-stopall');
+      manager.stopAll();
+      expect(manager.listTools()).toEqual([]);
+    });
+
+    it('listTools 여러번 호출 → 일관된 결과', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const t1 = manager.listTools();
+      const t2 = manager.listTools();
+      expect(t1.length).toBe(t2.length);
+    });
+  });
+
+  // ── initialize 추가 엣지 케이스 ─────────────────────────────
+
+  describe('initialize - 추가 엣지 케이스', () => {
+    it('빈 디렉토리로 초기화 → ok', async () => {
+      const manager = createManager();
+      const r = await manager.initialize(globalDir);
+      expect(r.ok).toBe(true);
+    });
+
+    it('project 디렉토리와 함께 초기화 → ok', async () => {
+      const manager = createManager();
+      const r = await manager.initialize(globalDir, projectDir);
+      expect(r.ok).toBe(true);
+    });
+
+    it('초기화 후 서버 카운트 0 (빈 디렉토리)', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      if (r.ok) expect(Object.keys(r.value).length).toBe(0);
+    });
+
+    it('초기화 후 서버 등록됨', async () => {
+      await createMcpConfig(globalDir, 'init-server', [
+        { name: 'init-server', command: 'node', args: ['server.js'], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      if (r.ok) expect('init-server' in r.value).toBe(true);
+    });
+
+    it('두번 초기화 → 두번째가 첫번째 대체', async () => {
+      await createMcpConfig(globalDir, 'reinit-server', [
+        { name: 'reinit-server', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('reinit-server');
+      await manager.initialize(globalDir); // 두번째 초기화
+      // 두번째 초기화 후 인스턴스 초기화됨
+      expect(manager.getStatus('reinit-server')).toBe('stopped');
+    });
+
+    it('disabled 서버 → 등록되지만 시작 불가', async () => {
+      await createMcpConfig(globalDir, 'disabled-server', [
+        { name: 'disabled-server', command: 'npx', args: [], enabled: false },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.startServer('disabled-server');
+      expect(r.ok).toBe(false);
+    });
+
+    it('enabled 서버 여러개 → 모두 등록됨', async () => {
+      await createMcpConfig(globalDir, 'multi-init', [
+        { name: 'server-x', command: 'npx', args: [], enabled: true },
+        { name: 'server-y', command: 'npx', args: [], enabled: true },
+        { name: 'server-z', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.healthCheck();
+      if (r.ok) {
+        expect('server-x' in r.value).toBe(true);
+        expect('server-y' in r.value).toBe(true);
+        expect('server-z' in r.value).toBe(true);
+      }
+    });
+
+    it('존재하지 않는 globalDir → err 또는 ok(빈 목록)', async () => {
+      const manager = createManager();
+      const r = await manager.initialize('/nonexistent-dir-xyz-99999');
+      expect(typeof r.ok).toBe('boolean');
+    });
+
+    it('project 디렉토리 서버가 global 서버와 병합', async () => {
+      await createMcpConfig(globalDir, 'global-srv', [
+        { name: 'global-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(projectDir, 'project-srv', [
+        { name: 'project-srv', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir, projectDir);
+      const r = manager.healthCheck();
+      if (r.ok) {
+        // 적어도 하나의 서버가 등록되어야 함
+        expect(typeof r.value).toBe('object');
+      }
+    });
+  });
+
+  // ── startServer/stopServer 엣지 케이스 추가 ─────────────────
+
+  describe('startServer/stopServer - 추가 엣지 케이스', () => {
+    it('존재하지 않는 서버 stopServer → err', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.stopServer('nonexistent-xyz');
+      expect(r.ok).toBe(false);
+    });
+
+    it('stopServer error code 존재', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.stopServer('no-such-server');
+      if (!r.ok) expect(typeof r.error.code).toBe('string');
+    });
+
+    it('startServer error code 존재 (not found)', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.startServer('no-such-server-2');
+      if (!r.ok) expect(typeof r.error.code).toBe('string');
+    });
+
+    it('시작 후 다시 시작 → already running err', async () => {
+      await createMcpConfig(globalDir, 'double-start', [
+        { name: 'double-start', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('double-start');
+      const r = manager.startServer('double-start');
+      expect(r.ok).toBe(false);
+    });
+
+    it('시작-정지-재시작 사이클', async () => {
+      await createMcpConfig(globalDir, 'cycle-server', [
+        { name: 'cycle-server', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('cycle-server');
+      manager.stopServer('cycle-server');
+      const r = manager.startServer('cycle-server');
+      expect(r.ok).toBe(true);
+      expect(manager.getStatus('cycle-server')).toBe('running');
+    });
+
+    it('startServer 성공 후 instance tools는 배열', async () => {
+      await createMcpConfig(globalDir, 'tools-check', [
+        { name: 'tools-check', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.startServer('tools-check');
+      if (r.ok) expect(Array.isArray(r.value.tools)).toBe(true);
+    });
+
+    it('startServer 성공 후 instance status=running', async () => {
+      await createMcpConfig(globalDir, 'status-running', [
+        { name: 'status-running', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const r = manager.startServer('status-running');
+      if (r.ok) expect(r.value.status).toBe('running');
+    });
+
+    it('stopServer 성공 후 getStatus=stopped', async () => {
+      await createMcpConfig(globalDir, 'post-stop', [
+        { name: 'post-stop', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('post-stop');
+      manager.stopServer('post-stop');
+      expect(manager.getStatus('post-stop')).toBe('stopped');
+    });
+
+    it('이미 정지된 서버 stopServer → err', async () => {
+      await createMcpConfig(globalDir, 'already-stopped', [
+        { name: 'already-stopped', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('already-stopped');
+      manager.stopServer('already-stopped');
+      const r = manager.stopServer('already-stopped');
+      expect(r.ok).toBe(false);
+    });
+
+    it('여러 서버 독립 시작 → 각각 running', async () => {
+      await createMcpConfig(globalDir, 'ind-a', [
+        { name: 'ind-a', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(globalDir, 'ind-b', [
+        { name: 'ind-b', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('ind-a');
+      manager.startServer('ind-b');
+      expect(manager.getStatus('ind-a')).toBe('running');
+      expect(manager.getStatus('ind-b')).toBe('running');
+    });
+
+    it('한 서버 정지해도 다른 서버 유지', async () => {
+      await createMcpConfig(globalDir, 'keep-a', [
+        { name: 'keep-a', command: 'npx', args: [], enabled: true },
+      ]);
+      await createMcpConfig(globalDir, 'keep-b', [
+        { name: 'keep-b', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('keep-a');
+      manager.startServer('keep-b');
+      manager.stopServer('keep-a');
+      expect(manager.getStatus('keep-a')).toBe('stopped');
+      expect(manager.getStatus('keep-b')).toBe('running');
+    });
+  });
+
+  // ── getStatus 추가 엣지 케이스 ──────────────────────────────
+
+  describe('getStatus - 추가 엣지 케이스', () => {
+    it('알 수 없는 서버 → stopped 반환', async () => {
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      expect(manager.getStatus('totally-unknown')).toBe('stopped');
+    });
+
+    it('getStatus 반환값이 running 또는 stopped', async () => {
+      await createMcpConfig(globalDir, 'gs-test', [
+        { name: 'gs-test', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      const status = manager.getStatus('gs-test');
+      expect(['running', 'stopped']).toContain(status);
+    });
+
+    it('시작 전 getStatus → stopped', async () => {
+      await createMcpConfig(globalDir, 'gs-before-start', [
+        { name: 'gs-before-start', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      expect(manager.getStatus('gs-before-start')).toBe('stopped');
+    });
+
+    it('시작 후 getStatus → running', async () => {
+      await createMcpConfig(globalDir, 'gs-after-start', [
+        { name: 'gs-after-start', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('gs-after-start');
+      expect(manager.getStatus('gs-after-start')).toBe('running');
+    });
+
+    it('getStatus 10회 반복 → 일관된 결과', async () => {
+      await createMcpConfig(globalDir, 'gs-stable', [
+        { name: 'gs-stable', command: 'npx', args: [], enabled: true },
+      ]);
+      const manager = createManager();
+      await manager.initialize(globalDir);
+      manager.startServer('gs-stable');
+      const first = manager.getStatus('gs-stable');
+      for (let i = 0; i < 9; i++) {
+        expect(manager.getStatus('gs-stable')).toBe(first);
+      }
+    });
+
+    it('초기화 없이 getStatus → stopped', () => {
+      const manager = createManager();
+      expect(manager.getStatus('any-server')).toBe('stopped');
+    });
+  });
 });

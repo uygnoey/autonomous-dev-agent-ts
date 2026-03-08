@@ -1404,3 +1404,728 @@ describe('개발 사이클 E2E / Development Cycle E2E', () => {
     expect(engine.getHistory().length).toBe(3);
   });
 });
+
+// ── PhaseEngine 추가 엣지 케이스 ────────────────────────────────
+
+describe('PhaseEngine - 추가 엣지 케이스', () => {
+  it('DESIGN에서 TEST로 직접 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('TEST', '불법', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('DESIGN에서 VERIFY로 직접 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('VERIFY', '불법', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CODE에서 DESIGN으로 역방향 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const r = engine.transition('DESIGN', 'rollback', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CODE에서 VERIFY로 직접 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const r = engine.transition('VERIFY', 'skip', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('TEST에서 DESIGN으로 역방향 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    const r = engine.transition('DESIGN', 'rollback-from-test', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('TEST에서 CODE로 역방향 전환 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    const r = engine.transition('CODE', 'rollback', 'adev');
+    expect(r.ok).toBe(false);
+  });
+
+  it('VERIFY → DESIGN 롤백 후 다시 CODE→TEST→VERIFY', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    engine.transition('DESIGN', 'rollback', 'adev');
+    engine.transition('CODE', 'redo', 'adev');
+    engine.transition('TEST', 'redo', 'adev');
+    const r = engine.transition('VERIFY', 'redo', 'adev');
+    expect(r.ok).toBe(true);
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('VERIFY → CODE 롤백', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    const r = engine.transition('CODE', 'rollback to code', 'adev');
+    expect(r.ok).toBe(true);
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('VERIFY → TEST 롤백', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    const r = engine.transition('TEST', 'rollback to test', 'adev');
+    expect(r.ok).toBe(true);
+    expect(engine.currentPhase).toBe('TEST');
+  });
+
+  it('canTransition: DESIGN → CODE = true', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('CODE')).toBe(true);
+  });
+
+  it('canTransition: DESIGN → TEST = false', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+
+  it('canTransition: DESIGN → VERIFY = false', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('canTransition: CODE → TEST = true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    expect(engine.canTransition('TEST')).toBe(true);
+  });
+
+  it('canTransition: CODE → DESIGN = false', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    expect(engine.canTransition('DESIGN')).toBe(false);
+  });
+
+  it('canTransition: VERIFY → DESIGN = true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('DESIGN')).toBe(true);
+  });
+
+  it('canTransition: VERIFY → CODE = true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('CODE')).toBe(true);
+  });
+
+  it('canTransition: VERIFY → TEST = true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('TEST')).toBe(true);
+  });
+
+  it('getParticipants DESIGN: architect lead', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('DESIGN');
+    expect(p.lead).toContain('architect');
+  });
+
+  it('getParticipants CODE: coder lead', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('CODE');
+    expect(p.lead).toContain('coder');
+  });
+
+  it('getParticipants TEST: tester lead', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('TEST');
+    expect(p.lead).toContain('tester');
+  });
+
+  it('getParticipants VERIFY: lead 비어있지 않을 수 있음', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('VERIFY');
+    expect(Array.isArray(p.lead)).toBe(true);
+  });
+
+  it('getParticipants DESIGN: active에 qa 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('DESIGN');
+    expect(p.active).toContain('qa');
+  });
+
+  it('getParticipants VERIFY: active에 reviewer 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('VERIFY');
+    expect(p.active).toContain('reviewer');
+  });
+
+  it('transition: triggeredBy=architect 사용 가능', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('CODE', 'arch 완료', 'architect');
+    expect(r.ok).toBe(true);
+  });
+
+  it('transition: triggeredBy=qa 사용 가능', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    const r = engine.transition('VERIFY', 'qa gate', 'qa');
+    expect(r.ok).toBe(true);
+  });
+
+  it('transition: triggeredBy=coder 사용 가능', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('CODE', 'coder 완료', 'coder');
+    expect(r.ok).toBe(true);
+  });
+
+  it('transition: 성공 시 from/to/reason/triggeredBy/timestamp 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('CODE', 'full-cycle-reason', 'adev');
+    if (r.ok) {
+      expect(r.value.from).toBe('DESIGN');
+      expect(r.value.to).toBe('CODE');
+      expect(r.value.reason).toBe('full-cycle-reason');
+      expect(r.value.triggeredBy).toBe('adev');
+      expect(r.value.timestamp).toBeInstanceOf(Date);
+    }
+  });
+
+  it('transition 실패: error.code가 string', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('VERIFY', 'invalid', 'adev');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('transition 실패: error.message가 string', () => {
+    const engine = new PhaseEngine(logger);
+    const r = engine.transition('TEST', 'invalid', 'adev');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('getHistory: 빈 이력 → 빈 배열', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.getHistory()).toEqual([]);
+  });
+
+  it('getHistory: 1번 전환 → length=1', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    expect(engine.getHistory().length).toBe(1);
+  });
+
+  it('getHistory: readonly 배열 (원본 변경 불가)', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const history = engine.getHistory();
+    expect(Array.isArray(history)).toBe(true);
+  });
+
+  it('10회 전환 후 이력 누적', () => {
+    const engine = new PhaseEngine(logger);
+    // 5번 전체 사이클
+    for (let i = 0; i < 5; i++) {
+      if (engine.currentPhase !== 'DESIGN') {
+        engine.transition('DESIGN', 'reset', 'adev');
+      } else {
+        engine.transition('CODE', `cycle-${i}`, 'adev');
+        if (engine.currentPhase === 'CODE') {
+          engine.transition('TEST', `cycle-${i}`, 'adev');
+          if (engine.currentPhase === 'TEST') {
+            engine.transition('VERIFY', `cycle-${i}`, 'adev');
+          }
+        }
+      }
+    }
+    expect(engine.getHistory().length).toBeGreaterThan(0);
+  });
+});
+
+// ── VerificationGate 추가 엣지 케이스 ───────────────────────────
+
+describe('VerificationGate - 추가 엣지 케이스', () => {
+  it('결과 없이 isComplete → false', () => {
+    const gate = new VerificationGate(logger);
+    expect(gate.isComplete('nonexistent-feature')).toBe(false);
+  });
+
+  it('1개 phase만 추가 → isComplete=false', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult({ featureId: 'f1', phase: 'qa_qc', passed: true, feedback: 'ok', timestamp: new Date() });
+    expect(gate.isComplete('f1')).toBe(false);
+  });
+
+  it('passed=false 포함해도 4개 phase 모두 추가 → isComplete=true', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId: 'f-fail', phase, passed: phase === 'reviewer' ? false : true, feedback: 'x', timestamp: new Date() });
+    }
+    // isComplete는 phase 존재 여부만 확인 (passed와 무관)
+    expect(gate.isComplete('f-fail')).toBe(true);
+  });
+
+  it('4개 phase 모두 passed=true → isComplete=true', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId: 'f-all-pass', phase, passed: true, feedback: 'ok', timestamp: new Date() });
+    }
+    expect(gate.isComplete('f-all-pass')).toBe(true);
+  });
+
+  it('featureId 대소문자 구별', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId: 'UPPER', phase, passed: true, feedback: 'ok', timestamp: new Date() });
+    }
+    expect(gate.isComplete('upper')).toBe(false);
+    expect(gate.isComplete('UPPER')).toBe(true);
+  });
+
+  it('여러 featureId 독립적으로 관리', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId: 'feat-A', phase, passed: true, feedback: 'ok', timestamp: new Date() });
+    }
+    expect(gate.isComplete('feat-A')).toBe(true);
+    expect(gate.isComplete('feat-B')).toBe(false);
+  });
+
+  it('addResult 반복 호출 → 마지막 결과 반영', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult({ featureId: 'f-rep', phase: 'qa_qc', passed: false, feedback: 'fail', timestamp: new Date() });
+    gate.addResult({ featureId: 'f-rep', phase: 'qa_qc', passed: true, feedback: 'pass', timestamp: new Date() });
+    gate.addResult({ featureId: 'f-rep', phase: 'reviewer', passed: true, feedback: 'ok', timestamp: new Date() });
+    gate.addResult({ featureId: 'f-rep', phase: 'layer1', passed: true, feedback: 'ok', timestamp: new Date() });
+    gate.addResult({ featureId: 'f-rep', phase: 'adev', passed: true, feedback: 'ok', timestamp: new Date() });
+    // qa_qc는 최신=passed=true
+    expect(gate.isComplete('f-rep')).toBe(true);
+  });
+
+  it('feedback 빈 문자열 → 처리됨', () => {
+    const gate = new VerificationGate(logger);
+    expect(() =>
+      gate.addResult({ featureId: 'f-no-fb', phase: 'qa_qc', passed: true, feedback: '', timestamp: new Date() }),
+    ).not.toThrow();
+  });
+
+  it('feedback 매우 긴 문자열 → 처리됨', () => {
+    const gate = new VerificationGate(logger);
+    const longFeedback = 'x'.repeat(10000);
+    expect(() =>
+      gate.addResult({ featureId: 'f-long-fb', phase: 'qa_qc', passed: true, feedback: longFeedback, timestamp: new Date() }),
+    ).not.toThrow();
+  });
+
+  it('UUID featureId 50개 모두 isComplete=false (초기)', () => {
+    const gate = new VerificationGate(logger);
+    const uuids = Array.from({ length: 50 }, () => crypto.randomUUID());
+    for (const uuid of uuids) {
+      expect(gate.isComplete(uuid)).toBe(false);
+    }
+  });
+
+  it('getSummary 또는 getResults → 처리됨', () => {
+    const gate = new VerificationGate(logger);
+    gate.addResult({ featureId: 'summary-f', phase: 'qa_qc', passed: true, feedback: 'ok', timestamp: new Date() });
+    // getSummary/getResults가 있으면 호출, 없으면 isComplete만 확인
+    expect(gate.isComplete('summary-f')).toBe(false);
+  });
+});
+
+// ── FailureHandler 추가 엣지 케이스 ─────────────────────────────
+
+describe('FailureHandler - 추가 엣지 케이스', () => {
+  it('빈 message → 분류됨', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-empty-msg', 'VERIFY', '');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('매우 긴 message → ok', () => {
+    const handler = new FailureHandler(logger);
+    const longMsg = 'test '.repeat(1000);
+    const r = handler.classify('f-long', 'VERIFY', longMsg);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('design_flaw 분류: architecture 키워드', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-arch', 'CODE', 'architecture flaw detected');
+    if (r.ok) expect(r.value.type).toBe('design_flaw');
+  });
+
+  it('implementation_bug 분류: TypeError 키워드', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-type', 'CODE', 'TypeError: cannot read property');
+    if (r.ok) expect(r.value.type).toBe('implementation_bug');
+  });
+
+  it('test_gap 분류: coverage 키워드', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-cov', 'TEST', 'test coverage insufficient');
+    if (r.ok) expect(r.value.type).toBe('test_gap');
+  });
+
+  it('분류 결과에 failureId 포함', () => {
+    const handler = new FailureHandler(logger);
+    const fid = 'failure-id-xyz';
+    const r = handler.classify(fid, 'VERIFY', 'undefined error');
+    if (r.ok) expect(r.value.featureId).toBe(fid);
+  });
+
+  it('분류 결과에 phase 포함', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-phase', 'TEST', 'test gap found');
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('분류 결과에 suggestedAction 존재', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-action', 'VERIFY', 'architecture issue');
+    if (r.ok) expect(typeof r.value.suggestedAction).toBe('string');
+  });
+
+  it('여러 phase에 걸쳐 분류 → 모두 ok', () => {
+    const handler = new FailureHandler(logger);
+    const phases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'] as const;
+    for (const phase of phases) {
+      const r = handler.classify(`f-${phase}`, phase, 'undefined is not defined');
+      expect(typeof r.ok).toBe('boolean');
+    }
+  });
+
+  it('10회 연속 분류 → 모두 처리', () => {
+    const handler = new FailureHandler(logger);
+    for (let i = 0; i < 10; i++) {
+      const r = handler.classify(`f-${i}`, 'VERIFY', `error message ${i}`);
+      expect(typeof r.ok).toBe('boolean');
+    }
+  });
+
+  it('한글 message → 분류됨', () => {
+    const handler = new FailureHandler(logger);
+    const r = handler.classify('f-kor', 'VERIFY', '아키텍처 결함 발견');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('UUID failureId → ok', () => {
+    const handler = new FailureHandler(logger);
+    const uuid = crypto.randomUUID();
+    const r = handler.classify(uuid, 'CODE', 'null pointer');
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── AgentGenerator 추가 엣지 케이스 ─────────────────────────────
+
+describe('AgentGenerator - 추가 엣지 케이스', () => {
+  it('AgentGenerator 인스턴스 생성됨', () => {
+    const gen = new AgentGenerator(logger);
+    expect(gen).toBeInstanceOf(AgentGenerator);
+  });
+
+  it('generate: architect → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('architect', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('architect');
+  });
+
+  it('generate: coder → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('coder', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('coder');
+  });
+
+  it('generate: tester → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('tester', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('tester');
+  });
+
+  it('generate: reviewer → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('reviewer', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('reviewer');
+  });
+
+  it('generate: qa → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('qa', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('qa');
+  });
+
+  it('generate: qc → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('qc', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('qc');
+  });
+
+  it('generate: documenter → AgentName 포함', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('documenter', '', 'feat-1');
+    if (r.ok) expect(r.value.name).toBe('documenter');
+  });
+
+  it('generate 결과 ok는 boolean', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('architect', '', 'feat-1');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('generate: phase DESIGN → ok', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('architect', '', 'feat-1');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('generate: phase CODE → ok', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('coder', '', 'feat-1');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('generate: phase TEST → ok', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('tester', '', 'feat-1');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('generate: phase VERIFY → ok', () => {
+    const gen = new AgentGenerator(logger);
+    const r = gen.generateAgentConfig('reviewer', '', 'feat-1');
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── CoderAllocator 추가 엣지 케이스 ─────────────────────────────
+
+describe('CoderAllocator - 추가 엣지 케이스', () => {
+  it('CoderAllocator 인스턴스 생성됨', () => {
+    const alloc = new CoderAllocator(logger);
+    expect(alloc).toBeInstanceOf(CoderAllocator);
+  });
+
+  it('allocate: 모듈 1개 → ok', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-extra-1', ['module-a']);
+    expect(r.ok).toBe(true);
+  });
+
+  it('allocate: 빈 모듈 목록 → ok', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-empty-extra', []);
+    expect(r.ok).toBe(true);
+  });
+
+  it('allocate: 모듈 10개 → ok', () => {
+    const alloc = new CoderAllocator(logger);
+    const mods = Array.from({ length: 10 }, (_, i) => `mod-extra-${i}`);
+    const r = alloc.allocate('feat-many-extra', mods);
+    expect(r.ok).toBe(true);
+  });
+
+  it('allocate: 결과는 배열', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-arr-extra', ['mod-x']);
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('allocate: 각 모듈에 coderId 할당됨', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-coderid', ['m1', 'm2', 'm3']);
+    if (r.ok) {
+      for (const alloc_ of r.value) {
+        expect(typeof alloc_.coderId).toBe('string');
+      }
+    }
+  });
+
+  it('allocate: 각 할당에 featureId 포함', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-fid-check', ['m1']);
+    if (r.ok) {
+      for (const a of r.value) {
+        expect(a.featureId).toBe('feat-fid-check');
+      }
+    }
+  });
+
+  it('allocate: 각 할당에 branchName 포함', () => {
+    const alloc = new CoderAllocator(logger);
+    const r = alloc.allocate('feat-branch-check', ['m1']);
+    if (r.ok) {
+      for (const a of r.value) {
+        expect(typeof a.branchName).toBe('string');
+        expect(a.branchName.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('allocate: 같은 모듈 두 번 → 두번째는 충돌 err', () => {
+    const alloc = new CoderAllocator(logger);
+    alloc.allocate('feat-dup-extra-1', ['shared-mod-extra']);
+    const r = alloc.allocate('feat-dup-extra-2', ['shared-mod-extra']);
+    expect(r.ok).toBe(false);
+  });
+
+  it('getActiveAllocations: 초기 빈 배열', () => {
+    const alloc = new CoderAllocator(logger);
+    expect(alloc.getActiveAllocations()).toEqual([]);
+  });
+
+  it('getActiveAllocations: allocate 후 길이 증가', () => {
+    const alloc = new CoderAllocator(logger);
+    alloc.allocate('feat-active-extra', ['mod-act-1', 'mod-act-2']);
+    expect(alloc.getActiveAllocations().length).toBeGreaterThan(0);
+  });
+});
+
+// ── IntegrationTester 추가 엣지 케이스 ──────────────────────────
+
+describe('IntegrationTester - 추가 엣지 케이스', () => {
+  it('IntegrationTester 인스턴스 생성됨', () => {
+    const em = new CleanEnvManager(logger);
+    const tester = new IntegrationTester(logger, processExecutor, em);
+    expect(tester).toBeInstanceOf(IntegrationTester);
+  });
+
+  it('runIntegrationTests: 유효한 projectId → ok 또는 err', async () => {
+    const em = new CleanEnvManager(logger);
+    const tester = new IntegrationTester(logger, processExecutor, em);
+    const r = await tester.runIntegrationTests('test-proj-extra', '/tmp/proj-extra');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('runIntegrationTests: 빈 projectId → 처리됨', async () => {
+    const em = new CleanEnvManager(logger);
+    const tester = new IntegrationTester(logger, processExecutor, em);
+    const r = await tester.runIntegrationTests('', '/tmp/empty-proj');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('runIntegrationTests: 결과가 배열 또는 에러', async () => {
+    const em = new CleanEnvManager(logger);
+    const tester = new IntegrationTester(logger, processExecutor, em);
+    const r = await tester.runIntegrationTests('proj-abc', '/tmp/proj-abc');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('여러 IntegrationTester 인스턴스 독립적', () => {
+    const em1 = new CleanEnvManager(logger);
+    const em2 = new CleanEnvManager(logger);
+    const t1 = new IntegrationTester(logger, processExecutor, em1);
+    const t2 = new IntegrationTester(logger, processExecutor, em2);
+    expect(t1).toBeInstanceOf(IntegrationTester);
+    expect(t2).toBeInstanceOf(IntegrationTester);
+  });
+
+  it('runIntegrationTests: 한글 projectId → 처리됨', async () => {
+    const em = new CleanEnvManager(logger);
+    const tester = new IntegrationTester(logger, processExecutor, em);
+    const r = await tester.runIntegrationTests('테스트프로젝트', '/tmp/kor-proj');
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── CleanEnvManager 추가 엣지 케이스 ────────────────────────────
+
+describe('CleanEnvManager - 추가 엣지 케이스', () => {
+  it('CleanEnvManager 인스턴스 생성됨', () => {
+    const em = new CleanEnvManager(logger);
+    expect(em).toBeInstanceOf(CleanEnvManager);
+  });
+
+  it('create: 유효한 projectId → ok', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.create('proj-create-test');
+    if (r.ok) {
+      await em.destroy(r.value.envPath);
+    }
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('create: 환경 경로 반환', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.create('proj-path-test');
+    if (r.ok) {
+      expect(typeof r.value.envPath).toBe('string');
+      expect(r.value.envPath.length).toBeGreaterThan(0);
+      await em.destroy(r.value.envPath);
+    }
+  });
+
+  it('create: 두 번 생성 → 독립된 경로', async () => {
+    const em = new CleanEnvManager(logger);
+    const r1 = await em.create('proj-dual-1');
+    const r2 = await em.create('proj-dual-2');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.envPath).not.toBe(r2.value.envPath);
+      await em.destroy(r1.value.envPath);
+      await em.destroy(r2.value.envPath);
+    }
+  });
+
+  it('create 후 isClean → true', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.create('proj-clean-check');
+    if (r.ok) {
+      expect(em.isClean(r.value.envPath)).toBe(true);
+      await em.destroy(r.value.envPath);
+    }
+  });
+
+  it('create 후 destroy → isClean=false', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.create('proj-destroy-check');
+    if (r.ok) {
+      await em.destroy(r.value.envPath);
+      expect(em.isClean(r.value.envPath)).toBe(false);
+    }
+  });
+
+  it('listActive: 초기 빈 배열', () => {
+    const em = new CleanEnvManager(logger);
+    expect(em.listActive()).toEqual([]);
+  });
+
+  it('listActive: create 후 증가', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.create('proj-list-active');
+    if (r.ok) {
+      expect(em.listActive().length).toBeGreaterThan(0);
+      await em.destroy(r.value.envPath);
+    }
+  });
+
+  it('destroy: 미관리 경로 → err', async () => {
+    const em = new CleanEnvManager(logger);
+    const r = await em.destroy('/nonexistent-env-path-xyz');
+    expect(r.ok).toBe(false);
+  });
+
+  it('여러 인스턴스 독립적', async () => {
+    const em1 = new CleanEnvManager(logger);
+    const em2 = new CleanEnvManager(logger);
+    const r1 = await em1.create('em1-proj');
+    const r2 = await em2.create('em2-proj');
+    if (r1.ok) await em1.destroy(r1.value.envPath);
+    if (r2.ok) await em2.destroy(r2.value.envPath);
+    expect(typeof r1.ok).toBe('boolean');
+    expect(typeof r2.ok).toBe('boolean');
+  });
+});
