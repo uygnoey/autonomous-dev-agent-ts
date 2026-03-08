@@ -731,3 +731,178 @@ describe('AgentSpawner 에러 전파 패턴', () => {
     }
   });
 });
+
+// ── 추가 edge/random 케이스 ────────────────────────────────────
+
+describe('AgentSpawner 추가 edge/random 케이스', () => {
+  it('UUID projectId → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ projectId: crypto.randomUUID() }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('UUID featureId → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ featureId: crypto.randomUUID() }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('빈 prompt config → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ prompt: '' }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('빈 systemPrompt config → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ systemPrompt: '' }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(0);
+  });
+
+  it('특수문자 content 이벤트 → 그대로 전달', async () => {
+    const content = '!@#$%^&*()_+-=[]{}|;:\',.<>?/`~';
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent({ content })]), logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(content);
+  });
+
+  it('이모지 content 이벤트 → 그대로 전달', async () => {
+    const content = '🔑🚀💻🎯✅❌⚠️';
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent({ content })]), logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(content);
+  });
+
+  it('maxTurns=Number.MAX_SAFE_INTEGER → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ maxTurns: Number.MAX_SAFE_INTEGER }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(0);
+  });
+
+  it('maxTurns 음수 → 정상 처리 (구현 의존)', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ maxTurns: -1 }))) {
+      events.push(e);
+    }
+    expect(Array.isArray(events)).toBe(true);
+  });
+
+  it('tools 배열에 특수문자 도구명 → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ tools: ['Read', 'Write', 'Bash', 'Glob'] }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('많은 도구 배열 → 정상 처리', async () => {
+    const tools = Array.from({ length: 50 }, (_, i) => `Tool${i}`);
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ tools }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('세션 ID에 특수문자 포함 → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('session!@#$%')) events.push(e);
+    expect(events.length).toBe(1);
+  });
+
+  it('세션 ID에 한국어 포함 → 정상 처리', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('세션-한국어-아이디')) events.push(e);
+    expect(events.length).toBe(1);
+  });
+
+  it('세션 ID 매우 긴 문자열 → 정상 처리', async () => {
+    const longId = 'session-' + 'x'.repeat(500);
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const events: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession(longId)) events.push(e);
+    expect(events.length).toBe(1);
+  });
+
+  it('이벤트 timestamp 미래 날짜 → 그대로 전달', async () => {
+    const futureDate = new Date('2099-12-31T23:59:59Z');
+    const event = makeAgentEvent({ timestamp: futureDate });
+    const spawner = new AgentSpawner(makeSuccessExecutor([event]), logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.timestamp).toEqual(futureDate);
+  });
+
+  it('이벤트 timestamp 과거 날짜 → 그대로 전달', async () => {
+    const pastDate = new Date('2000-01-01T00:00:00Z');
+    const event = makeAgentEvent({ timestamp: pastDate });
+    const spawner = new AgentSpawner(makeSuccessExecutor([event]), logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.timestamp).toEqual(pastDate);
+  });
+
+  it('spawn 후 resumeSession 순서대로 동작', async () => {
+    const spawnEvent = makeAgentEvent({ content: 'spawn-result' });
+    const resumeEvent = makeAgentEvent({ content: 'resume-result' });
+    const spawnExecutor = makeSuccessExecutor([spawnEvent]);
+    const spawner1 = new AgentSpawner(spawnExecutor, logger);
+    const spawnReceived: AgentEvent[] = [];
+    for await (const e of spawner1.spawn(makeAgentConfig())) spawnReceived.push(e);
+
+    const resumeExecutor = makeSuccessExecutor([resumeEvent]);
+    const spawner2 = new AgentSpawner(resumeExecutor, logger);
+    const resumeReceived: AgentEvent[] = [];
+    for await (const e of spawner2.resumeSession('sess-123')) resumeReceived.push(e);
+
+    expect(spawnReceived[0]?.content).toBe('spawn-result');
+    expect(resumeReceived[0]?.content).toBe('resume-result');
+  });
+
+  it('error executor spawn → Error.name은 "Error"', async () => {
+    const spawner = new AgentSpawner(makeErrorExecutor('test error'), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.name).toBe('Error');
+  });
+
+  it('spawn 반환값 AsyncIterable → for-await 사용 가능', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    let count = 0;
+    for await (const _ of spawner.spawn(makeAgentConfig())) count++;
+    expect(count).toBe(1);
+  });
+
+  it('resumeSession 반환값 AsyncIterable → for-await 사용 가능', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    let count = 0;
+    for await (const _ of spawner.resumeSession('id')) count++;
+    expect(count).toBe(1);
+  });
+});

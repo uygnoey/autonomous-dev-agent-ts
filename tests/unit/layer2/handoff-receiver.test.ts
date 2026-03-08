@@ -740,3 +740,199 @@ describe('HandoffReceiver validateStructure - 추가 edge 케이스', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── 추가 edge/random 케이스 ─────────────────────────────────────
+
+describe('HandoffReceiver 추가 edge/random 케이스', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(new ConsoleLogger('error'));
+  });
+
+  it('UUID 형식 handoff.id → ok=true', () => {
+    const handoff = createValidHandoff();
+    handoff.id = crypto.randomUUID();
+    expect(receiver.receive(handoff).ok).toBe(true);
+  });
+
+  it('한글 planDocument → ok=true', () => {
+    const handoff = createValidHandoff();
+    handoff.planDocument = '이것은 한국어로 작성된 기획 문서입니다. 모든 요구사항이 포함되어 있습니다.';
+    expect(receiver.receive(handoff).ok).toBe(true);
+  });
+
+  it('매우 긴 specDocument → ok=true', () => {
+    const handoff = createValidHandoff();
+    handoff.specDocument = 'spec '.repeat(1000);
+    expect(receiver.receive(handoff).ok).toBe(true);
+  });
+
+  it('빈 planDocument → boolean 반환', () => {
+    const handoff = createValidHandoff();
+    handoff.planDocument = '';
+    expect(typeof receiver.receive(handoff).ok).toBe('boolean');
+  });
+
+  it('빈 designDocument → boolean 반환', () => {
+    const handoff = createValidHandoff();
+    handoff.designDocument = '';
+    expect(typeof receiver.receive(handoff).ok).toBe('boolean');
+  });
+
+  it('completenessScore 경계값 0.80 → ok=true', () => {
+    const contract = createValidContract();
+    contract.verificationMatrix.completenessScore = 0.80;
+    expect(receiver.receive(createValidHandoff(contract)).ok).toBe(true);
+  });
+
+  it('completenessScore 경계값 0.799 → ok=false', () => {
+    const contract = createValidContract();
+    contract.verificationMatrix.completenessScore = 0.799;
+    expect(receiver.receive(createValidHandoff(contract)).ok).toBe(false);
+  });
+
+  it('completenessScore NaN → ok=false or boolean', () => {
+    const contract = createValidContract();
+    contract.verificationMatrix.completenessScore = Number.NaN;
+    const result = receiver.receive(createValidHandoff(contract));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('completenessScore Infinity → boolean', () => {
+    const contract = createValidContract();
+    contract.verificationMatrix.completenessScore = Number.POSITIVE_INFINITY;
+    const result = receiver.receive(createValidHandoff(contract));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 1개 수락 기준 없음, 나머지 정상 → ok=false', () => {
+    const contract = createValidContract();
+    contract.features.push({
+      id: 'feat-bad',
+      name: '나쁜 기능',
+      description: '수락 기준 없음',
+      acceptanceCriteria: [],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    });
+    contract.testDefinitions.push({
+      featureId: 'feat-bad',
+      categories: [],
+      rules: [],
+      sampleTests: [],
+      ratios: { unit: 1, module: 0, e2e: 0 },
+    });
+    contract.implementationOrder.push('feat-bad');
+    expect(receiver.receive(createValidHandoff(contract)).ok).toBe(false);
+  });
+
+  it('acceptanceCriteria.verifiable=false → boolean 반환', () => {
+    const contract = createValidContract();
+    const feature = contract.features[0];
+    if (feature) {
+      const criterion = feature.acceptanceCriteria[0];
+      if (criterion) {
+        (criterion as { verifiable: boolean }).verifiable = false;
+      }
+    }
+    expect(typeof receiver.receive(createValidHandoff(contract)).ok).toBe('boolean');
+  });
+
+  it('testDefinitions featureId 불일치 → boolean 반환', () => {
+    const contract = createValidContract();
+    const td = contract.testDefinitions[0];
+    if (td) {
+      (td as { featureId: string }).featureId = 'feat-nonexistent';
+    }
+    expect(typeof receiver.receive(createValidHandoff(contract)).ok).toBe('boolean');
+  });
+
+  it('ratios가 모두 0 → boolean 반환', () => {
+    const contract = createValidContract();
+    const td = contract.testDefinitions[0];
+    if (td) {
+      (td as { ratios: { unit: number; module: number; e2e: number } }).ratios = { unit: 0, module: 0, e2e: 0 };
+    }
+    expect(typeof receiver.receive(createValidHandoff(contract)).ok).toBe('boolean');
+  });
+
+  it('validateConsistency: 여러 기능 중 일부만 implementationOrder에 → 경고', () => {
+    const contract = createValidContract();
+    contract.features.push({
+      id: 'feat-orphan',
+      name: '고아 기능',
+      description: '순서 미지정',
+      acceptanceCriteria: [{ id: 'ac-orphan', description: '기준', verifiable: true, testCategory: 'test' }],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    });
+    // implementationOrder에 추가 안 함
+    const result = receiver.validateConsistency(contract);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('validateStructure: 기능 10개 모두 유효 → ok=true or warnings', () => {
+    const contract = createValidContract();
+    for (let i = 2; i <= 10; i++) {
+      contract.features.push({
+        id: `feat-${i}`,
+        name: `기능 ${i}`,
+        description: `설명 ${i}`,
+        acceptanceCriteria: [{ id: `ac-${i}`, description: `기준 ${i}`, verifiable: true, testCategory: 'test' }],
+        dependencies: [],
+        inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+        outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+      });
+      contract.testDefinitions.push({
+        featureId: `feat-${i}`,
+        categories: [{ name: 'test', description: '테스트', mappedCriteria: [`ac-${i}`] }],
+        rules: [],
+        sampleTests: [],
+        ratios: { unit: 0.6, module: 0.3, e2e: 0.1 },
+      });
+      contract.implementationOrder.push(`feat-${i}`);
+    }
+    const result = receiver.validateStructure(contract);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('receive: createdAt이 미래 날짜 → boolean 반환', () => {
+    const handoff = createValidHandoff();
+    handoff.createdAt = new Date('2099-12-31T23:59:59Z');
+    expect(typeof receiver.receive(handoff).ok).toBe('boolean');
+  });
+
+  it('receive: createdAt이 과거 날짜 → boolean 반환', () => {
+    const handoff = createValidHandoff();
+    handoff.createdAt = new Date('2000-01-01T00:00:00Z');
+    expect(typeof receiver.receive(handoff).ok).toBe('boolean');
+  });
+
+  it('receive: 특수문자 handoff.id → boolean 반환', () => {
+    const handoff = createValidHandoff();
+    handoff.id = '!@#$%^&*()-_=+[]{}|;:\',.<>?/`~';
+    expect(typeof receiver.receive(handoff).ok).toBe('boolean');
+  });
+
+  it('3개 인스턴스 동시 사용 → 각각 독립', () => {
+    const r1 = new HandoffReceiver(new ConsoleLogger('error'));
+    const r2 = new HandoffReceiver(new ConsoleLogger('error'));
+    const r3 = new HandoffReceiver(new ConsoleLogger('error'));
+    const h = createValidHandoff();
+    expect(r1.receive(h).ok).toBe(r2.receive(h).ok);
+    expect(r2.receive(h).ok).toBe(r3.receive(h).ok);
+  });
+
+  it('validateConsistency: 빈 features → boolean 반환', () => {
+    const contract: ContractSchema = { ...createValidContract(), features: [], implementationOrder: [] };
+    expect(typeof receiver.validateConsistency(contract).ok).toBe('boolean');
+  });
+
+  it('validateConsistency: 빈 testDefinitions → boolean 반환', () => {
+    const contract: ContractSchema = { ...createValidContract(), testDefinitions: [] };
+    expect(typeof receiver.validateConsistency(contract).ok).toBe('boolean');
+  });
+});

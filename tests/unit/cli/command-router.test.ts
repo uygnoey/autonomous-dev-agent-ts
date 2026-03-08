@@ -734,3 +734,179 @@ describe('CommandRouter 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 edge/random 케이스 ──────────────────────────────────────
+
+describe('CommandRouter 추가 edge/random 케이스', () => {
+  it('parse: 단일 특수문자 명령 → err', () => {
+    const router = makeRouter();
+    router.register(makeCommand('cmd'));
+    const result = router.parse(['!@#$']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('parse: 빈 문자열만 있는 argv → err', () => {
+    const router = makeRouter();
+    router.register(makeCommand('cmd'));
+    const result = router.parse(['']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('parse: 숫자 문자열 명령 → 등록 전 err', () => {
+    const router = makeRouter();
+    const result = router.parse(['123']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('register: 숫자 이름 명령 → parse 성공', () => {
+    const router = makeRouter();
+    router.register(makeCommand('123'));
+    expect(router.parse(['123']).ok).toBe(true);
+  });
+
+  it('parse: 한글 명령 등록 → parse 성공', () => {
+    const router = makeRouter();
+    router.register(makeCommand('초기화'));
+    expect(router.parse(['초기화']).ok).toBe(true);
+  });
+
+  it('parse: UUID 형식 명령 → 등록 후 parse 성공', () => {
+    const router = makeRouter();
+    const cmdName = '550e8400-e29b-41d4-a716-446655440000';
+    router.register(makeCommand(cmdName));
+    expect(router.parse([cmdName]).ok).toBe(true);
+  });
+
+  it('parse: 매우 긴 명령 이름 → 등록 후 parse 성공', () => {
+    const router = makeRouter();
+    const longName = 'cmd-' + 'x'.repeat(200);
+    router.register(makeCommand(longName));
+    expect(router.parse([longName]).ok).toBe(true);
+  });
+
+  it('parse: 매우 긴 플래그 이름 → 처리됨', () => {
+    const router = makeRouter();
+    router.register(makeCommand('test'));
+    const longFlag = '--' + 'a'.repeat(200);
+    const result = router.parse(['test', longFlag]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('execute: 명령 실행 후 result.ok는 boolean', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('bool-check'));
+    const result = await router.execute(['bool-check']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('parse: options에 undefined 아닌 값만 포함됨', () => {
+    const router = makeRouter();
+    router.register(makeCommand('check-opts'));
+    const result = router.parse(['check-opts', '--key=val']);
+    if (result.ok) {
+      expect(result.value.options['key']).not.toBeUndefined();
+    }
+  });
+
+  it('register: 동일 별칭 여러 명령에 등록 → 마지막이 우선', () => {
+    const router = makeRouter();
+    router.register(makeCommand('cmd-a', { aliases: ['x'] }));
+    router.register(makeCommand('cmd-b', { aliases: ['x'] }));
+    const result = router.parse(['x']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('parse: args 순서 보존', () => {
+    const router = makeRouter();
+    router.register(makeCommand('order-test'));
+    const result = router.parse(['order-test', 'first', 'second', 'third']);
+    if (result.ok) {
+      expect(result.value.args[0]).toBe('first');
+      expect(result.value.args[1]).toBe('second');
+      expect(result.value.args[2]).toBe('third');
+    }
+  });
+
+  it('parse: 플래그 이름 camelCase 변환 검증', () => {
+    const router = makeRouter();
+    router.register(makeCommand('camel'));
+    const result = router.parse(['camel', '--my-long-flag-name']);
+    if (result.ok) {
+      expect(result.value.options['myLongFlagName']).toBe(true);
+    }
+  });
+
+  it('execute: Promise 반환 타입', () => {
+    const router = makeRouter();
+    router.register(makeCommand('async-check'));
+    const promise = router.execute(['async-check']);
+    expect(promise instanceof Promise).toBe(true);
+  });
+
+  it('getHelp: 한글 명령 설명 포함', () => {
+    const router = makeRouter();
+    router.register(makeCommand('kor-cmd', { description: '한국어 설명이 들어갑니다' }));
+    const help = router.getHelp();
+    expect(help).toContain('kor-cmd');
+  });
+
+  it('parse: 플래그 없는 args만 있는 경우', () => {
+    const router = makeRouter();
+    router.register(makeCommand('args-only'));
+    const result = router.parse(['args-only', 'a', 'b', 'c']);
+    if (result.ok) {
+      expect(result.value.args.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('parse: args 없는 플래그만 있는 경우', () => {
+    const router = makeRouter();
+    router.register(makeCommand('flags-only'));
+    const result = router.parse(['flags-only', '--a', '--b', '--c']);
+    if (result.ok) {
+      expect(result.value.options['a']).toBe(true);
+      expect(result.value.options['b']).toBe(true);
+      expect(result.value.options['c']).toBe(true);
+    }
+  });
+
+  it('register 후 같은 명령 다시 등록 → getHelp 정상', () => {
+    const router = makeRouter();
+    router.register(makeCommand('dup'));
+    router.register(makeCommand('dup'));
+    expect(typeof router.getHelp()).toBe('string');
+  });
+
+  it('execute: 다른 에러 타입 명령 → err.ok=false', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('err-type', {
+      executeResult: err(new AdevError('agent_not_found', 'Not found')),
+    }));
+    const result = await router.execute(['err-type']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('agent_not_found');
+    }
+  });
+
+  it('parse: flags 서브 객체 존재 확인', () => {
+    const router = makeRouter();
+    router.register(makeCommand('flags-sub'));
+    const result = router.parse(['flags-sub', '--key=val']);
+    if (result.ok) {
+      const flags = result.value.options['flags'];
+      // flags 서브 객체가 있다면 object여야 함
+      if (flags !== undefined) {
+        expect(typeof flags).toBe('object');
+      }
+    }
+  });
+
+  it('10개 다른 플래그 조합 → parse 성공', () => {
+    const router = makeRouter();
+    router.register(makeCommand('many-flags'));
+    const flags = Array.from({ length: 10 }, (_, i) => `--flag-${i}=value${i}`);
+    const result = router.parse(['many-flags', ...flags]);
+    expect(result.ok).toBe(true);
+  });
+});

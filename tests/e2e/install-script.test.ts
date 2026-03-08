@@ -729,3 +729,177 @@ describe('install.sh e2e — 단순 기능 검증', () => {
     }
   });
 });
+
+// ── 추가 edge 케이스 ──────────────────────────────────────────
+
+describe('install.sh e2e — 추가 edge/random 케이스', () => {
+  it('simulateAuthChoice: choice=" 1" (앞 공백) → 잘못된 입력 (trim 후 "1" 처리)', () => {
+    const result = simulateAuthChoice(' 1', 'mykey', '');
+    // trim 후 '1'이므로 저장 완료
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=mykey');
+  });
+
+  it('simulateAuthChoice: choice="1 " (뒤 공백) → trim 후 1 처리', () => {
+    const result = simulateAuthChoice('1 ', 'mykey2', '');
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=mykey2');
+  });
+
+  it('simulateAuthChoice: choice="\t2\t" (탭 공백) → trim 후 2 처리', () => {
+    const result = simulateAuthChoice('\t2\t', 'oauthkey', '');
+    expect(result.envContent).toContain('CLAUDE_CODE_OAUTH_TOKEN=oauthkey');
+  });
+
+  it('simulateAuthChoice: choice="\n3\n" (개행 포함) → trim 후 3 처리', () => {
+    const result = simulateAuthChoice('\n3\n', 'skipkey', 'EXISTING=val');
+    expect(result.envContent).toBe('EXISTING=val');
+    expect(result.message).toContain('건너뜀');
+  });
+
+  it('simulateAuthChoice: 아주 긴 choice 문자열 → 잘못된 입력', () => {
+    const longChoice = 'x'.repeat(1000);
+    const result = simulateAuthChoice(longChoice, 'k', 'E=v');
+    expect(result.envContent).toBe('E=v');
+    expect(result.message).toContain('잘못된 입력');
+  });
+
+  it('simulateAuthChoice: 음수 choice → 잘못된 입력', () => {
+    const result = simulateAuthChoice('-1', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('simulateAuthChoice: 소수점 choice → 잘못된 입력', () => {
+    const result = simulateAuthChoice('1.5', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('simulateAuthChoice: 전각 숫자 "１" → 잘못된 입력', () => {
+    const result = simulateAuthChoice('１', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('simulateAuthChoice: 특수문자 choice → 잘못된 입력', () => {
+    const result = simulateAuthChoice('!@#$', 'key', 'E=v');
+    expect(result.envContent).toBe('E=v');
+  });
+
+  it('simulatePathAdd: 빈 binDir 추가 시 처리됨', () => {
+    const result = simulatePathAdd('existing content', '');
+    // 빈 binDir는 이미 포함되어 있는 것으로 처리되거나 추가됨
+    expect(typeof result).toBe('string');
+  });
+
+  it('simulatePathAdd: binDir에 특수문자 포함 → 처리됨', () => {
+    const binDir = '/home/user with spaces/.local/bin';
+    const result = simulatePathAdd('', binDir);
+    expect(typeof result).toBe('string');
+  });
+
+  it('simulatePathAdd: binDir에 한국어 포함 → 처리됨', () => {
+    const binDir = '/홈/사용자/.local/bin';
+    const result = simulatePathAdd('', binDir);
+    expect(result).toContain(binDir);
+  });
+
+  it('simulatePlatform: Darwin arm64 소문자는 null', () => {
+    expect(simulatePlatform('darwin', 'arm64')).toBeNull();
+  });
+
+  it('simulatePlatform: linux 소문자는 null', () => {
+    expect(simulatePlatform('linux', 'x86_64')).toBeNull();
+  });
+
+  it('simulatePlatform: Windows_NT → null', () => {
+    expect(simulatePlatform('Windows_NT', 'x86_64')).toBeNull();
+  });
+
+  it('simulatePlatform: Linux arm64 소문자 → null', () => {
+    expect(simulatePlatform('Linux', 'ARM64')).toBeNull();
+  });
+
+  it('simulatePlatform: 빈 문자열 둘 다 → null', () => {
+    expect(simulatePlatform('', '')).toBeNull();
+  });
+
+  it('simulatePlatform: null 문자열 → null', () => {
+    expect(simulatePlatform('null', 'null')).toBeNull();
+  });
+
+  it('simulateAuthChoice: key에 등호 포함 → envContent에 저장됨', () => {
+    const key = 'sk-ant-api01-key=with=equals';
+    const result = simulateAuthChoice('1', key, '');
+    expect(result.envContent).toContain(`ANTHROPIC_API_KEY=${key}`);
+  });
+
+  it('simulateAuthChoice: key에 슬래시 포함 → envContent에 저장됨', () => {
+    const key = 'sk-ant-api01-key/with/slash';
+    const result = simulateAuthChoice('1', key, '');
+    expect(result.envContent).toContain(`ANTHROPIC_API_KEY=${key}`);
+  });
+
+  it('simulateAuthChoice: 기존 env에 여러 줄 있을 때 키 교체', () => {
+    const existingEnv = 'VAR1=val1\nANTHROPIC_API_KEY=old\nVAR2=val2\nCLAUDE_CODE_OAUTH_TOKEN=old-oauth';
+    const result = simulateAuthChoice('1', 'new-key', existingEnv);
+    expect(result.envContent).toContain('ANTHROPIC_API_KEY=new-key');
+    expect(result.envContent).not.toContain('ANTHROPIC_API_KEY=old');
+    expect(result.envContent).not.toContain('CLAUDE_CODE_OAUTH_TOKEN=');
+    expect(result.envContent).toContain('VAR1=val1');
+    expect(result.envContent).toContain('VAR2=val2');
+  });
+
+  it('simulateAuthChoice: 기존 env에 중복 API 키가 있어도 1개로 정리', () => {
+    // 실제로 API는 중복 키 방지가 있으므로 결과에 1개만
+    const existingEnv = 'ANTHROPIC_API_KEY=key1';
+    const result = simulateAuthChoice('1', 'key2', existingEnv);
+    const count = (result.envContent.match(/ANTHROPIC_API_KEY=/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it('simulatePathAdd: 긴 RC 파일 내용에 binDir 추가', () => {
+    const longRcContent = '# bash profile\n' + 'export VAR=val\n'.repeat(100);
+    const binDir = '/usr/local/bin/adev';
+    const result = simulatePathAdd(longRcContent, binDir);
+    expect(result).toContain(binDir);
+    const count = (result.match(new RegExp('/usr/local/bin/adev', 'g')) ?? []).length;
+    expect(count).toBe(1);
+  });
+
+  it('simulateTtyBranch: 여러 번 호출 → 항상 같은 입력에 같은 출력', () => {
+    for (let i = 0; i < 20; i++) {
+      expect(simulateTtyBranch(true)).toBe('prompt');
+      expect(simulateTtyBranch(false)).toBe('skip');
+    }
+  });
+
+  it('simulatePlatform: 결과가 null이면 설치 불가 표시', () => {
+    const unsupportedPlatforms = [
+      { os: 'Windows', arch: 'x86_64' },
+      { os: 'Darwin', arch: 'x86_64' },
+      { os: 'FreeBSD', arch: 'x86_64' },
+      { os: 'SunOS', arch: 'x86_64' },
+      { os: 'AIX', arch: 'powerpc' },
+    ];
+    for (const p of unsupportedPlatforms) {
+      expect(simulatePlatform(p.os, p.arch)).toBeNull();
+    }
+  });
+
+  it('simulatePlatform: 지원 가능 플랫폼 목록 검증', () => {
+    const supported = [
+      { os: 'Darwin', arch: 'arm64', name: 'adev-darwin-arm64' },
+      { os: 'Linux', arch: 'x86_64', name: 'adev-linux-x64' },
+      { os: 'Linux', arch: 'aarch64', name: 'adev-linux-arm64' },
+      { os: 'Linux', arch: 'arm64', name: 'adev-linux-arm64' },
+    ];
+    for (const p of supported) {
+      expect(simulatePlatform(p.os, p.arch)).toBe(p.name);
+    }
+  });
+
+  it('simulateAuthChoice: choice=2, 기존 env에 API key있을 때 API key 삭제 확인', () => {
+    const existingEnv = 'ANTHROPIC_API_KEY=existing-api-key\nOTHER=val';
+    const result = simulateAuthChoice('2', 'new-oauth', existingEnv);
+    expect(result.envContent).not.toContain('ANTHROPIC_API_KEY=');
+    expect(result.envContent).toContain('CLAUDE_CODE_OAUTH_TOKEN=new-oauth');
+    expect(result.envContent).toContain('OTHER=val');
+  });
+});
