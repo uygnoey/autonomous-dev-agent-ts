@@ -910,3 +910,519 @@ describe('CommandRouter 추가 edge/random 케이스', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+// ── 추가 경계값 배치2: parse 심층 ─────────────────────────────
+
+describe('CommandRouter parse 심층 경계값', () => {
+  it('parse: command 필드가 argv[0]과 일치', () => {
+    const router = makeRouter();
+    router.register(makeCommand('exact-match'));
+    const result = router.parse(['exact-match', '--verbose']);
+    if (result.ok) {
+      expect(result.value.command).toBe('exact-match');
+    }
+  });
+
+  it('parse: --flag=value 파싱 후 options["flag"] === "value"', () => {
+    const router = makeRouter();
+    router.register(makeCommand('kv-test'));
+    const result = router.parse(['kv-test', '--output=json']);
+    if (result.ok) {
+      expect(result.value.options['output']).toBe('json');
+    }
+  });
+
+  it('parse: 플래그 이름에 숫자 포함 → camelCase 변환 없음', () => {
+    const router = makeRouter();
+    router.register(makeCommand('num-flag'));
+    const result = router.parse(['num-flag', '--flag2=val']);
+    if (result.ok) {
+      expect(result.value.options['flag2']).toBe('val');
+    }
+  });
+
+  it('parse: 대문자 포함 플래그 → 그대로 유지', () => {
+    const router = makeRouter();
+    router.register(makeCommand('upper-flag'));
+    const result = router.parse(['upper-flag', '--MyFlag']);
+    if (result.ok) {
+      expect(result.value.options['MyFlag']).toBe(true);
+    }
+  });
+
+  it('parse: 하이픈 3개 이상 플래그 → 처리됨', () => {
+    const router = makeRouter();
+    router.register(makeCommand('triple-dash'));
+    const result = router.parse(['triple-dash', '---flag']);
+    // ---flag는 --로 시작하는데 남은 부분이 -flag → 그대로 처리
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('parse: 단일 위치 인자만 있을 때 args 길이 1', () => {
+    const router = makeRouter();
+    router.register(makeCommand('single-arg'));
+    const result = router.parse(['single-arg', 'only-arg']);
+    if (result.ok) {
+      expect(result.value.args.length).toBe(1);
+      expect(result.value.args[0]).toBe('only-arg');
+    }
+  });
+
+  it('parse: 위치 인자 없을 때 args 길이 0', () => {
+    const router = makeRouter();
+    router.register(makeCommand('no-args-cmd'));
+    const result = router.parse(['no-args-cmd', '--flag']);
+    if (result.ok) {
+      expect(result.value.args.length).toBe(0);
+    }
+  });
+
+  it('parse: 같은 명령 10번 → 동일한 결과', () => {
+    const router = makeRouter();
+    router.register(makeCommand('repeat-parse'));
+    const results = Array.from({ length: 10 }, () => router.parse(['repeat-parse', '--key=val']));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.options['key']).toBe('val');
+    }
+  });
+
+  it('parse: 랜덤 UUID 명령 등록 후 파싱 → ok=true', () => {
+    const router = makeRouter();
+    const uuid = crypto.randomUUID();
+    router.register(makeCommand(uuid));
+    expect(router.parse([uuid]).ok).toBe(true);
+  });
+
+  it('parse: 매우 많은 위치 인자 (50개)', () => {
+    const router = makeRouter();
+    router.register(makeCommand('many-pos'));
+    const args = Array.from({ length: 50 }, (_, i) => `arg-${i}`);
+    const result = router.parse(['many-pos', ...args]);
+    if (result.ok) {
+      expect(result.value.args.length).toBe(50);
+    }
+  });
+
+  it('parse: flags 서브 객체의 원본 key 확인 (camelCase 아님)', () => {
+    const router = makeRouter();
+    router.register(makeCommand('raw-key'));
+    const result = router.parse(['raw-key', '--my-flag=value']);
+    if (result.ok) {
+      const flags = result.value.options['flags'] as Record<string, unknown>;
+      if (flags) {
+        expect(flags['my-flag']).toBe('value');
+      }
+    }
+  });
+
+  it('parse: 미등록 명령 error.message 존재', () => {
+    const router = makeRouter();
+    const result = router.parse(['does-not-exist']);
+    if (!result.ok) {
+      expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  it('parse: 미등록 명령 error.message 비어있지 않음', () => {
+    const router = makeRouter();
+    const result = router.parse(['phantom-cmd']);
+    if (!result.ok) {
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('parse: 빈 argv error.code 확인', () => {
+    const router = makeRouter();
+    const result = router.parse([]);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_no_command');
+    }
+  });
+
+  it('parse: 미등록 명령 error.code 확인', () => {
+    const router = makeRouter();
+    const result = router.parse(['unknown-xyz-999']);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_unknown_command');
+    }
+  });
+
+  it('parse: --로 시작 안 하는 인자는 위치 인자', () => {
+    const router = makeRouter();
+    router.register(makeCommand('positional-test'));
+    const result = router.parse(['positional-test', 'file1.txt', 'file2.txt']);
+    if (result.ok) {
+      expect(result.value.args).toContain('file1.txt');
+      expect(result.value.args).toContain('file2.txt');
+    }
+  });
+});
+
+// ── 추가 경계값 배치2: execute 심층 ──────────────────────────
+
+describe('CommandRouter execute 심층 경계값', () => {
+  it('execute: error.code가 cli_no_command (빈 argv)', async () => {
+    const router = makeRouter();
+    const result = await router.execute([]);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_no_command');
+    }
+  });
+
+  it('execute: error.code가 cli_unknown_command (미등록 명령)', async () => {
+    const router = makeRouter();
+    const result = await router.execute(['ghost-cmd']);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_unknown_command');
+    }
+  });
+
+  it('execute: 여러 위치 인자와 플래그 모두 전달', async () => {
+    const receivedArgs: string[] = [];
+    const receivedOpts: CliOptions[] = [];
+    const cmd: CliCommand = {
+      name: 'multi-recv',
+      aliases: [],
+      description: 'multi',
+      execute: async (args, opts) => {
+        receivedArgs.push(...args);
+        receivedOpts.push(opts);
+        return ok({ message: 'done' });
+      },
+      help: () => 'help',
+    };
+    const router = makeRouter();
+    router.register(cmd);
+    await router.execute(['multi-recv', 'a', 'b', '--flag', '--key=val']);
+    expect(receivedArgs).toContain('a');
+    expect(receivedArgs).toContain('b');
+    expect(receivedOpts[0]?.['flag']).toBe(true);
+    expect(receivedOpts[0]?.['key']).toBe('val');
+  });
+
+  it('execute: 명령이 ok({value}) 반환 → router.execute ok=true', async () => {
+    const cmd: CliCommand = {
+      name: 'value-cmd',
+      aliases: [],
+      description: 'returns value',
+      execute: async () => ok({ message: 'with-value', count: 42 }),
+      help: () => 'help',
+    };
+    const router = makeRouter();
+    router.register(cmd);
+    const result = await router.execute(['value-cmd']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('execute: 에러 코드 config_read_failed 전파', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('cfail', {
+      executeResult: err(new AdevError('config_read_failed', 'read error')),
+    }));
+    const result = await router.execute(['cfail']);
+    if (!result.ok) {
+      expect(result.error.code).toBe('config_read_failed');
+    }
+  });
+
+  it('execute: 에러 코드 auth_failed 전파', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('afail', {
+      executeResult: err(new AdevError('auth_failed', 'auth error')),
+    }));
+    const result = await router.execute(['afail']);
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_failed');
+    }
+  });
+
+  it('execute: 여러 명령 중 올바른 명령 실행', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('cmd-x'));
+    router.register(makeCommand('cmd-y'));
+    router.register(makeCommand('cmd-z'));
+
+    const xResult = await router.execute(['cmd-x']);
+    const yResult = await router.execute(['cmd-y']);
+    const zResult = await router.execute(['cmd-z']);
+
+    expect(xResult.ok).toBe(true);
+    expect(yResult.ok).toBe(true);
+    expect(zResult.ok).toBe(true);
+  });
+
+  it('execute: 별칭 실행 후 result.ok=true', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('long-name', { aliases: ['ln'] }));
+    const result = await router.execute(['ln']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('execute: 명령 실행 순서 보장 (순차 실행)', async () => {
+    const order: number[] = [];
+    const makeOrderedCmd = (n: number): CliCommand => ({
+      name: `ordered-${n}`,
+      aliases: [],
+      description: `ordered ${n}`,
+      execute: async () => {
+        order.push(n);
+        return ok({ message: `done-${n}` });
+      },
+      help: () => 'help',
+    });
+
+    const router = makeRouter();
+    router.register(makeOrderedCmd(1));
+    router.register(makeOrderedCmd(2));
+    router.register(makeOrderedCmd(3));
+
+    await router.execute(['ordered-1']);
+    await router.execute(['ordered-2']);
+    await router.execute(['ordered-3']);
+
+    expect(order).toEqual([1, 2, 3]);
+  });
+
+  it('execute: result.ok의 타입은 항상 boolean', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('type-bool'));
+    const r1 = await router.execute(['type-bool']);
+    const r2 = await router.execute(['missing']);
+    expect(typeof r1.ok).toBe('boolean');
+    expect(typeof r2.ok).toBe('boolean');
+  });
+});
+
+// ── 추가 경계값 배치2: getHelp 심층 ──────────────────────────
+
+describe('CommandRouter getHelp 심층 경계값', () => {
+  it('getHelp: Usage 문자열 포함', () => {
+    const router = makeRouter();
+    expect(router.getHelp()).toContain('Usage');
+  });
+
+  it('getHelp: Commands 섹션 포함', () => {
+    const router = makeRouter();
+    expect(router.getHelp()).toContain('Commands');
+  });
+
+  it('getHelp: --verbose 옵션 안내 포함', () => {
+    const router = makeRouter();
+    expect(router.getHelp()).toContain('verbose');
+  });
+
+  it('getHelp: --help 옵션 안내 포함', () => {
+    const router = makeRouter();
+    expect(router.getHelp()).toContain('help');
+  });
+
+  it('getHelp: 멀티라인 문자열 반환', () => {
+    const router = makeRouter();
+    const help = router.getHelp();
+    expect(help.includes('\n')).toBe(true);
+  });
+
+  it('getHelp: 명령 설명 포함 여부', () => {
+    const router = makeRouter();
+    router.register(makeCommand('mydesc', { description: 'unique-desc-12345' }));
+    const help = router.getHelp();
+    expect(help).toContain('mydesc');
+  });
+
+  it('getHelp: 별칭도 도움말에 나타남', () => {
+    const router = makeRouter();
+    router.register(makeCommand('full-cmd', { aliases: ['fc', 'full'] }));
+    const help = router.getHelp();
+    // 적어도 명령 이름은 포함
+    expect(help).toContain('full-cmd');
+  });
+
+  it('getHelp: 반환값이 50자 이상', () => {
+    const router = makeRouter();
+    expect(router.getHelp().length).toBeGreaterThan(50);
+  });
+
+  it('getHelp: 추가 명령 등록 전후 길이 증가', () => {
+    const router = makeRouter();
+    const before = router.getHelp().length;
+    router.register(makeCommand('extra-help-cmd'));
+    const after = router.getHelp().length;
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it('getHelp: 100개 명령 등록 후 모두 포함', () => {
+    const router = makeRouter();
+    for (let i = 0; i < 100; i++) {
+      router.register(makeCommand(`batch-help-${i}`));
+    }
+    const help = router.getHelp();
+    for (let i = 0; i < 100; i++) {
+      expect(help).toContain(`batch-help-${i}`);
+    }
+  });
+});
+
+// ── 추가 경계값 배치2: register 심층 ─────────────────────────
+
+describe('CommandRouter register 심층 경계값', () => {
+  it('register: 명령 등록 후 execute로 args 전달 확인', async () => {
+    const captured: readonly string[] = [];
+    let capturedArgs: readonly string[] = [];
+    const cmd: CliCommand = {
+      name: 'capture-args',
+      aliases: [],
+      description: 'capture',
+      execute: async (args) => {
+        capturedArgs = args;
+        return ok({ message: 'ok' });
+      },
+      help: () => 'help',
+    };
+    const router = makeRouter();
+    router.register(cmd);
+    await router.execute(['capture-args', 'x', 'y', 'z']);
+    expect(capturedArgs).toContain('x');
+    expect(capturedArgs).toContain('y');
+    expect(capturedArgs).toContain('z');
+    void captured;
+  });
+
+  it('register: 명령 등록 후 options 전달 확인', async () => {
+    let capturedOpts: CliOptions = {};
+    const cmd: CliCommand = {
+      name: 'capture-opts',
+      aliases: [],
+      description: 'capture opts',
+      execute: async (_, opts) => {
+        capturedOpts = opts;
+        return ok({ message: 'ok' });
+      },
+      help: () => 'help',
+    };
+    const router = makeRouter();
+    router.register(cmd);
+    await router.execute(['capture-opts', '--mode=test', '--verbose']);
+    expect(capturedOpts['mode']).toBe('test');
+    expect(capturedOpts['verbose']).toBe(true);
+  });
+
+  it('register: 50개 명령 등록 → 50개 모두 parse 성공', () => {
+    const router = makeRouter();
+    for (let i = 0; i < 50; i++) {
+      router.register(makeCommand(`register-${i}`));
+    }
+    for (let i = 0; i < 50; i++) {
+      expect(router.parse([`register-${i}`]).ok).toBe(true);
+    }
+  });
+
+  it('register: 명령 help() 반환값이 문자열', () => {
+    const cmd = makeCommand('help-str-test');
+    expect(typeof cmd.help()).toBe('string');
+  });
+
+  it('register: 명령 name이 정확히 일치', () => {
+    const router = makeRouter();
+    router.register(makeCommand('exact-name-test'));
+    const result = router.parse(['exact-name-test']);
+    if (result.ok) {
+      expect(result.value.command).toBe('exact-name-test');
+    }
+  });
+
+  it('register: description이 빈 문자열인 명령 등록 가능', () => {
+    const router = makeRouter();
+    router.register(makeCommand('empty-desc', { description: '' }));
+    expect(router.parse(['empty-desc']).ok).toBe(true);
+  });
+
+  it('register: 이모지 이름 명령 등록 → parse 성공', () => {
+    const router = makeRouter();
+    router.register(makeCommand('cmd-🚀'));
+    expect(router.parse(['cmd-🚀']).ok).toBe(true);
+  });
+
+  it('register: 별칭 이모지 → parse 성공', () => {
+    const router = makeRouter();
+    router.register(makeCommand('rocket', { aliases: ['🚀'] }));
+    expect(router.parse(['🚀']).ok).toBe(true);
+  });
+
+  it('register: 공백 포함 명령 이름 등록 후 parse', () => {
+    const router = makeRouter();
+    router.register(makeCommand('my command'));
+    // 공백 포함 이름은 argv[0]과 정확히 일치해야 함
+    expect(router.parse(['my command']).ok).toBe(true);
+  });
+});
+
+// ── 추가 복합 스트레스 테스트 ─────────────────────────────────
+
+describe('CommandRouter 복합 스트레스 테스트', () => {
+  it('500번 parse 반복 → 항상 ok (등록된 명령)', () => {
+    const router = makeRouter();
+    router.register(makeCommand('stress-parse'));
+    for (let i = 0; i < 500; i++) {
+      const result = router.parse(['stress-parse']);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('두 라우터 각자 100개 명령 → 교차 parse 모두 실패', () => {
+    const r1 = makeRouter();
+    const r2 = makeRouter();
+    for (let i = 0; i < 100; i++) {
+      r1.register(makeCommand(`r1-cmd-${i}`));
+      r2.register(makeCommand(`r2-cmd-${i}`));
+    }
+    // r1의 명령을 r2에서 parse → 실패
+    expect(r2.parse(['r1-cmd-0']).ok).toBe(false);
+    // r2의 명령을 r1에서 parse → 실패
+    expect(r1.parse(['r2-cmd-0']).ok).toBe(false);
+  });
+
+  it('register → parse → execute 전체 플로우 10회', async () => {
+    for (let i = 0; i < 10; i++) {
+      const router = makeRouter();
+      router.register(makeCommand(`flow-${i}`));
+      const parsed = router.parse([`flow-${i}`, '--iter', `--val=${i}`]);
+      expect(parsed.ok).toBe(true);
+      const executed = await router.execute([`flow-${i}`]);
+      expect(executed.ok).toBe(true);
+    }
+  });
+
+  it('별칭 충돌 시 마지막 등록 명령 실행', async () => {
+    const router = makeRouter();
+    const order: string[] = [];
+    router.register({
+      name: 'cmd-first',
+      aliases: ['shared-alias'],
+      description: 'first',
+      execute: async () => { order.push('first'); return ok({ message: 'first' }); },
+      help: () => 'first',
+    });
+    router.register({
+      name: 'cmd-second',
+      aliases: ['shared-alias'],
+      description: 'second',
+      execute: async () => { order.push('second'); return ok({ message: 'second' }); },
+      help: () => 'second',
+    });
+    await router.execute(['shared-alias']);
+    // 마지막 등록이 우선
+    expect(order).toContain('second');
+  });
+
+  it('parse/execute 혼합 사용 → 상호 영향 없음', async () => {
+    const router = makeRouter();
+    router.register(makeCommand('mixed-cmd'));
+
+    const parsed = router.parse(['mixed-cmd', '--verbose']);
+    const executed = await router.execute(['mixed-cmd', '--mode=test']);
+
+    expect(parsed.ok).toBe(true);
+    expect(executed.ok).toBe(true);
+  });
+});

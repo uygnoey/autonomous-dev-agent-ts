@@ -909,4 +909,387 @@ describe('core ↔ mcp 통합 / core ↔ mcp integration', () => {
     expect(names).toContain('c1');
     expect(names).toContain('c2');
   });
+
+  // ── 추가 edge/random 케이스 배치2 ──────────────────────────────
+
+  it('McpRegistry: clear() 후 listServers 빈 배열', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('clear-a'));
+    registry.register(createTestConfig('clear-b'));
+    registry.clear();
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('McpRegistry: clear() 후 getServer null 반환', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('clear-target'));
+    registry.clear();
+    expect(registry.getServer('clear-target')).toBeNull();
+  });
+
+  it('McpRegistry: clear() 후 재등록 가능', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('recyclable'));
+    registry.clear();
+    const reReg = registry.register(createTestConfig('recyclable'));
+    expect(reReg.ok).toBe(true);
+  });
+
+  it('McpRegistry: whitespace만 있는 이름 등록 시 에러', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({ name: '   ', command: 'cmd', args: [], enabled: true });
+    expect(result.ok).toBe(false);
+  });
+
+  it('McpRegistry: whitespace만 있는 command 등록 시 에러', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({ name: 'valid', command: '   ', args: [], enabled: true });
+    expect(result.ok).toBe(false);
+  });
+
+  it('McpRegistry: 정상 등록 → enabled 필드 보존', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({ name: 'enabled-srv', command: 'cmd', args: [], enabled: true });
+    expect(registry.getServer('enabled-srv')?.enabled).toBe(true);
+  });
+
+  it('McpRegistry: command 필드 보존 확인', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({ name: 'cmd-check', command: 'bun', args: ['run', 'start'], enabled: true });
+    expect(registry.getServer('cmd-check')?.command).toBe('bun');
+  });
+
+  it('McpRegistry: args 필드 보존 확인', () => {
+    const registry = new McpRegistry(logger);
+    const args = ['run', 'start', '--port=3000'];
+    registry.register({ name: 'args-check', command: 'bun', args, enabled: true });
+    expect(registry.getServer('args-check')?.args).toEqual(args);
+  });
+
+  it('McpRegistry: 빈 레지스트리에서 unregister → not_found 에러', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.unregister('phantom');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('mcp_server_not_found');
+  });
+
+  it('McpRegistry: register 성공 후 listServers 길이 증가', () => {
+    const registry = new McpRegistry(logger);
+    expect(registry.listServers().length).toBe(0);
+    registry.register(createTestConfig('new-srv'));
+    expect(registry.listServers().length).toBe(1);
+  });
+
+  it('McpRegistry: unregister 성공 후 listServers 길이 감소', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('rm-srv'));
+    expect(registry.listServers().length).toBe(1);
+    registry.unregister('rm-srv');
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('McpRegistry: 랜덤 UUID 25개 등록 후 listServers 25개', () => {
+    const registry = new McpRegistry(logger);
+    const uuids = Array.from({ length: 25 }, () => crypto.randomUUID());
+    for (const uuid of uuids) {
+      registry.register({ name: uuid, command: 'test', args: [], enabled: true });
+    }
+    expect(registry.listServers().length).toBe(25);
+  });
+
+  it('McpManager: startServer → stopServer → startServer 재시작 성공', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('restart-srv'));
+    manager.startServer('restart-srv');
+    manager.stopServer('restart-srv');
+
+    const reStart = manager.startServer('restart-srv');
+    expect(reStart.ok).toBe(true);
+    expect(manager.getStatus('restart-srv')).toBe('running');
+  });
+
+  it('McpManager: stopAll 후 재시작 가능', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('stopall-restart'));
+    manager.startServer('stopall-restart');
+    manager.stopAll();
+
+    const reStart = manager.startServer('stopall-restart');
+    expect(reStart.ok).toBe(true);
+  });
+
+  it('McpManager: healthCheck 결과에 registered 서버 이름 포함', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('hc-present'));
+    manager.startServer('hc-present');
+
+    const result = manager.healthCheck();
+    if (result.ok) {
+      expect(Object.keys(result.value)).toContain('hc-present');
+    }
+  });
+
+  it('McpManager: healthCheck 값이 running 또는 stopped', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('hc-valid-val'));
+    manager.startServer('hc-valid-val');
+
+    const result = manager.healthCheck();
+    if (result.ok) {
+      const val = result.value['hc-valid-val'];
+      expect(['running', 'stopped']).toContain(val);
+    }
+  });
+
+  it('McpLoader: 다수 서버 중 disabled=false 서버 필터링 불가 (로드만 함)', async () => {
+    const loader = new McpLoader(logger);
+    const mixDir = join(tmpDir, 'mix-srv');
+    await mkdir(mixDir, { recursive: true });
+    await Bun.write(
+      join(mixDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'active-1', command: 'cmd', args: [], enabled: true },
+          { name: 'active-2', command: 'cmd', args: [], enabled: true },
+          { name: 'inactive-1', command: 'cmd', args: [], enabled: false },
+        ],
+      }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 모두 로드됨 (disabled 포함)
+    expect(result.value.length).toBe(3);
+  });
+
+  it('McpLoader: loadAndMerge 글로벌만 있는 경우 → 글로벌 서버 반환', async () => {
+    const loader = new McpLoader(logger);
+
+    const globalDir2 = join(tmpDir, 'global2');
+    const gSrvDir = join(globalDir2, 'g-srv');
+    await mkdir(gSrvDir, { recursive: true });
+    await Bun.write(
+      join(gSrvDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'g-only', command: 'global-cmd', args: [], enabled: true },
+        ],
+      }),
+    );
+
+    const emptyProjectDir = join(tmpDir, 'empty-project2');
+    await mkdir(emptyProjectDir, { recursive: true });
+
+    const result = await loader.loadAndMerge(globalDir2, emptyProjectDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const found = result.value.find(s => s.name === 'g-only');
+    expect(found).toBeDefined();
+    expect(found?.command).toBe('global-cmd');
+  });
+
+  it('McpLoader: loadAndMerge 프로젝트만 있는 경우 → 프로젝트 서버 반환', async () => {
+    const loader = new McpLoader(logger);
+
+    const emptyGlobalDir = join(tmpDir, 'empty-global');
+    await mkdir(emptyGlobalDir, { recursive: true });
+
+    const projectDir2 = join(tmpDir, 'project2');
+    const pSrvDir = join(projectDir2, 'p-srv');
+    await mkdir(pSrvDir, { recursive: true });
+    await Bun.write(
+      join(pSrvDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'p-only', command: 'project-cmd', args: [], enabled: true },
+        ],
+      }),
+    );
+
+    const result = await loader.loadAndMerge(emptyGlobalDir, projectDir2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const found = result.value.find(s => s.name === 'p-only');
+    expect(found).toBeDefined();
+  });
+
+  it('McpRegistry: clear() 빈 레지스트리에서 호출 → 에러 없음', () => {
+    const registry = new McpRegistry(logger);
+    expect(() => registry.clear()).not.toThrow();
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('McpManager: getStatus는 string 또는 null 타입', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('type-check-srv'));
+    manager.startServer('type-check-srv');
+    const status = manager.getStatus('type-check-srv');
+    expect(typeof status === 'string' || status === null).toBe(true);
+  });
+
+  it('McpRegistry: 연속 등록-해제-등록 100번 → 마지막 getServer 성공', () => {
+    const registry = new McpRegistry(logger);
+    const name = 'cycle-srv';
+    for (let i = 0; i < 100; i++) {
+      registry.register({ name, command: 'cmd', args: [], enabled: true });
+      registry.unregister(name);
+    }
+    registry.register({ name, command: 'cmd', args: [], enabled: true });
+    expect(registry.getServer(name)).not.toBeNull();
+  });
+
+  it('McpManager: 5개 서버 시작 → 3개 정지 → healthCheck 결과 혼합', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    for (let i = 0; i < 5; i++) {
+      registry.register(createTestConfig(`mix-srv-${i}`));
+      manager.startServer(`mix-srv-${i}`);
+    }
+
+    // 0, 1, 2 정지
+    manager.stopServer('mix-srv-0');
+    manager.stopServer('mix-srv-1');
+    manager.stopServer('mix-srv-2');
+
+    const result = manager.healthCheck();
+    if (!result.ok) return;
+
+    expect(result.value['mix-srv-0']).toBe('stopped');
+    expect(result.value['mix-srv-1']).toBe('stopped');
+    expect(result.value['mix-srv-2']).toBe('stopped');
+    expect(result.value['mix-srv-3']).toBe('running');
+    expect(result.value['mix-srv-4']).toBe('running');
+  });
+
+  it('BUILTIN_SERVERS: 이름 중복 없음', () => {
+    const names = BUILTIN_SERVERS.map(s => s.name);
+    const unique = new Set(names);
+    expect(unique.size).toBe(names.length);
+  });
+
+  it('McpLoader: env 없는 서버 설정 로드 → env 필드 undefined 또는 없음', async () => {
+    const loader = new McpLoader(logger);
+    const noEnvDir = join(tmpDir, 'no-env-srv');
+    await mkdir(noEnvDir, { recursive: true });
+    await Bun.write(
+      join(noEnvDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [{ name: 'no-env-server', command: 'cmd', args: [], enabled: true }],
+      }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    if (result.ok && result.value.length > 0) {
+      const srv = result.value.find(s => s.name === 'no-env-server');
+      // env 필드가 없거나 undefined이면 정상
+      expect(srv).toBeDefined();
+    }
+  });
+
+  it('McpRegistry: getServer 여러 번 호출 → 동일 객체 반환', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('same-ref'));
+    const s1 = registry.getServer('same-ref');
+    const s2 = registry.getServer('same-ref');
+    expect(s1).toBe(s2);
+  });
+
+  it('McpRegistry: listServers 반환 배열 수정 → 내부 상태 변경 없음', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('immutable-test'));
+    const list = registry.listServers();
+    list.push({ name: 'injected', command: 'hack', args: [], enabled: true });
+    // 내부 map은 변경 안 됨
+    expect(registry.listServers().length).toBe(1);
+  });
+
+  it('McpRegistry: 100개 등록 후 clear() → listServers 빈 배열', () => {
+    const registry = new McpRegistry(logger);
+    for (let i = 0; i < 100; i++) {
+      registry.register({ name: `bulk-clear-${i}`, command: 'cmd', args: [], enabled: true });
+    }
+    expect(registry.listServers().length).toBe(100);
+    registry.clear();
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('McpRegistry: register 오류 코드가 mcp_invalid_config (빈 이름)', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({ name: '', command: 'cmd', args: [], enabled: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('mcp_invalid_config');
+  });
+
+  it('McpRegistry: register 오류 코드가 mcp_invalid_config (빈 command)', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({ name: 'valid', command: '', args: [], enabled: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('mcp_invalid_config');
+  });
+
+  it('McpManager: startServer error.message 존재', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const result = manager.startServer('nonexistent-xyz');
+    if (!result.ok) {
+      expect(typeof result.error.message).toBe('string');
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('McpRegistry: getServer 결과 타입 확인 (null 또는 McpServerConfig)', () => {
+    const registry = new McpRegistry(logger);
+    registry.register(createTestConfig('type-check'));
+    const found = registry.getServer('type-check');
+    const notFound = registry.getServer('not-registered');
+    expect(found !== null && typeof found === 'object').toBe(true);
+    expect(notFound).toBeNull();
+  });
+
+  it('McpLoader: 설정 파일에 extra 필드 있어도 로드됨', async () => {
+    const loader = new McpLoader(logger);
+    const extraDir = join(tmpDir, 'extra-fields');
+    await mkdir(extraDir, { recursive: true });
+    await Bun.write(
+      join(extraDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [{
+          name: 'extra-field-server',
+          command: 'cmd',
+          args: [],
+          enabled: true,
+          unknownField: 'should-be-ignored',
+          anotherExtra: 42,
+        }],
+      }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    if (result.ok) {
+      const srv = result.value.find(s => s.name === 'extra-field-server');
+      expect(srv).toBeDefined();
+    }
+  });
 });

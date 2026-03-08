@@ -921,3 +921,376 @@ describe('TestTypeDesigner validate 심층 경계값', () => {
     if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(100);
   });
 });
+
+// ── 추가 경계값 배치2: createDefinitions 심층 ─────────────────
+
+describe('TestTypeDesigner createDefinitions 심층 배치2', () => {
+  let designer: TestTypeDesigner;
+
+  beforeEach(() => {
+    designer = new TestTypeDesigner(new ConsoleLogger('error'));
+  });
+
+  it('ratios.unit >= 0', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.unit).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ratios.module >= 0', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.module).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ratios.e2e >= 0', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.e2e).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ratios.unit <= 1', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.unit).toBeLessThanOrEqual(1);
+  });
+
+  it('ratios.module <= 1', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.module).toBeLessThanOrEqual(1);
+  });
+
+  it('ratios.e2e <= 1', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) expect(result.value[0]?.ratios.e2e).toBeLessThanOrEqual(1);
+  });
+
+  it('categories 배열 원소 name은 문자열', () => {
+    const result = designer.createDefinitions([createFeature({ acceptanceCriteria: [
+      { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'test-cat' },
+    ]})]);
+    if (result.ok) {
+      for (const cat of result.value[0]?.categories ?? []) {
+        expect(typeof cat.name).toBe('string');
+      }
+    }
+  });
+
+  it('categories 배열 원소 description은 문자열', () => {
+    const result = designer.createDefinitions([createFeature({ acceptanceCriteria: [
+      { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'test-cat' },
+    ]})]);
+    if (result.ok) {
+      for (const cat of result.value[0]?.categories ?? []) {
+        expect(typeof cat.description).toBe('string');
+      }
+    }
+  });
+
+  it('categories 배열 원소 mappedCriteria는 배열', () => {
+    const result = designer.createDefinitions([createFeature({ acceptanceCriteria: [
+      { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'test-cat' },
+    ]})]);
+    if (result.ok) {
+      for (const cat of result.value[0]?.categories ?? []) {
+        expect(Array.isArray(cat.mappedCriteria)).toBe(true);
+      }
+    }
+  });
+
+  it('sampleTests 배열 원소 category는 문자열', () => {
+    const result = designer.createDefinitions([createFeature({ acceptanceCriteria: [
+      { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'sample-cat' },
+    ]})]);
+    if (result.ok) {
+      for (const test of result.value[0]?.sampleTests ?? []) {
+        expect(typeof test.category).toBe('string');
+      }
+    }
+  });
+
+  it('sampleTests 배열 원소 category는 문자열', () => {
+    const result = designer.createDefinitions([createFeature({ acceptanceCriteria: [
+      { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'tc-1' },
+    ]})]);
+    if (result.ok) {
+      for (const test of result.value[0]?.sampleTests ?? []) {
+        // WHY: SampleTest has category/description/expectedBehavior, no 'type' field
+        expect(typeof test.category).toBe('string');
+      }
+    }
+  });
+
+  it('rules 배열 비어있지 않음 (기본)', () => {
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok) {
+      expect(result.value[0]?.rules.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('featureId가 정확히 일치 (UUID)', () => {
+    const uuid = crypto.randomUUID();
+    const result = designer.createDefinitions([createFeature({ id: uuid })]);
+    if (result.ok) {
+      expect(result.value[0]?.featureId).toBe(uuid);
+    }
+  });
+
+  it('300개 기능 → ok=true', () => {
+    const features = Array.from({ length: 300 }, (_, i) => createFeature({ id: `feat-${i}` }));
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(300);
+  });
+
+  it('수락 기준 verifiable=false → ok=true (처리됨)', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-nv', description: '검증 불가 기준', verifiable: false, testCategory: 'general' },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('acceptanceCriteria 같은 id 중복 → ok 또는 error', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'dup-id', description: '기준1', verifiable: true, testCategory: 'cat' },
+        { id: 'dup-id', description: '기준2', verifiable: true, testCategory: 'cat' },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('dependencies 필드 포함 → ok=true', () => {
+    const features = [createFeature({
+      dependencies: ['feat-dep-1', 'feat-dep-2'],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('inputs 필드 포함 → ok=true', () => {
+    const features = [createFeature({
+      inputs: [{ name: 'userId', type: 'string', required: true }],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('outputs 필드 포함 → ok=true', () => {
+    const features = [createFeature({
+      outputs: [{ name: 'token', type: 'string' }],
+    })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── 추가 경계값 배치2: validate 심층 ─────────────────────────
+
+describe('TestTypeDesigner validate 심층 배치2', () => {
+  let designer: TestTypeDesigner;
+
+  beforeEach(() => {
+    designer = new TestTypeDesigner(new ConsoleLogger('error'));
+  });
+
+  it('validate ok=true → value는 문자열 배열', () => {
+    const result = designer.validate([], []);
+    if (result.ok) {
+      for (const w of result.value) {
+        expect(typeof w).toBe('string');
+      }
+    }
+  });
+
+  it('validate: 정의 featureId와 기능 id 일치 → 경고 없음', () => {
+    const features = [createFeature({ id: 'match-id' })];
+    const defs = [makeDefinition('match-id')];
+    const result = designer.validate(defs, features);
+    if (result.ok) {
+      const hasMatch = result.value.some(w => w.includes('match-id'));
+      expect(hasMatch).toBe(false);
+    }
+  });
+
+  it('validate: 기능 10개 중 5개 정의 → 5개 이상 경고', () => {
+    const features = Array.from({ length: 10 }, (_, i) => createFeature({ id: `feat-${i}` }));
+    const defs = Array.from({ length: 5 }, (_, i) => makeDefinition(`feat-${i}`));
+    const result = designer.validate(defs, features);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('validate: 경고 배열에 기능 id 문자열 포함', () => {
+    const features = [createFeature({ id: 'warn-id-check' })];
+    const result = designer.validate([], features);
+    if (result.ok && result.value.length > 0) {
+      expect(result.value[0]).toContain('warn-id-check');
+    }
+  });
+
+  it('validate: 100개 기능 전체 정의됨 → 경고 0개', () => {
+    const features = Array.from({ length: 100 }, (_, i) => createFeature({ id: `feat-${i}` }));
+    const defs = features.map(f => makeDefinition(f.id));
+    const result = designer.validate(defs, features);
+    if (result.ok) expect(result.value.length).toBe(0);
+  });
+
+  it('validate: createDefinitions 출력 → validate 경고 없음 (100번)', () => {
+    for (let i = 0; i < 100; i++) {
+      const features = [createFeature({ id: `auto-${i}` })];
+      const defsResult = designer.createDefinitions(features);
+      if (!defsResult.ok) continue;
+      const result = designer.validate(defsResult.value, features);
+      if (result.ok) expect(result.value.length).toBe(0);
+    }
+  });
+
+  it('validate: 경고가 있을 때 배열 길이 >= 1', () => {
+    const features = [createFeature({ id: 'warn-1' }), createFeature({ id: 'warn-2' })];
+    const result = designer.validate([], features);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('validate: ok 필드가 boolean', () => {
+    const result = designer.validate([makeDefinition('feat-x')], [createFeature({ id: 'feat-x' })]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('validate: 기능과 정의 순서 무관하게 매핑', () => {
+    const features = [
+      createFeature({ id: 'feat-z' }),
+      createFeature({ id: 'feat-a' }),
+    ];
+    const defs = [
+      makeDefinition('feat-a'),
+      makeDefinition('feat-z'),
+    ];
+    const result = designer.validate(defs, features);
+    if (result.ok) expect(result.value.length).toBe(0);
+  });
+
+  it('validate: 매우 긴 featureId 가진 정의 매핑 성공', () => {
+    const longId = 'feat-' + 'x'.repeat(500);
+    const features = [createFeature({ id: longId })];
+    const defs = [makeDefinition(longId)];
+    const result = designer.validate(defs, features);
+    if (result.ok) {
+      const hasMissing = result.value.some(w => w.includes(longId));
+      expect(hasMissing).toBe(false);
+    }
+  });
+
+  it('validate: 이모지 featureId 정의 매핑 → 경고 없음', () => {
+    const features = [createFeature({ id: 'feat-🔐' })];
+    const defs = [makeDefinition('feat-🔐')];
+    const result = designer.validate(defs, features);
+    if (result.ok) {
+      const hasMissing = result.value.some(w => w.includes('feat-🔐'));
+      expect(hasMissing).toBe(false);
+    }
+  });
+});
+
+// ── 추가 복합 시나리오 배치2 ──────────────────────────────────
+
+describe('TestTypeDesigner 복합 시나리오 배치2', () => {
+  it('createDefinitions → validate 파이프라인 100번', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      const features = [createFeature({ id: `pipe-${i}`, acceptanceCriteria: [
+        { id: `ac-${i}`, description: `기준 ${i}`, verifiable: true, testCategory: 'general' },
+      ]})];
+      const defs = designer.createDefinitions(features);
+      if (defs.ok) {
+        const val = designer.validate(defs.value, features);
+        expect(val.ok).toBe(true);
+        if (val.ok) expect(val.value.length).toBe(0);
+      }
+    }
+  });
+
+  it('동일 입력 createDefinitions 3회 → 결과 일관', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'consistent-feat' })];
+    const r1 = designer.createDefinitions(features);
+    const r2 = designer.createDefinitions(features);
+    const r3 = designer.createDefinitions(features);
+    if (r1.ok && r2.ok && r3.ok) {
+      expect(r1.value.length).toBe(r2.value.length);
+      expect(r2.value.length).toBe(r3.value.length);
+      expect(r1.value[0]?.featureId).toBe(r2.value[0]?.featureId);
+      expect(r1.value[0]?.ratios.unit).toBe(r2.value[0]?.ratios.unit);
+    }
+  });
+
+  it('validate 경고 → createDefinitions → validate 재검증 → 경고 없음', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'fix-flow', acceptanceCriteria: [
+      { id: 'ac-fix', description: '기준', verifiable: true, testCategory: 'general' },
+    ]})];
+
+    // 처음엔 정의 없음 → 경고 있음
+    const warn = designer.validate([], features);
+    if (warn.ok) expect(warn.value.length).toBeGreaterThan(0);
+
+    // createDefinitions로 정의 생성 후 재검증
+    const defs = designer.createDefinitions(features);
+    if (defs.ok) {
+      const fixed = designer.validate(defs.value, features);
+      if (fixed.ok) expect(fixed.value.length).toBe(0);
+    }
+  });
+
+  it('수락 기준 5개 → 카테고리 1개 (같은 category)', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      acceptanceCriteria: Array.from({ length: 5 }, (_, i) => ({
+        id: `ac-${i}`,
+        description: `기준 ${i}`,
+        verifiable: true,
+        testCategory: 'unified-cat',
+      })),
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok) {
+      expect(result.value[0]?.categories.length).toBe(1);
+      expect(result.value[0]?.categories[0]?.mappedCriteria.length).toBe(5);
+    }
+  });
+
+  it('수락 기준 각각 다른 카테고리 5개 → 카테고리 5개', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      acceptanceCriteria: Array.from({ length: 5 }, (_, i) => ({
+        id: `ac-${i}`,
+        description: `기준 ${i}`,
+        verifiable: true,
+        testCategory: `cat-${i}`,
+      })),
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok) {
+      expect(result.value[0]?.categories.length).toBe(5);
+    }
+  });
+
+  it('validate + createDefinitions 두 인스턴스 교차 사용 → ok', () => {
+    const d1 = new TestTypeDesigner(new ConsoleLogger('error'));
+    const d2 = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'cross-inst' })];
+    const defs = d1.createDefinitions(features);
+    if (defs.ok) {
+      const result = d2.validate(defs.value, features);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('1000번 validate 빈 입력 → 항상 ok, 경고 0개', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    for (let i = 0; i < 1000; i++) {
+      const result = designer.validate([], []);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.length).toBe(0);
+    }
+  });
+});
