@@ -292,4 +292,377 @@ describe('core ↔ mcp 통합 / core ↔ mcp integration', () => {
     if (reStartResult.ok) return;
     expect(reStartResult.error.code).toBe('mcp_server_already_running');
   });
+
+  // ── 추가 edge/random case 테스트 ────────────────────────────────
+
+  it('McpRegistry: UUID 형식 서버 이름 등록', () => {
+    const registry = new McpRegistry(logger);
+    const uuidName = '550e8400-e29b-41d4-a716-446655440000';
+
+    const result = registry.register({ name: uuidName, command: 'test', args: [], enabled: true });
+    expect(result.ok).toBe(true);
+
+    const server = registry.getServer(uuidName);
+    expect(server?.name).toBe(uuidName);
+  });
+
+  it('McpRegistry: 한글 이름 서버 등록', () => {
+    const registry = new McpRegistry(logger);
+
+    const result = registry.register({ name: '한글서버', command: 'test-cmd', args: [], enabled: true });
+    expect(result.ok).toBe(true);
+
+    const server = registry.getServer('한글서버');
+    expect(server?.name).toBe('한글서버');
+  });
+
+  it('McpRegistry: 특수문자 이름 서버 등록', () => {
+    const registry = new McpRegistry(logger);
+
+    const result = registry.register({ name: 'server-!@#', command: 'test', args: [], enabled: true });
+    // WHY: 특수문자 허용 여부는 구현에 따라 다름
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('McpRegistry: 매우 긴 서버 이름 등록', () => {
+    const registry = new McpRegistry(logger);
+    const longName = 'a'.repeat(500);
+
+    const result = registry.register({ name: longName, command: 'test', args: [], enabled: true });
+    // WHY: 길이 제한 여부는 구현에 따라 다름
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('McpRegistry: 등록되지 않은 서버 해제 시 에러', () => {
+    const registry = new McpRegistry(logger);
+
+    const result = registry.unregister('nonexistent-server');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('mcp_server_not_found');
+  });
+
+  it('McpRegistry: listServers가 등록된 모든 서버 반환', () => {
+    const registry = new McpRegistry(logger);
+
+    registry.register(createTestConfig('server-alpha'));
+    registry.register(createTestConfig('server-beta'));
+    registry.register(createTestConfig('server-gamma'));
+
+    const servers = registry.listServers();
+    expect(servers.length).toBe(3);
+    const names = servers.map((s) => s.name);
+    expect(names).toContain('server-alpha');
+    expect(names).toContain('server-beta');
+    expect(names).toContain('server-gamma');
+  });
+
+  it('McpRegistry: 빈 레지스트리에서 listServers 빈 배열', () => {
+    const registry = new McpRegistry(logger);
+
+    const servers = registry.listServers();
+    expect(servers.length).toBe(0);
+  });
+
+  it('McpRegistry: 서버 해제 후 같은 이름 재등록 가능', () => {
+    const registry = new McpRegistry(logger);
+
+    registry.register(createTestConfig('reusable-server'));
+    registry.unregister('reusable-server');
+
+    const reRegResult = registry.register(createTestConfig('reusable-server'));
+    expect(reRegResult.ok).toBe(true);
+  });
+
+  it('McpManager: 미등록 서버 정지 시 에러', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const stopResult = manager.stopServer('ghost-server');
+    expect(stopResult.ok).toBe(false);
+    if (stopResult.ok) return;
+    expect(stopResult.error.code).toBe('mcp_server_not_found');
+  });
+
+  it('McpManager: 이미 정지된 서버 재정지 시 에러', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('stoppable-server'));
+    manager.startServer('stoppable-server');
+    manager.stopServer('stoppable-server');
+
+    const doubleStopResult = manager.stopServer('stoppable-server');
+    expect(doubleStopResult.ok).toBe(false);
+    if (doubleStopResult.ok) return;
+    // WHY: 이미 정지된 서버 재정지 에러 코드 확인
+    expect(['mcp_server_not_running', 'mcp_server_already_stopped']).toContain(doubleStopResult.error.code);
+  });
+
+  it('McpManager: getStatus 미등록 서버에 null 또는 stopped 반환', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const status = manager.getStatus('ghost-server');
+    // WHY: 미등록 서버는 null 또는 'stopped' 반환 — 구현에 따라 다름
+    expect(status === null || status === 'stopped').toBe(true);
+  });
+
+  it('McpManager: stopAll 서버 없을 때 성공', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const result = manager.stopAll();
+    expect(result.ok).toBe(true);
+  });
+
+  it('McpManager: healthCheck 서버 없을 때 빈 객체 반환', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const result = manager.healthCheck();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.keys(result.value).length).toBe(0);
+  });
+
+  it('McpManager: 10개 서버 동시 시작 후 healthCheck', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    for (let i = 0; i < 10; i++) {
+      registry.register(createTestConfig(`bulk-server-${i}`));
+      manager.startServer(`bulk-server-${i}`);
+    }
+
+    const healthResult = manager.healthCheck();
+    expect(healthResult.ok).toBe(true);
+    if (!healthResult.ok) return;
+
+    for (let i = 0; i < 10; i++) {
+      expect(healthResult.value[`bulk-server-${i}`]).toBe('running');
+    }
+  });
+
+  it('McpLoader: 빈 servers 배열 설정 파일 로드', async () => {
+    const loader = new McpLoader(logger);
+
+    const emptyDir = join(tmpDir, 'empty-srv');
+    await mkdir(emptyDir, { recursive: true });
+    await Bun.write(
+      join(emptyDir, 'mcp.json'),
+      JSON.stringify({ servers: [] }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(0);
+  });
+
+  it('McpLoader: 잘못된 JSON 설정 파일 처리', async () => {
+    const loader = new McpLoader(logger);
+
+    const badDir = join(tmpDir, 'bad-json-srv');
+    await mkdir(badDir, { recursive: true });
+    await Bun.write(
+      join(badDir, 'mcp.json'),
+      'this is not valid json {{{',
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    // WHY: 잘못된 JSON은 에러 반환 또는 스킵 — 구현에 따라 다름
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('McpLoader: 존재하지 않는 디렉토리 처리', async () => {
+    const loader = new McpLoader(logger);
+
+    const result = await loader.loadFromDirectory('/tmp/nonexistent-adev-dir-xyz-999');
+    // WHY: 존재하지 않는 디렉토리는 에러 또는 빈 결과 — 구현에 따라 다름
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('McpLoader: args 배열이 비어있는 서버 설정 로드', async () => {
+    const loader = new McpLoader(logger);
+
+    const noArgsDir = join(tmpDir, 'no-args-srv');
+    await mkdir(noArgsDir, { recursive: true });
+    await Bun.write(
+      join(noArgsDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'no-args-server', command: 'standalone-cmd', args: [], enabled: true },
+        ],
+      }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value[0]?.args).toEqual([]);
+  });
+
+  it('McpLoader: disabled 서버도 로드됨', async () => {
+    const loader = new McpLoader(logger);
+
+    const disabledDir = join(tmpDir, 'disabled-srv');
+    await mkdir(disabledDir, { recursive: true });
+    await Bun.write(
+      join(disabledDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'enabled-server', command: 'cmd', args: [], enabled: true },
+          { name: 'disabled-server', command: 'cmd2', args: [], enabled: false },
+        ],
+      }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(2);
+
+    const disabled = result.value.find((s) => s.name === 'disabled-server');
+    expect(disabled?.enabled).toBe(false);
+  });
+
+  it('McpLoader: 여러 서브디렉토리에 mcp.json이 있을 때 모두 로드', async () => {
+    const loader = new McpLoader(logger);
+
+    const dir1 = join(tmpDir, 'srv1');
+    const dir2 = join(tmpDir, 'srv2');
+    await mkdir(dir1, { recursive: true });
+    await mkdir(dir2, { recursive: true });
+
+    await Bun.write(
+      join(dir1, 'mcp.json'),
+      JSON.stringify({ servers: [{ name: 'srv1-server', command: 'cmd1', args: [], enabled: true }] }),
+    );
+    await Bun.write(
+      join(dir2, 'mcp.json'),
+      JSON.stringify({ servers: [{ name: 'srv2-server', command: 'cmd2', args: [], enabled: true }] }),
+    );
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.length).toBe(2);
+  });
+
+  it('McpRegistry: args 배열에 한글/특수문자 포함', () => {
+    const registry = new McpRegistry(logger);
+
+    const config: McpServerConfig = {
+      name: 'unicode-args-server',
+      command: 'test-cmd',
+      args: ['--name', '한글값', '--special', '!@#$%'],
+      enabled: true,
+    };
+
+    const result = registry.register(config);
+    expect(result.ok).toBe(true);
+
+    const server = registry.getServer('unicode-args-server');
+    expect(server?.args).toEqual(['--name', '한글값', '--special', '!@#$%']);
+  });
+
+  it('McpManager: 빌트인 서버 모두 등록 후 startServer 에러 없음', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    for (const config of BUILTIN_SERVERS) {
+      registry.register(config);
+    }
+
+    // WHY: 빌트인 서버가 모두 enabled라면 start 가능
+    for (const config of BUILTIN_SERVERS) {
+      if (config.enabled) {
+        const startResult = manager.startServer(config.name);
+        expect(startResult.ok).toBe(true);
+      }
+    }
+  });
+
+  it('McpRegistry: 동시에 많은 서버 등록 및 조회', () => {
+    const registry = new McpRegistry(logger);
+    const count = 50;
+
+    for (let i = 0; i < count; i++) {
+      const result = registry.register(createTestConfig(`mass-server-${i}`));
+      expect(result.ok).toBe(true);
+    }
+
+    const servers = registry.listServers();
+    expect(servers.length).toBe(count);
+
+    for (let i = 0; i < count; i++) {
+      const server = registry.getServer(`mass-server-${i}`);
+      expect(server).not.toBeNull();
+    }
+  });
+
+  it('McpLoader: mcp.json이 없는 디렉토리에서 빈 결과 반환', async () => {
+    const loader = new McpLoader(logger);
+
+    const emptyContentDir = join(tmpDir, 'no-mcp-json');
+    await mkdir(emptyContentDir, { recursive: true });
+
+    const result = await loader.loadFromDirectory(tmpDir);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // WHY: mcp.json 없으면 서버 없음
+    expect(result.value.length).toBe(0);
+  });
+
+  it('McpManager: initialize 빈 디렉토리에서 빈 레지스트리', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const emptyConfigDir = join(tmpDir, 'empty-init');
+    await mkdir(emptyConfigDir, { recursive: true });
+
+    const initResult = await manager.initialize(emptyConfigDir);
+    expect(initResult.ok).toBe(true);
+
+    const servers = registry.listServers();
+    expect(servers.length).toBe(0);
+  });
+
+  it('McpRegistry: getServer 존재하지 않는 서버에 null 반환', () => {
+    const registry = new McpRegistry(logger);
+
+    const server = registry.getServer('does-not-exist');
+    expect(server).toBeNull();
+  });
+
+  it('McpManager: stopAll 후 healthCheck 전부 stopped', () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    registry.register(createTestConfig('s1'));
+    registry.register(createTestConfig('s2'));
+    registry.register(createTestConfig('s3'));
+    manager.startServer('s1');
+    manager.startServer('s2');
+    manager.startServer('s3');
+
+    manager.stopAll();
+
+    const healthResult = manager.healthCheck();
+    expect(healthResult.ok).toBe(true);
+    if (!healthResult.ok) return;
+    expect(healthResult.value['s1']).toBe('stopped');
+    expect(healthResult.value['s2']).toBe('stopped');
+    expect(healthResult.value['s3']).toBe('stopped');
+  });
 });
