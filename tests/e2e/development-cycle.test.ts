@@ -985,4 +985,422 @@ describe('개발 사이클 E2E / Development Cycle E2E', () => {
       expect(result.ok).toBe(true);
     }
   });
+
+  // ── 추가 PhaseEngine 전환 규칙 검증 ──────────────────────────
+
+  it('PhaseEngine: DESIGN → VERIFY 직접 불가', () => {
+    const engine = new PhaseEngine(logger);
+    const result = engine.transition('VERIFY', '건너뛰기', 'adev');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('phase_invalid_transition');
+  });
+
+  it('PhaseEngine: CODE → DESIGN 직접 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const result = engine.transition('DESIGN', 'backward', 'adev');
+    expect(result.ok).toBe(false);
+  });
+
+  it('PhaseEngine: TEST → CODE 직접 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    const result = engine.transition('CODE', 'from test to code', 'adev');
+    expect(result.ok).toBe(false);
+  });
+
+  it('PhaseEngine: TEST → DESIGN 직접 불가', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    const result = engine.transition('DESIGN', 'from test to design', 'adev');
+    expect(result.ok).toBe(false);
+  });
+
+  it('PhaseEngine: canTransition DESIGN→CODE=true', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('CODE')).toBe(true);
+  });
+
+  it('PhaseEngine: canTransition DESIGN→VERIFY=false', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('PhaseEngine: canTransition DESIGN→TEST=false', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+
+  it('PhaseEngine: canTransition CODE→TEST=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    expect(engine.canTransition('TEST')).toBe(true);
+  });
+
+  it('PhaseEngine: canTransition CODE→VERIFY=false', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('PhaseEngine: canTransition VERIFY→DESIGN=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('DESIGN')).toBe(true);
+  });
+
+  it('PhaseEngine: canTransition VERIFY→CODE=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('CODE')).toBe(true);
+  });
+
+  it('PhaseEngine: canTransition VERIFY→TEST=true', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.canTransition('TEST')).toBe(true);
+  });
+
+  it('PhaseEngine: 성공 전환 반환값에 from/to/reason/triggeredBy 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const result = engine.transition('CODE', 'my reason', 'architect');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.from).toBe('DESIGN');
+      expect(result.value.to).toBe('CODE');
+      expect(result.value.reason).toBe('my reason');
+      expect(result.value.triggeredBy).toBe('architect');
+    }
+  });
+
+  it('PhaseEngine: 성공 전환 반환값에 timestamp 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const before = new Date();
+    const result = engine.transition('CODE', 'ok', 'adev');
+    const after = new Date();
+    if (result.ok) {
+      expect(result.value.timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime() - 100);
+      expect(result.value.timestamp.getTime()).toBeLessThanOrEqual(after.getTime() + 100);
+    }
+  });
+
+  it('PhaseEngine: getParticipants CODE 단계 active에 architect 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('CODE');
+    expect(p.active).toContain('architect');
+  });
+
+  it('PhaseEngine: getParticipants TEST 단계 active에 qc 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('TEST');
+    expect(p.active).toContain('qc');
+  });
+
+  it('PhaseEngine: getParticipants VERIFY 단계 active에 qa/qc/reviewer 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('VERIFY');
+    expect(p.active).toContain('qa');
+    expect(p.active).toContain('qc');
+    expect(p.active).toContain('reviewer');
+  });
+
+  it('PhaseEngine: getParticipants DESIGN 단계 inactive에 tester 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const p = engine.getParticipants('DESIGN');
+    expect(p.inactive).toContain('tester');
+  });
+
+  it('PhaseEngine: 이력 항목의 timestamp가 Date이다', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const history = engine.getHistory();
+    expect(history[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('PhaseEngine: 이력 항목이 from/to 필드를 가진다', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    const h = engine.getHistory();
+    expect('from' in (h[0] ?? {})).toBe(true);
+    expect('to' in (h[0] ?? {})).toBe(true);
+  });
+
+  // ── 추가 AgentGenerator 심화 검증 ────────────────────────────
+
+  it('AgentGenerator: 모든 7개 에이전트 name 필드 정확히 일치', () => {
+    const generator = new AgentGenerator(logger);
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const name of agents) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-name-check');
+      if (result.ok) expect(result.value.name).toBe(name);
+    }
+  });
+
+  it('AgentGenerator: 모든 7개 에이전트 tools는 배열이다', () => {
+    const generator = new AgentGenerator(logger);
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const name of agents) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-tools-check');
+      if (result.ok) expect(Array.isArray(result.value.tools)).toBe(true);
+    }
+  });
+
+  it('AgentGenerator: 모든 7개 에이전트 systemPrompt는 string이다', () => {
+    const generator = new AgentGenerator(logger);
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const name of agents) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-prompt-check');
+      if (result.ok) expect(typeof result.value.systemPrompt).toBe('string');
+    }
+  });
+
+  it('AgentGenerator: 긴 spec → systemPrompt에 일부 내용 포함', () => {
+    const generator = new AgentGenerator(logger);
+    const longSpec = '기능 명세서: ' + 'x'.repeat(500);
+    const result = generator.generateAgentConfig('architect', longSpec, 'feat-long-spec');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.systemPrompt.length).toBeGreaterThan(0);
+  });
+
+  it('AgentGenerator: 10번 같은 에이전트 생성 → 모두 ok', () => {
+    const generator = new AgentGenerator(logger);
+    for (let i = 0; i < 10; i++) {
+      const result = generator.generateAgentConfig('coder', `spec-${i}`, `feat-${i}`);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  // ── 추가 CoderAllocator 심화 검증 ────────────────────────────
+
+  it('CoderAllocator: 할당된 모듈 수와 결과 배열 길이 일치', () => {
+    const allocator = new CoderAllocator(logger);
+    const modules = ['auth', 'user', 'db', 'api', 'cache'];
+    const result = allocator.allocate('feat-count', modules);
+    if (result.ok) expect(result.value.length).toBe(modules.length);
+  });
+
+  it('CoderAllocator: 모든 할당 항목에 branchName 필드 존재', () => {
+    const allocator = new CoderAllocator(logger);
+    const result = allocator.allocate('feat-fields', ['mod-a', 'mod-b']);
+    if (result.ok) {
+      for (const alloc of result.value) {
+        expect('branchName' in alloc).toBe(true);
+      }
+    }
+  });
+
+  it('CoderAllocator: 모든 할당 항목에 status 필드 존재', () => {
+    const allocator = new CoderAllocator(logger);
+    const result = allocator.allocate('feat-status-field', ['mod-x']);
+    if (result.ok) {
+      for (const alloc of result.value) {
+        expect('status' in alloc).toBe(true);
+      }
+    }
+  });
+
+  it('CoderAllocator: branchName이 featureId를 포함한다 (재확인)', () => {
+    const allocator = new CoderAllocator(logger);
+    const featureId = 'unique-feat-abc';
+    const result = allocator.allocate(featureId, ['mod-z']);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].branchName).toContain(featureId);
+    }
+  });
+
+  it('CoderAllocator: 같은 모듈 두 번 할당 시도 → 두 번째 ok=false', () => {
+    const allocator = new CoderAllocator(logger);
+    allocator.allocate('feat-1', ['shared-module']);
+    const result = allocator.allocate('feat-2', ['shared-module']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('CoderAllocator: 빈 featureId → ok 또는 error (구현에 따름)', () => {
+    const allocator = new CoderAllocator(logger);
+    const result = allocator.allocate('', ['mod-a']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  // ── 추가 VerificationGate 심화 검증 ──────────────────────────
+
+  it('VerificationGate: 새 featureId의 isAllPassed=false (결과 없음)', () => {
+    const gate = new VerificationGate(logger);
+    expect(gate.isAllPassed('feat-new-no-results')).toBe(false);
+  });
+
+  it('VerificationGate: 단일 featureId 4개 phase 모두 passed=false → isAllPassed=false', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({
+        featureId: 'feat-all-false',
+        phase,
+        passed: false,
+        feedback: 'fail',
+        timestamp: new Date(),
+      });
+    }
+    expect(gate.isAllPassed('feat-all-false')).toBe(false);
+  });
+
+  it('VerificationGate: summarize ok=true 결과의 passed 필드가 boolean', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId: 'feat-bool-check', phase, passed: true, feedback: 'ok', timestamp: new Date() });
+    }
+    const result = gate.summarize('feat-bool-check');
+    if (result.ok) expect(typeof result.value.passed).toBe('boolean');
+  });
+
+  it('VerificationGate: addResult 반환값이 void이다 (예외 없음)', () => {
+    const gate = new VerificationGate(logger);
+    expect(() => {
+      gate.addResult({
+        featureId: 'feat-void',
+        phase: 'qa_qc',
+        passed: true,
+        feedback: 'ok',
+        timestamp: new Date(),
+      });
+    }).not.toThrow();
+  });
+
+  // ── 추가 복합 시나리오 검증 ──────────────────────────────────
+
+  it('5개 PhaseEngine 인스턴스 → 각각 독립 초기 상태', () => {
+    const engines = Array.from({ length: 5 }, () => new PhaseEngine(logger));
+    for (const engine of engines) {
+      expect(engine.currentPhase).toBe('DESIGN');
+      expect(engine.getHistory()).toHaveLength(0);
+    }
+  });
+
+  it('PhaseEngine + AgentGenerator: CODE 전환 후 coder 설정 생성', () => {
+    const engine = new PhaseEngine(logger);
+    const generator = new AgentGenerator(logger);
+
+    const transition = engine.transition('CODE', 'ok', 'architect');
+    expect(transition.ok).toBe(true);
+    expect(engine.currentPhase).toBe('CODE');
+
+    const config = generator.generateAgentConfig('coder', 'implement feature', 'feat-combined-2');
+    expect(config.ok).toBe(true);
+    if (config.ok) {
+      expect(config.value.tools).toContain('Write');
+    }
+  });
+
+  it('PhaseEngine + VerificationGate: 완료 후 summarize text 포함', () => {
+    const engine = new PhaseEngine(logger);
+    const gate = new VerificationGate(logger);
+    const featureId = 'feat-summary-text';
+
+    engine.transition('CODE', 'ok', 'architect');
+    engine.transition('TEST', 'ok', 'coder');
+    engine.transition('VERIFY', 'ok', 'tester');
+
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    for (const phase of phases) {
+      gate.addResult({ featureId, phase, passed: true, feedback: 'ok', timestamp: new Date() });
+    }
+
+    const summary = gate.summarize(featureId);
+    if (summary.ok) {
+      expect(typeof summary.value.summary).toBe('string');
+      expect(summary.value.summary.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('FailureHandler + CoderAllocator: 버그 실패 → CODE 복구 → 모듈 재할당', () => {
+    const handler = new FailureHandler(logger);
+    const allocator = new CoderAllocator(logger);
+
+    const failure = handler.classify('feat-realloc', 'VERIFY', 'null pointer exception');
+    expect(failure.ok).toBe(true);
+
+    if (failure.ok) {
+      const recoveryPhase = handler.getRecoveryPhase(failure.value);
+      expect(recoveryPhase).toBe('CODE');
+
+      // CODE 복구이므로 새 모듈 할당
+      const reallocation = allocator.allocate('feat-realloc-new', ['auth-fix']);
+      expect(reallocation.ok).toBe(true);
+    }
+  });
+
+  it('AgentGenerator: 7개 에이전트 모두 tools.length > 0', () => {
+    const generator = new AgentGenerator(logger);
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const name of agents) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-tools-len');
+      if (result.ok) expect(result.value.tools.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('PhaseEngine: 롤백 후 재진행 가능', () => {
+    const engine = new PhaseEngine(logger);
+
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+
+    // 롤백 to DESIGN
+    const rollback = engine.transition('DESIGN', '재설계', 'adev');
+    expect(rollback.ok).toBe(true);
+    expect(engine.currentPhase).toBe('DESIGN');
+
+    // 재진행
+    const retry = engine.transition('CODE', '재구현', 'adev');
+    expect(retry.ok).toBe(true);
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('VerificationGate: 10개 UUID featureId 모두 isComplete=true', () => {
+    const gate = new VerificationGate(logger);
+    const phases = ['qa_qc', 'reviewer', 'layer1', 'adev'] as const;
+    const uuids = Array.from({ length: 10 }, () => crypto.randomUUID());
+
+    for (const uuid of uuids) {
+      for (const phase of phases) {
+        gate.addResult({ featureId: uuid, phase, passed: true, feedback: 'ok', timestamp: new Date() });
+      }
+    }
+
+    for (const uuid of uuids) {
+      expect(gate.isComplete(uuid)).toBe(true);
+    }
+  });
+
+  it('FailureHandler: design_flaw + implementation_bug + test_gap 모두 분류', () => {
+    const handler = new FailureHandler(logger);
+
+    const r1 = handler.classify('f1', 'VERIFY', 'architecture 결함 발견');
+    const r2 = handler.classify('f2', 'VERIFY', 'undefined is not a function');
+    const r3 = handler.classify('f3', 'VERIFY', 'test coverage 부족');
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(true);
+
+    if (r1.ok) expect(r1.value.type).toBe('design_flaw');
+    if (r2.ok) expect(r2.value.type).toBe('implementation_bug');
+    if (r3.ok) expect(r3.value.type).toBe('test_gap');
+  });
+
+  it('PhaseEngine: DESIGN→CODE→TEST→VERIFY 후 이력 length=3', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'ok', 'adev');
+    engine.transition('TEST', 'ok', 'adev');
+    engine.transition('VERIFY', 'ok', 'adev');
+    expect(engine.getHistory().length).toBe(3);
+  });
 });

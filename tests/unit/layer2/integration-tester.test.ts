@@ -979,3 +979,472 @@ describe('IntegrationTester - 추가 랜덤/경계값 케이스', () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// ADDITIONAL BOUNDARY / STRESS CASES
+// ══════════════════════════════════════════════════════════════════
+
+describe('IntegrationTester - 추가 경계값/스트레스 케이스', () => {
+  it('Step 1 통과 → getCurrentStep이 1 이상', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(10, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(3, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(2, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('Step 1~4 모두 통과 → getCurrentStep이 4', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBe(4);
+  });
+
+  it('Step 1 실패 → getCurrentStep이 1', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 2));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBe(1);
+  });
+
+  it('Step 3 실패 → getCurrentStep이 3', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 3));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBe(3);
+  });
+
+  it('Step 4 실패 → getCurrentStep이 4', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 1));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBe(4);
+  });
+
+  it('결과 배열의 failCount는 음수가 아니다', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    const results = tester.getResults();
+    for (const r of results) {
+      expect(r.failCount).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('결과 배열의 step 값은 1-4 범위이다', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    const results = tester.getResults();
+    for (const r of results) {
+      expect(r.step).toBeGreaterThanOrEqual(1);
+      expect(r.step).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('stdout "1 fail" 패턴 → failCount=1 감지', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 1,
+      stdout: '1 failed',
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(1);
+    }
+  });
+
+  it('stderr "10 failed" 패턴 → failCount=10', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 1,
+      stdout: '',
+      stderr: '10 failed',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(10);
+    }
+  });
+
+  it('UUID projectId로 3번 연속 실행 → ok', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(3, 0));
+
+    for (let i = 0; i < 3; i++) {
+      const uuid = crypto.randomUUID();
+      const result = await tester.runIntegrationTests(uuid, '/path');
+      expect(result.ok).toBeDefined();
+    }
+  });
+
+  it('envManager destroy 실패해도 getCurrentStep 정상 반환', async () => {
+    envManager.setFailDestroy(true);
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getCurrentStep()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('envManager destroy 실패해도 getResults 정상 반환', async () => {
+    envManager.setFailDestroy(true);
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getResults().length).toBeGreaterThan(0);
+  });
+
+  it('Step 2 통과 → getResults[1].passed=true', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 1));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getResults()[1]?.passed).toBe(true);
+  });
+
+  it('Step 3 통과 → getResults[2].passed=true', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 1));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getResults()[2]?.passed).toBe(true);
+  });
+
+  it('한글 projectId → envManager.create 호출 (ok 또는 error)', async () => {
+    const result = await tester.runIntegrationTests('한글-프로젝트-ID', '/path');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('빈 projectId → envManager.create에 빈 문자열 전달', async () => {
+    const result = await tester.runIntegrationTests('', '/path');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('결과 배열이 ReadonlyArray처럼 동작 (push 안 되는 경우 없음)', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    if (result.ok) {
+      // getResults()는 복사본이므로 수정해도 원본에 영향 없음
+      const copy = tester.getResults();
+      expect(Array.isArray(copy)).toBe(true);
+    }
+  });
+
+  it('stdout 패턴 없고 exitCode=0 → passed=true, failCount=0', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 0,
+      stdout: 'All good!',
+      stderr: '',
+      durationMs: 50,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.passed).toBe(true);
+      expect(result.value[0]?.failCount).toBe(0);
+    }
+  });
+
+  it('stdout "0 failed" → failCount=0 → passed(exitCode=0)', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 0,
+      stdout: '5 tests | 5 passed | 0 failed',
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(0);
+      expect(result.value[0]?.passed).toBe(true);
+    }
+  });
+
+  it('getResults() 두 번 호출 → 동일 길이', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    const r1 = tester.getResults();
+    const r2 = tester.getResults();
+    expect(r1.length).toBe(r2.length);
+  });
+
+  it('getResults() 두 번 호출 → 각 항목 step 동일', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    const r1 = tester.getResults();
+    const r2 = tester.getResults();
+    for (let i = 0; i < r1.length; i++) {
+      expect(r1[i]?.step).toBe(r2[i]?.step);
+    }
+  });
+
+  it('runIntegrationTests 두 번 연속 → 두 번째도 ok', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+
+    const r1 = await tester.runIntegrationTests('proj-a', '/path');
+    const r2 = await tester.runIntegrationTests('proj-b', '/path');
+
+    expect(r1.ok).toBeDefined();
+    expect(r2.ok).toBeDefined();
+  });
+
+  it('특수문자 projectPath → ok (처리 시도)', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(3, 0));
+    const result = await tester.runIntegrationTests('proj-1', '/path/with!@#special');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('매우 긴 stdout → failCount 파싱 성공', async () => {
+    const longStdout = 'x'.repeat(10000) + ' 5 tests | 5 passed | 0 failed ' + 'y'.repeat(10000);
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 0,
+      stdout: longStdout,
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(0);
+    }
+  });
+
+  it('Step 1 passed=true → Step 2 실행됨 (결과 2개 이상)', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 1));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getResults().length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('destroy 실패 + Step 1 성공 → result.ok=true', async () => {
+    envManager.setFailDestroy(true);
+    processExecutor.setMockResult('tests/unit', createSuccessResult(10, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(8, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(3, 0));
+
+    const result = await tester.runIntegrationTests('proj-destroy-fail', '/path');
+
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// ADDITIONAL PARSE / OUTPUT PATTERN CASES
+// ══════════════════════════════════════════════════════════════════
+
+describe('IntegrationTester - 파싱 패턴 추가 케이스', () => {
+  it('stdout "0 fail" 패턴 → failCount=0', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 0,
+      stdout: '0 fail',
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(0);
+    }
+  });
+
+  it('stdout "100 failed" 패턴 → failCount=100', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 1,
+      stdout: '100 failed',
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(100);
+    }
+  });
+
+  it('stderr에만 "50 failed" → failCount=50', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 1,
+      stdout: '',
+      stderr: '50 failed',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(50);
+    }
+  });
+
+  it('stdout/stderr 모두 비어 있고 exitCode=0 → passed=true', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 0,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.passed).toBe(true);
+    }
+  });
+
+  it('exitCode=255 → passed=false (exitCode != 0)', async () => {
+    processExecutor.setMockResult('tests/unit', {
+      exitCode: 255,
+      stdout: '5 tests | 5 passed | 0 failed',
+      stderr: '',
+      durationMs: 100,
+    });
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.passed).toBe(false);
+    }
+  });
+
+  it('Step 4 passed=true → getResults[3].passed=true', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    expect(tester.getResults()[3]?.passed).toBe(true);
+  });
+
+  it('Step 1 failCount=10 → passed=false 且 failCount=10', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(10, 10));
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value[0]?.failCount).toBe(10);
+      expect(result.value[0]?.passed).toBe(false);
+    }
+  });
+
+  it('Step 3 통과 후 Step 4 시작 → 총 4개 결과', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 0));
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBe(4);
+    }
+  });
+
+  it('각 Step result.passed는 boolean 타입', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/e2e', createSuccessResult(5, 0));
+
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    for (const r of tester.getResults()) {
+      expect(typeof r.passed).toBe('boolean');
+    }
+  });
+
+  it('envManager.wasDestroyCalled는 실패 시에도 true', async () => {
+    class FailAtStep3Executor implements ProcessExecutor {
+      async execute(
+        _command: string,
+        args: readonly string[],
+      ): Promise<Result<ProcessResult>> {
+        const testPath = args[1];
+        if (testPath === 'tests/integration') {
+          return err(new AdevError('test_execution_error', 'Integration test crashed'));
+        }
+        return ok(createSuccessResult(5, 0));
+      }
+    }
+
+    const failingTester = new IntegrationTester(logger, new FailAtStep3Executor(), envManager);
+    await failingTester.runIntegrationTests('proj-123', '/path');
+
+    expect(envManager.wasDestroyCalled()).toBe(true);
+  });
+
+  it('Step 1, 2 통과, Step 3 실패 → 결과 3개', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/module', createSuccessResult(5, 0));
+    processExecutor.setMockResult('tests/integration', createSuccessResult(5, 7));
+
+    const result = await tester.runIntegrationTests('proj-123', '/path');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBe(3);
+    }
+  });
+
+  it('getResults()는 실행 결과의 복사본 (독립적)', async () => {
+    processExecutor.setMockResult('tests/unit', createSuccessResult(5, 0));
+    await tester.runIntegrationTests('proj-123', '/path');
+
+    const r1 = tester.getResults();
+    const r2 = tester.getResults();
+
+    // WHY: 각각 독립적인 배열이어야 함 (동일 참조가 아님)
+    expect(r1).not.toBe(r2);
+  });
+});

@@ -984,3 +984,378 @@ describe('DocIntegrator collectFragments - 추가 edge 케이스', () => {
     }
   });
 });
+
+// ── integrate 반환값 세부 검증 ────────────────────────────────
+
+describe('DocIntegrator integrate - 반환값 세부 검증', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('result.value.id가 문자열이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(typeof result.value.id).toBe('string');
+  });
+
+  it('result.value.projectId가 문자열이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(typeof result.value.projectId).toBe('string');
+  });
+
+  it('result.value.type이 문자열이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(typeof result.value.type).toBe('string');
+  });
+
+  it('result.value.content가 문자열이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(typeof result.value.content).toBe('string');
+  });
+
+  it('result.value.version이 숫자이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(typeof result.value.version).toBe('number');
+  });
+
+  it('result.value.sourceFragments가 배열이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(Array.isArray(result.value.sourceFragments)).toBe(true);
+  });
+
+  it('result.value.generatedAt이 Date이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(result.value.generatedAt).toBeInstanceOf(Date);
+  });
+
+  it('result.value.version은 양수이다', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    if (result.ok) expect(result.value.version).toBeGreaterThan(0);
+  });
+
+  it('결과 id가 비어있지 않다 (재확인)', () => {
+    const result = integrator.integrate(['frag-a', 'frag-b'], makeTemplate(), 'proj-x');
+    if (result.ok) expect(result.value.id.trim().length).toBeGreaterThan(0);
+  });
+
+  it('5번 통합 → 모두 ok=true', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = integrator.integrate([`frag-${i}`], makeTemplate(), `proj-${i}`);
+      expect(result.ok).toBe(true);
+    }
+  });
+});
+
+// ── listTemplates 세부 검증 ───────────────────────────────────
+
+describe('DocIntegrator listTemplates - 세부 검증', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('false 옵션 → 커스텀 템플릿 제외', async () => {
+    await integrator.registerTemplate({
+      id: 'custom-exclude-test',
+      name: 'custom',
+      type: 'readme',
+      format: 'md',
+      description: 'custom',
+      custom: true,
+    });
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      const ids = result.value.map((t) => t.id);
+      expect(ids).not.toContain('custom-exclude-test');
+    }
+  });
+
+  it('true 옵션 → 커스텀 템플릿 포함', async () => {
+    await integrator.registerTemplate({
+      id: 'custom-include-test',
+      name: 'custom',
+      type: 'readme',
+      format: 'md',
+      description: 'custom',
+      custom: true,
+    });
+    const result = await integrator.listTemplates(true);
+    if (result.ok) {
+      const ids = result.value.map((t) => t.id);
+      expect(ids).toContain('custom-include-test');
+    }
+  });
+
+  it('기본 8개는 모두 custom=false이다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      for (const t of result.value) {
+        expect(t.custom).toBe(false);
+      }
+    }
+  });
+
+  it('기본 8개 모두 format 필드가 있다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      for (const t of result.value) {
+        expect(t.format).toBeDefined();
+      }
+    }
+  });
+
+  it('기본 8개 모두 description 필드가 있다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      for (const t of result.value) {
+        expect(t.description).toBeDefined();
+      }
+    }
+  });
+
+  it('기본 8개 모두 name 길이가 0보다 크다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      for (const t of result.value) {
+        expect(t.name.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('기본 8개 모두 id가 "default-"로 시작한다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      for (const t of result.value) {
+        expect(t.id?.startsWith('default-')).toBe(true);
+      }
+    }
+  });
+
+  it('5번 반복 listTemplates(false) → 항상 8개', async () => {
+    for (let i = 0; i < 5; i++) {
+      const result = await integrator.listTemplates(false);
+      if (result.ok) expect(result.value.length).toBe(8);
+    }
+  });
+
+  it('api-reference 템플릿 format이 html이다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      const apiRef = result.value.find((t) => t.type === 'api-reference');
+      if (apiRef) expect(apiRef.format).toBe('html');
+    }
+  });
+
+  it('readme 템플릿 format이 md이다', async () => {
+    const result = await integrator.listTemplates(false);
+    if (result.ok) {
+      const readme = result.value.find((t) => t.type === 'readme');
+      if (readme) expect(readme.format).toBe('md');
+    }
+  });
+});
+
+// ── registerTemplate 세부 검증 ───────────────────────────────
+
+describe('DocIntegrator registerTemplate - 세부 검증', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('동적 ID로 등록 → listTemplates(true)에 포함', async () => {
+    const dynId = `dynamic-${Date.now()}-${Math.random()}`;
+    await integrator.registerTemplate({
+      id: dynId,
+      name: 'dynamic',
+      type: 'changelog',
+      format: 'md',
+      description: 'dynamic template',
+      custom: true,
+    });
+    const result = await integrator.listTemplates(true);
+    if (result.ok) {
+      const ids = result.value.map((t) => t.id);
+      expect(ids).toContain(dynId);
+    }
+  });
+
+  it('여러 커스텀 템플릿 등록 → 모두 포함', async () => {
+    const ids = ['cust-a', 'cust-b', 'cust-c'];
+    for (const id of ids) {
+      await integrator.registerTemplate({
+        id,
+        name: id,
+        type: 'readme',
+        format: 'md',
+        description: id,
+        custom: true,
+      });
+    }
+    const result = await integrator.listTemplates(true);
+    if (result.ok) {
+      const foundIds = result.value.map((t) => t.id);
+      for (const id of ids) {
+        expect(foundIds).toContain(id);
+      }
+    }
+  });
+
+  it('중복 ID → error.message 비어있지 않다', async () => {
+    const result = await integrator.registerTemplate({
+      id: 'default-readme',
+      name: 'readme',
+      type: 'readme',
+      format: 'md',
+      description: 'dup',
+      custom: false,
+    });
+    if (!result.ok) expect(result.error.message.length).toBeGreaterThan(0);
+  });
+
+  it('중복 ID → error.name 비어있지 않다', async () => {
+    const result = await integrator.registerTemplate({
+      id: 'default-readme',
+      name: 'readme',
+      type: 'readme',
+      format: 'md',
+      description: 'dup',
+      custom: false,
+    });
+    if (!result.ok) expect(result.error.name.length).toBeGreaterThan(0);
+  });
+
+  it('custom=false 중복 ID 등록 → ok=false', async () => {
+    const result = await integrator.registerTemplate({
+      id: 'default-changelog',
+      name: 'changelog',
+      type: 'changelog',
+      format: 'md',
+      description: 'dup-changelog',
+      custom: false,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('templatePath 없는 커스텀 템플릿도 등록 성공', async () => {
+    const result = await integrator.registerTemplate({
+      id: 'no-path-tpl',
+      name: 'no-path',
+      type: 'readme',
+      format: 'md',
+      description: 'no templatePath',
+      custom: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID id 커스텀 템플릿 등록 → ok', async () => {
+    const uuid = crypto.randomUUID();
+    const result = await integrator.registerTemplate({
+      id: uuid,
+      name: 'uuid-template',
+      type: 'architecture',
+      format: 'md',
+      description: 'UUID id template',
+      custom: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 name 커스텀 템플릿 → ok', async () => {
+    const result = await integrator.registerTemplate({
+      id: `kor-name-${Date.now()}`,
+      name: '한글템플릿',
+      type: 'user-manual',
+      format: 'md',
+      description: '한글 설명',
+      custom: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── updateDocument + exportAsMarkdown 연계 검증 ──────────────
+
+describe('DocIntegrator updateDocument + exportAsMarkdown 연계', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('integrate → updateDocument → exportAsMarkdown 체인 ok', () => {
+    const intResult = integrator.integrate(['frag-1'], makeTemplate(), 'proj-chain');
+    if (!intResult.ok) return;
+
+    const updResult = integrator.updateDocument(intResult.value, ['frag-new']);
+    if (!updResult.ok) return;
+
+    const expResult = integrator.exportAsMarkdown(updResult.value);
+    expect(expResult.ok).toBe(true);
+  });
+
+  it('integrate → updateDocument → version 증가', () => {
+    const intResult = integrator.integrate(['frag-1'], makeTemplate(), 'proj-version');
+    if (!intResult.ok) return;
+
+    const updResult = integrator.updateDocument(intResult.value, ['frag-2']);
+    if (updResult.ok) {
+      expect(updResult.value.version).toBe(intResult.value.version + 1);
+    }
+  });
+
+  it('integrate → exportAsMarkdown → content에 projectId 포함', () => {
+    const projId = 'proj-export-chain';
+    const intResult = integrator.integrate(['frag-1'], makeTemplate(), projId);
+    if (!intResult.ok) return;
+
+    const expResult = integrator.exportAsMarkdown(intResult.value);
+    if (expResult.ok) expect(expResult.value).toContain(projId);
+  });
+
+  it('integrate → exportAsMarkdown → version: 1 포함', () => {
+    const intResult = integrator.integrate(['frag-1'], makeTemplate(), 'proj-v1');
+    if (!intResult.ok) return;
+
+    const expResult = integrator.exportAsMarkdown(intResult.value);
+    if (expResult.ok) expect(expResult.value).toContain('version: 1');
+  });
+
+  it('5번 integrate + 각 exportAsMarkdown → 모두 ok', () => {
+    for (let i = 0; i < 5; i++) {
+      const intResult = integrator.integrate([`frag-${i}`], makeTemplate(), `proj-${i}`);
+      if (!intResult.ok) continue;
+      const expResult = integrator.exportAsMarkdown(intResult.value);
+      expect(expResult.ok).toBe(true);
+    }
+  });
+
+  it('integrate + 2회 updateDocument → version=3', () => {
+    const intResult = integrator.integrate(['frag-orig'], makeTemplate(), 'proj-v3');
+    if (!intResult.ok) return;
+
+    const upd1 = integrator.updateDocument(intResult.value, ['frag-a']);
+    if (!upd1.ok) return;
+
+    const upd2 = integrator.updateDocument(upd1.value, ['frag-b']);
+    if (upd2.ok) expect(upd2.value.version).toBe(3);
+  });
+
+  it('exportAsMarkdown 후 --- 사이에 version 포함', () => {
+    const intResult = integrator.integrate(['frag-1'], makeTemplate(), 'proj-frontmatter');
+    if (!intResult.ok) return;
+
+    const expResult = integrator.exportAsMarkdown(intResult.value);
+    if (expResult.ok) {
+      const content = expResult.value;
+      const firstDash = content.indexOf('---');
+      const secondDash = content.indexOf('---', firstDash + 3);
+      const frontmatter = content.substring(firstDash, secondDash + 3);
+      expect(frontmatter).toContain('version');
+    }
+  });
+});
