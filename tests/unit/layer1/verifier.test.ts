@@ -699,3 +699,126 @@ describe('Layer1Verifier 반환값 구조 일관성', () => {
     }
   });
 });
+
+// ── 추가 edge: featureId 극단값 ────────────────────────────────
+
+describe('Layer1Verifier featureId 극단값', () => {
+  let verifier: Layer1Verifier;
+
+  beforeEach(() => {
+    verifier = new Layer1Verifier(new ConsoleLogger('error'));
+  });
+
+  it('featureId 한글만 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: '인증기능' }));
+    if (result.ok) expect(result.value.featureId).toBe('인증기능');
+  });
+
+  it('featureId 특수문자 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat!@#$%' }));
+    if (result.ok) expect(result.value.featureId).toBe('feat!@#$%');
+  });
+
+  it('featureId 공백 포함 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat with spaces' }));
+    if (result.ok) expect(result.value.featureId).toBe('feat with spaces');
+  });
+
+  it('featureId 매우 긴 문자열 → 그대로 반환', () => {
+    const longId = 'feat-' + 'x'.repeat(500);
+    const result = verifier.verify(makeRequest({ featureId: longId }));
+    if (result.ok) expect(result.value.featureId).toBe(longId);
+  });
+
+  it('featureId 숫자만 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: '12345' }));
+    if (result.ok) expect(result.value.featureId).toBe('12345');
+  });
+
+  it('featureId 이모지 포함 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat-🚀-launch' }));
+    if (result.ok) expect(result.value.featureId).toBe('feat-🚀-launch');
+  });
+
+  it('featureId 탭 포함 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat\tid' }));
+    if (result.ok) expect(result.value.featureId).toBe('feat\tid');
+  });
+
+  it('featureId 개행 포함 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'feat\nid' }));
+    if (result.ok) expect(result.value.featureId).toBe('feat\nid');
+  });
+
+  it('featureId UUID → 그대로 반환', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = verifier.verify(makeRequest({ featureId: uuid }));
+    if (result.ok) expect(result.value.featureId).toBe(uuid);
+  });
+
+  it('featureId 단일 문자 → 그대로 반환', () => {
+    const result = verifier.verify(makeRequest({ featureId: 'a' }));
+    if (result.ok) expect(result.value.featureId).toBe('a');
+  });
+});
+
+// ── 추가 edge: 다양한 testResults 경계값 ──────────────────────
+
+describe('Layer1Verifier testResults 추가 경계값', () => {
+  let verifier: Layer1Verifier;
+
+  beforeEach(() => {
+    verifier = new Layer1Verifier(new ConsoleLogger('error'));
+  });
+
+  it('testResults 한글만 → passed=true (패턴 없음)', () => {
+    const result = verifier.verify(makeRequest({ testResults: '모든 테스트 통과했습니다' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('testResults 개행 포함 성공 → passed=true', () => {
+    const result = verifier.verify(makeRequest({ testResults: 'test 1: pass\ntest 2: pass\ntest 3: pass' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('testResults 개행 포함 실패 → passed=false', () => {
+    const result = verifier.verify(makeRequest({ testResults: 'test 1: pass\ntest 2: fail\ntest 3: pass' }));
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('testResults 빈 줄 여러 개 → passed=true', () => {
+    const result = verifier.verify(makeRequest({ testResults: '\n\n\n' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('testResults "ErrorCode: 0" → passed=false (error 포함)', () => {
+    const result = verifier.verify(makeRequest({ testResults: 'ErrorCode: 0' }));
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('testResults 200자 성공 문자열 → passed=true', () => {
+    const log = 'Test suite completed. All ' + 'a'.repeat(150) + ' scenarios passed.';
+    const result = verifier.verify(makeRequest({ testResults: log }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('testResults "assertion failed" → passed=false', () => {
+    const result = verifier.verify(makeRequest({ testResults: 'assertion failed at line 42' }));
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('testResults "exitCode: 1, fail" → passed=false', () => {
+    const result = verifier.verify(makeRequest({ testResults: 'exitCode: 1, fail' }));
+    if (result.ok) expect(result.value.passed).toBe(false);
+  });
+
+  it('testResults 순수 숫자 → passed=true (패턴 없음)', () => {
+    const result = verifier.verify(makeRequest({ testResults: '100' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+
+  it('testResults 특수문자만 → passed=true', () => {
+    const result = verifier.verify(makeRequest({ testResults: '!!!###$$$%%%' }));
+    if (result.ok) expect(result.value.passed).toBe(true);
+  });
+});

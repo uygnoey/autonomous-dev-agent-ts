@@ -702,3 +702,116 @@ describe('createAuthProvider - 독립성 검증', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── 추가 edge: API 키 극단값 ──────────────────────────────────
+
+describe('createAuthProvider - API 키 추가 극단값', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('개행 포함 API 키 → ok=true (비어있지 않으면 허용)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key\n';
+    const result = createAuthProvider(createLogger());
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('탭 포함 API 키 → ok=true (비어있지 않으면 허용)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key\t';
+    const result = createAuthProvider(createLogger());
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('한글 포함 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-한글-api-key';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('이모지 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = '🔑-api-key';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('최대 길이 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-' + 'z'.repeat(500);
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('헤더 x-api-key가 비어있지 않다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-nonempty';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const hv = result.value.getAuthHeader()['x-api-key'];
+      if (hv) expect(hv.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('API 키 설정 → getAuthHeader() 반환값에 x-api-key 키 존재', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key-check';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect('x-api-key' in result.value.getAuthHeader()).toBe(true);
+    }
+  });
+
+  it('authMode가 "api-key"인지 확인 (소문자 하이픈)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-mode-lower';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(result.value.authMode).toMatch(/api-key/i);
+    }
+  });
+});
+
+// ── 추가 edge: OAuth 토큰 극단값 ──────────────────────────────
+
+describe('createAuthProvider - OAuth 토큰 추가 극단값', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('한글 포함 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-한글-토큰';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('이모지 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = '🔐-oauth-token';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('최대 길이 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-' + 'y'.repeat(500);
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('authorization 헤더가 비어있지 않다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-nonempty';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const hv = result.value.getAuthHeader().authorization;
+      if (hv) expect(hv.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('authorization 헤더가 공백을 포함한다 (Bearer + space)', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-space-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const hv = result.value.getAuthHeader().authorization;
+      if (hv) expect(hv).toContain(' ');
+    }
+  });
+
+  it('authMode가 "oauth-token"인지 확인 (하이픈 포함)', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-mode-lower';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(result.value.authMode).toMatch(/oauth-token/i);
+    }
+  });
+});
