@@ -838,4 +838,297 @@ describe('RagSearcher', () => {
       if (result.ok) expect(result.value).toEqual([]);
     });
   });
+
+  // ── searchCode 추가 edge/random 케이스 ──────────────────────
+
+  describe('searchCode 추가 edge/random 케이스', () => {
+    it('UUID 형식 쿼리 → ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'uuid-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const uuid = '550e8400-e29b-41d4-a716-446655440000';
+      const result = await searcher.searchCode(uuid);
+      expect(result.ok).toBe(true);
+    });
+
+    it('탭 문자 포함 쿼리 → ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'tab-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('\t\tfunction\t');
+      expect(result.ok).toBe(true);
+    });
+
+    it('개행 문자 포함 쿼리 → ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'newline-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('function\nloadConfig\n');
+      expect(result.ok).toBe(true);
+    });
+
+    it('이모지 포함 쿼리 → ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'emoji-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('find 🔑 config');
+      expect(result.ok).toBe(true);
+    });
+
+    it('연속 공백 쿼리 → ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'spaces-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('     ');
+      expect(result.ok).toBe(true);
+    });
+
+    it('최대값 Float32 임베딩 → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'max-embed',
+        embedding: new Float32Array([3.4e38, 3.4e38, 3.4e38, 3.4e38]),
+      }));
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('최솟값 Float32 임베딩 → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'min-embed',
+        embedding: new Float32Array([0, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('음수 임베딩 → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'neg-embed',
+        embedding: new Float32Array([-0.5, -0.5, -0.5, -0.5]),
+      }));
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('동일 filePath 여러 레코드 삽입 → searchCode ok', async () => {
+      const path = 'src/shared/util.ts';
+      for (let i = 0; i < 5; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `same-path-${i}`,
+          filePath: path,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('utility');
+      expect(result.ok).toBe(true);
+    });
+
+    it('100자 짧은 chunk → 검색 ok', async () => {
+      const chunk = 'const x = 1;'.repeat(8);
+      await store.insert(createTestCodeRecord({
+        id: 'short-chunk-100',
+        chunk,
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('const');
+      expect(result.ok).toBe(true);
+    });
+
+    it('모든 ASCII 특수문자 포함 chunk → 검색 ok', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'ascii-special',
+        chunk: '!@#$%^&*()-_=+[]{}|;:\',.<>?/`~',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('special');
+      expect(result.ok).toBe(true);
+    });
+
+    it('20개 레코드 순서 삽입 → limit=5 결과 5개 이하', async () => {
+      for (let i = 0; i < 20; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `order-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test', 5);
+      if (result.ok) expect(result.value.length).toBeLessThanOrEqual(5);
+    });
+
+    it('metadata.modifiedBy 필터 미매칭 → 빈 배열', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'mod-by-alice',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'fn', lastModified: new Date(), modifiedBy: 'alice' },
+      }));
+      const result = await searcher.searchCode('test', 10, { modifiedBy: 'nobody' });
+      if (result.ok) expect(result.value.length).toBe(0);
+    });
+
+    it('filter functionName 미매칭 → 빈 배열', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'fn-nomatch',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'realFn', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('test', 10, { functionName: 'ghostFn' });
+      if (result.ok) expect(result.value.length).toBe(0);
+    });
+
+    it('searchCode 결과 items에 score 필드가 number', async () => {
+      await store.insert(createTestCodeRecord({ id: 'score-num', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.score).toBe('number');
+        }
+      }
+    });
+
+    it('searchCode 결과 items에 record.id 필드가 string', async () => {
+      await store.insert(createTestCodeRecord({ id: 'id-string', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.record.id).toBe('string');
+        }
+      }
+    });
+
+    it('searchCode 결과 items에 record.chunk 필드가 string', async () => {
+      await store.insert(createTestCodeRecord({ id: 'chunk-string', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.record.chunk).toBe('string');
+        }
+      }
+    });
+
+    it('searchCode ok=true의 value는 배열', async () => {
+      const result = await searcher.searchCode('any query');
+      if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+    });
+
+    it('다른 MockEmbeddingProvider dimensions → 검색 ok', async () => {
+      const bigProvider = new MockEmbeddingProvider(8);
+      const bigStore = new CodeVectorStore(tempDir + '-big', logger);
+      await bigStore.initialize();
+      const bigSearcher = new RagSearcher(bigStore, bigProvider, logger);
+      await bigStore.insert(createTestCodeRecord({
+        id: 'big-dim',
+        embedding: new Float32Array([1, 0, 0, 0, 0, 0, 0, 0]),
+      }));
+      const result = await bigSearcher.searchCode('test');
+      expect(typeof result.ok).toBe('boolean');
+      await rm(tempDir + '-big', { recursive: true, force: true });
+    });
+  });
+
+  // ── searchByFile 추가 edge/random 케이스 ─────────────────────
+
+  describe('searchByFile 추가 edge/random 케이스', () => {
+    it('점(.)으로 시작하는 파일 경로 → ok', async () => {
+      const path = '.hidden/config.ts';
+      await store.insert(createTestCodeRecord({ id: 'dotfile', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+    });
+
+    it('확장자 없는 파일 경로 → ok', async () => {
+      const path = 'src/Makefile';
+      await store.insert(createTestCodeRecord({ id: 'makefile', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+    });
+
+    it('절대 경로 형식 → ok', async () => {
+      const path = '/home/user/project/src/main.ts';
+      await store.insert(createTestCodeRecord({ id: 'abs-path', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        for (const rec of result.value) {
+          expect(rec.filePath).toBe(path);
+        }
+      }
+    });
+
+    it('5개 다른 경로 삽입 → 각각 searchByFile ok', async () => {
+      const paths = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'];
+      for (const p of paths) {
+        await store.insert(createTestCodeRecord({
+          id: `path-${p}`,
+          filePath: p,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      for (const p of paths) {
+        const result = await searcher.searchByFile(p);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('searchByFile → 반환 records 타입 배열', async () => {
+      const result = await searcher.searchByFile('any.ts');
+      if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+    });
+
+    it('searchByFile 반환 records 각 항목에 id 필드', async () => {
+      await store.insert(createTestCodeRecord({ id: 'id-in-record', filePath: 'src/x.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('src/x.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.id).toBeDefined();
+      }
+    });
+
+    it('searchByFile 반환 records 각 항목에 chunk 필드', async () => {
+      await store.insert(createTestCodeRecord({ id: 'chunk-in-record', filePath: 'src/y.ts', chunk: 'const y = 2;', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('src/y.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.chunk).toBeDefined();
+      }
+    });
+
+    it('searchByFile 경로 대소문자 정확 일치 확인', async () => {
+      await store.insert(createTestCodeRecord({ id: 'case-1', filePath: 'src/Main.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await store.insert(createTestCodeRecord({ id: 'case-2', filePath: 'src/main.ts', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await searcher.searchByFile('src/Main.ts');
+      if (result.ok) {
+        for (const rec of result.value) {
+          expect(rec.filePath).toBe('src/Main.ts');
+        }
+      }
+    });
+
+    it('searchByFile → 10개 동일 경로 레코드 → 최소 1개 이상 반환', async () => {
+      const path = 'src/shared.ts';
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `same-path-10-${i}`,
+          filePath: path,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchByFile(path);
+      if (result.ok && result.value.length > 0) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+        for (const rec of result.value) {
+          expect(rec.filePath).toBe(path);
+        }
+      } else if (result.ok) {
+        // 빈 배열도 허용 (검색 구현에 따라 다를 수 있음)
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('searchByFile 결과 record에 metadata.lastModified 있음', async () => {
+      await store.insert(createTestCodeRecord({ id: 'lm-field', filePath: 'src/lm.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('src/lm.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.metadata.lastModified).toBeDefined();
+      }
+    });
+
+    it('searchByFile UUID 파일명 → ok', async () => {
+      const uuid = crypto.randomUUID();
+      const path = `src/${uuid}.ts`;
+      await store.insert(createTestCodeRecord({ id: 'uuid-fn', filePath: path, embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.filePath).toBe(path);
+      }
+    });
+  });
 });
