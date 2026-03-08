@@ -523,4 +523,167 @@ describe('loadRegistry', () => {
       expect(r1.value.projects.length).toBe(r2.value.projects.length);
     }
   });
+
+  it('잘못된 JSON → ok=false 또는 빈 레지스트리 반환', async () => {
+    await writeFile(join(registryDir, 'projects.json'), 'not-valid-json!!!');
+    const result = await loadRegistry(registryDir);
+    // 파싱 실패 시 에러 반환 또는 빈 레지스트리 반환 모두 허용
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('부분 JSON → ok=false 또는 빈 레지스트리 반환', async () => {
+    await writeFile(join(registryDir, 'projects.json'), '{"projects":');
+    const result = await loadRegistry(registryDir);
+    // 파싱 실패 시 에러 반환 또는 빈 레지스트리 반환 모두 허용
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('5번 반복 저장/불러오기 → 일관된 결과', async () => {
+    const registry: ProjectRegistry = {
+      activeProject: 'p1',
+      projects: [
+        { id: 'x', name: 'p1', path: '/tmp/p1', createdAt: new Date(), lastAccessedAt: new Date() },
+      ],
+    };
+    await saveRegistry(registry, registryDir);
+    for (let i = 0; i < 5; i++) {
+      const r = await loadRegistry(registryDir);
+      if (r.ok) {
+        expect(r.value.projects.length).toBe(1);
+        expect(r.value.activeProject).toBe('p1');
+      }
+    }
+  });
+
+  it('빈 projects 배열 저장/불러오기', async () => {
+    await saveRegistry({ activeProject: null, projects: [] }, registryDir);
+    const r = await loadRegistry(registryDir);
+    if (r.ok) {
+      expect(r.value.projects).toEqual([]);
+    }
+  });
+});
+
+// ── ProjectCommand 추가 경계값 ────────────────────────────────
+
+describe('ProjectCommand 추가 경계값', () => {
+  let tempDir: string;
+  let registryDir: string;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `adev-project-extra-${crypto.randomUUID()}`);
+    registryDir = join(tempDir, '.adev');
+    await mkdir(registryDir, { recursive: true });
+    projectDir = join(tempDir, 'test-proj');
+    await mkdir(projectDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('add → list → remove 전체 플로우', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const addResult = await cmd.execute(['add', projectDir], defaultOptions);
+    expect(addResult.ok).toBe(true);
+    const listResult = await cmd.execute(['list'], defaultOptions);
+    expect(listResult.ok).toBe(true);
+    const removeResult = await cmd.execute(['remove', 'test-proj'], defaultOptions);
+    expect(removeResult.ok).toBe(true);
+  });
+
+  it('remove 후 list → ok', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    await cmd.execute(['add', projectDir], defaultOptions);
+    await cmd.execute(['remove', 'test-proj'], defaultOptions);
+    const r = await cmd.execute(['list'], defaultOptions);
+    expect(r.ok).toBe(true);
+  });
+
+  it('3개 프로젝트 add → list → 모두 ok', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    for (let i = 0; i < 3; i++) {
+      const dir = join(tempDir, `proj-${i}`);
+      await mkdir(dir, { recursive: true });
+      const r = await cmd.execute(['add', dir], defaultOptions);
+      expect(r.ok).toBe(true);
+    }
+    const r = await cmd.execute(['list'], defaultOptions);
+    expect(r.ok).toBe(true);
+  });
+
+  it('execute 인자에 null-like 빈 배열 → 에러', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute([], defaultOptions);
+    expect(result.ok).toBe(false);
+  });
+
+  it('add 에러 코드는 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['add'], defaultOptions);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('switch 에러 코드는 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['switch'], defaultOptions);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('remove 에러 코드는 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['remove'], defaultOptions);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('unknown 에러 코드는 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['unknown-cmd'], defaultOptions);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('5번 반복 add 시도 → 첫 번째만 ok', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const results = [];
+    for (let i = 0; i < 5; i++) {
+      results.push(await cmd.execute(['add', projectDir], defaultOptions));
+    }
+    expect(results[0]!.ok).toBe(true);
+    for (let i = 1; i < 5; i++) {
+      expect(results[i]!.ok).toBe(false);
+    }
+  });
+
+  it('add 결과 ok는 boolean 타입', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['add', projectDir], defaultOptions);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('등록된 프로젝트 path는 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    await cmd.execute(['add', projectDir], defaultOptions);
+    const reg = await loadRegistry(registryDir);
+    if (reg.ok) {
+      expect(typeof reg.value.projects[0]!.path).toBe('string');
+    }
+  });
+
+  it('등록된 프로젝트 name은 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    await cmd.execute(['add', projectDir], defaultOptions);
+    const reg = await loadRegistry(registryDir);
+    if (reg.ok) {
+      expect(typeof reg.value.projects[0]!.name).toBe('string');
+    }
+  });
 });

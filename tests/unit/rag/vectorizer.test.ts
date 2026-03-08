@@ -516,3 +516,184 @@ describe('Vectorizer 랜덤/경계값', () => {
     expect((await v.search('query', 100)).ok).toBe(false);
   });
 });
+
+// ── 메서드 타입 및 반환값 구조 ────────────────────────────────
+
+describe('Vectorizer 메서드 타입 검증', () => {
+  it('search 반환값은 Promise', () => {
+    const v = makeVectorizer();
+    const p = v.search('query');
+    expect(p).toBeInstanceOf(Promise);
+  });
+
+  it('index 반환값은 Promise', () => {
+    const v = makeVectorizer();
+    const p = v.index('/tmp/dir');
+    expect(p).toBeInstanceOf(Promise);
+  });
+
+  it('search 결과 ok는 boolean', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('index 결과 ok는 boolean', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/test');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('search 에러 결과에 error 필드 존재', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query');
+    if (!r.ok) {
+      expect('error' in r).toBe(true);
+    }
+  });
+
+  it('index 에러 결과에 error 필드 존재', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/dir');
+    if (!r.ok) {
+      expect('error' in r).toBe(true);
+    }
+  });
+
+  it('search 에러 code는 비어있지 않음', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query');
+    if (!r.ok) {
+      expect(r.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('index 에러 code는 비어있지 않음', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/dir');
+    if (!r.ok) {
+      expect(r.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('search 에러 message는 비어있지 않음', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query');
+    if (!r.ok) {
+      expect(r.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('index 에러 message는 비어있지 않음', async () => {
+    const v = makeVectorizer();
+    const r = await v.index('/tmp/dir');
+    if (!r.ok) {
+      expect(r.error.message.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ── EmbeddingConfig 경계값 ─────────────────────────────────────
+
+describe('Vectorizer EmbeddingConfig 경계값', () => {
+  it('dimensions=0 설정 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: 0 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('dimensions=-1 설정 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: -1 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('model 빈 문자열 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: '', dimensions: 384 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('model 매우 긴 문자열 → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'x'.repeat(500), dimensions: 384 },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('dimensions=Number.MAX_SAFE_INTEGER → 인스턴스 생성', () => {
+    const config: EmbeddingConfig = {
+      default: 'transformers',
+      transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: Number.MAX_SAFE_INTEGER },
+    };
+    expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+  });
+
+  it('5가지 dimensions 설정 → 모두 인스턴스 생성', () => {
+    const dims = [64, 128, 256, 512, 1024];
+    for (const d of dims) {
+      const config: EmbeddingConfig = {
+        default: 'transformers',
+        transformers: { model: 'Xenova/all-MiniLM-L6-v2', dimensions: d },
+      };
+      expect(() => new Vectorizer('/tmp/db', config, logger)).not.toThrow();
+    }
+  });
+});
+
+// ── 미초기화 search + index 혼합 경계값 ───────────────────────
+
+describe('Vectorizer 미초기화 혼합 경계값', () => {
+  it('search 후 index 호출 → 모두 err', async () => {
+    const v = makeVectorizer();
+    const r1 = await v.search('query');
+    const r2 = await v.index('/tmp/dir');
+    expect(r1.ok).toBe(false);
+    expect(r2.ok).toBe(false);
+  });
+
+  it('index 후 search 호출 → 모두 err', async () => {
+    const v = makeVectorizer();
+    const r1 = await v.index('/tmp/dir');
+    const r2 = await v.search('query');
+    expect(r1.ok).toBe(false);
+    expect(r2.ok).toBe(false);
+  });
+
+  it('공백만 있는 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('   ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('유니코드 제어문자 쿼리 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('\u0000\u0001\u0002');
+    expect(r.ok).toBe(false);
+  });
+
+  it('limit=Number.MAX_SAFE_INTEGER → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query', Number.MAX_SAFE_INTEGER);
+    expect(r.ok).toBe(false);
+  });
+
+  it('limit=Infinity → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query', Infinity);
+    expect(r.ok).toBe(false);
+  });
+
+  it('limit=-1 → err', async () => {
+    const v = makeVectorizer();
+    const r = await v.search('query', -1);
+    expect(r.ok).toBe(false);
+  });
+});

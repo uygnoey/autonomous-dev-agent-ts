@@ -497,3 +497,179 @@ describe('에러 계층 구조', () => {
     expect(phaseErr instanceof ContractError).toBe(false);
   });
 });
+
+// ── AdevError 코드/메시지 경계값 반복 ─────────────────────────
+
+describe('AdevError 코드 경계값 반복', () => {
+  it('code에 공백 포함', () => {
+    const err = new AdevError('code with spaces', 'msg');
+    expect(err.code).toBe('code with spaces');
+  });
+
+  it('code에 unicode 포함', () => {
+    const err = new AdevError('에러코드', 'msg');
+    expect(err.code).toBe('에러코드');
+  });
+
+  it('code에 숫자만', () => {
+    const err = new AdevError('123456', 'msg');
+    expect(err.code).toBe('123456');
+  });
+
+  it('code에 밑줄만', () => {
+    const err = new AdevError('___', 'msg');
+    expect(err.code).toBe('___');
+  });
+
+  it('code에 점 포함', () => {
+    const err = new AdevError('error.code.nested', 'msg');
+    expect(err.code).toBe('error.code.nested');
+  });
+
+  it('code에 대시 포함', () => {
+    const err = new AdevError('error-code-value', 'msg');
+    expect(err.code).toBe('error-code-value');
+  });
+
+  it('message에 개행 포함', () => {
+    const err = new AdevError('code', 'line1\nline2\nline3');
+    expect(err.message).toContain('\n');
+  });
+
+  it('message에 탭 포함', () => {
+    const err = new AdevError('code', 'col1\tcol2');
+    expect(err.message).toContain('\t');
+  });
+
+  it('message에 null 문자 포함', () => {
+    const err = new AdevError('code', 'msg\0null');
+    expect(err.message).toContain('\0');
+  });
+
+  it('cause로 배열 허용', () => {
+    const arr = [1, 2, 3];
+    const err = new AdevError('code', 'msg', arr);
+    expect(err.cause).toBe(arr);
+  });
+
+  it('cause로 객체 허용', () => {
+    const obj = { key: 'value' };
+    const err = new AdevError('code', 'msg', obj);
+    expect(err.cause).toBe(obj);
+  });
+
+  it('cause로 Date 허용', () => {
+    const d = new Date();
+    const err = new AdevError('code', 'msg', d);
+    expect(err.cause).toBe(d);
+  });
+
+  it('5번 생성 → code 일관성', () => {
+    const code = 'repeat_code';
+    for (let i = 0; i < 5; i++) {
+      expect(new AdevError(code, 'msg').code).toBe(code);
+    }
+  });
+
+  it('5번 생성 → message 일관성', () => {
+    const msg = 'repeat_message';
+    for (let i = 0; i < 5; i++) {
+      expect(new AdevError('code', msg).message).toBe(msg);
+    }
+  });
+
+  it('10개 인스턴스 → 각각 독립적', () => {
+    const instances = Array.from({ length: 10 }, (_, i) =>
+      new AdevError(`code-${i}`, `msg-${i}`)
+    );
+    for (let i = 0; i < 10; i++) {
+      expect(instances[i]!.code).toBe(`code-${i}`);
+      expect(instances[i]!.message).toBe(`msg-${i}`);
+    }
+  });
+});
+
+// ── isAdevError 추가 경계값 ────────────────────────────────────
+
+describe('isAdevError 추가 경계값', () => {
+  it('BigInt에 false', () => {
+    expect(isAdevError(BigInt(42))).toBe(false);
+  });
+
+  it('WeakMap에 false', () => {
+    expect(isAdevError(new WeakMap())).toBe(false);
+  });
+
+  it('WeakSet에 false', () => {
+    expect(isAdevError(new WeakSet())).toBe(false);
+  });
+
+  it('Promise에 false', () => {
+    expect(isAdevError(Promise.resolve())).toBe(false);
+  });
+
+  it('정규식에 false', () => {
+    expect(isAdevError(/pattern/)).toBe(false);
+  });
+
+  it('TypeError에 false', () => {
+    expect(isAdevError(new TypeError('type err'))).toBe(false);
+  });
+
+  it('RangeError에 false', () => {
+    expect(isAdevError(new RangeError('range err'))).toBe(false);
+  });
+
+  it('SyntaxError에 false', () => {
+    expect(isAdevError(new SyntaxError('syntax err'))).toBe(false);
+  });
+
+  it('5번 연속 같은 값 → 일관된 결과', () => {
+    const err = new AdevError('code', 'msg');
+    for (let i = 0; i < 5; i++) {
+      expect(isAdevError(err)).toBe(true);
+    }
+  });
+
+  it('false 반환값도 boolean 타입', () => {
+    expect(typeof isAdevError(null)).toBe('boolean');
+    expect(typeof isAdevError(undefined)).toBe('boolean');
+    expect(typeof isAdevError(42)).toBe('boolean');
+  });
+});
+
+// ── DEFAULT_RETRY_POLICY 추가 불변성 검증 ─────────────────────
+
+describe('DEFAULT_RETRY_POLICY 불변성 및 관계 검증', () => {
+  it('baseDelay * backoffFactor < maxDelay', () => {
+    const { baseDelay, backoffFactor, maxDelay } = DEFAULT_RETRY_POLICY;
+    expect(baseDelay * backoffFactor).toBeLessThan(maxDelay);
+  });
+
+  it('maxDelay는 30초 이상', () => {
+    expect(DEFAULT_RETRY_POLICY.maxDelay).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it('baseDelay는 1초 이상', () => {
+    expect(DEFAULT_RETRY_POLICY.baseDelay).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it('retryableErrors 중복 없음', () => {
+    const unique = new Set(DEFAULT_RETRY_POLICY.retryableErrors);
+    expect(unique.size).toBe(DEFAULT_RETRY_POLICY.retryableErrors.length);
+  });
+
+  it('retryableErrors 빈 문자열 없음', () => {
+    for (const code of DEFAULT_RETRY_POLICY.retryableErrors) {
+      expect(code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('backoffFactor는 2 이상', () => {
+    expect(DEFAULT_RETRY_POLICY.backoffFactor).toBeGreaterThanOrEqual(2);
+  });
+
+  it('maxAttempts는 1 이상', () => {
+    expect(DEFAULT_RETRY_POLICY.maxAttempts).toBeGreaterThanOrEqual(1);
+  });
+});
