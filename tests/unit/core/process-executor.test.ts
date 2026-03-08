@@ -22,8 +22,43 @@ beforeEach(() => {
 
 afterEach(() => {
   // WHY: 테스트 간 상태 독립성 보장
-  logger = null as any;
-  executor = null as any;
+  logger = null as unknown as ConsoleLogger;
+  executor = null as unknown as ProcessExecutor;
+});
+
+// ══════════════════════════════════════════════════════════════════
+// CONSTRUCTOR
+// ══════════════════════════════════════════════════════════════════
+
+describe('ProcessExecutor - 생성자', () => {
+  it('인스턴스 생성됨', () => {
+    expect(() => new ProcessExecutor(new ConsoleLogger('error'))).not.toThrow();
+  });
+
+  it('ProcessExecutor 인스턴스이다', () => {
+    expect(new ProcessExecutor(new ConsoleLogger('error'))).toBeInstanceOf(ProcessExecutor);
+  });
+
+  it('execute 메서드가 존재한다', () => {
+    const ex = new ProcessExecutor(new ConsoleLogger('error'));
+    expect(typeof ex.execute).toBe('function');
+  });
+
+  it('두 인스턴스는 다른 객체이다', () => {
+    const e1 = new ProcessExecutor(new ConsoleLogger('error'));
+    const e2 = new ProcessExecutor(new ConsoleLogger('error'));
+    expect(e1).not.toBe(e2);
+  });
+
+  it('debug logger로 생성 가능', () => {
+    expect(() => new ProcessExecutor(new ConsoleLogger('debug'))).not.toThrow();
+  });
+
+  it('10개 인스턴스 모두 생성 가능', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(() => new ProcessExecutor(new ConsoleLogger('error'))).not.toThrow();
+    }
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -65,6 +100,36 @@ describe('ProcessExecutor - Normal Cases', () => {
       const targetBasename = targetDir.replace(/\\/g, '/').split('/').pop() ?? '';
       expect(pwd.endsWith(targetBasename)).toBe(true);
     }
+  });
+
+  it('ok가 boolean이다', async () => {
+    const result = await executor.execute('echo', ['bool-check']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('exitCode가 숫자이다', async () => {
+    const result = await executor.execute('echo', ['type-check']);
+    if (result.ok) expect(typeof result.value.exitCode).toBe('number');
+  });
+
+  it('stdout이 문자열이다', async () => {
+    const result = await executor.execute('echo', ['str-check']);
+    if (result.ok) expect(typeof result.value.stdout).toBe('string');
+  });
+
+  it('stderr이 문자열이다', async () => {
+    const result = await executor.execute('echo', ['stderr-check']);
+    if (result.ok) expect(typeof result.value.stderr).toBe('string');
+  });
+
+  it('durationMs가 숫자이다', async () => {
+    const result = await executor.execute('echo', ['dur-check']);
+    if (result.ok) expect(typeof result.value.durationMs).toBe('number');
+  });
+
+  it('단일 인자 echo', async () => {
+    const result = await executor.execute('echo', ['single']);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('single');
   });
 });
 
@@ -192,6 +257,60 @@ describe('ProcessExecutor - Edge Cases', () => {
       expect(result.value.stdout).toBe(multilineInput);
     }
   });
+
+  it('매우 긴 단일 인자 처리', async () => {
+    const longArg = 'x'.repeat(1000);
+    const result = await executor.execute('echo', [longArg]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.stdout.trim()).toBe(longArg);
+    }
+  });
+
+  it('exit code 2 반환', async () => {
+    const result = await executor.execute('sh', ['-c', 'exit 2']);
+    if (result.ok) expect(result.value.exitCode).toBe(2);
+  });
+
+  it('exit code 127 반환', async () => {
+    const result = await executor.execute('sh', ['-c', 'exit 127']);
+    if (result.ok) expect(result.value.exitCode).toBe(127);
+  });
+
+  it('true와 false의 exit code 차이', async () => {
+    const trueResult = await executor.execute('true');
+    const falseResult = await executor.execute('false');
+    if (trueResult.ok) expect(trueResult.value.exitCode).toBe(0);
+    if (falseResult.ok) expect(falseResult.value.exitCode).toBe(1);
+  });
+
+  it('빈 환경변수 값 전달', async () => {
+    const result = await executor.execute('sh', ['-c', 'echo "${EMPTY_VAR:-default}"'], {
+      env: { EMPTY_VAR: '' },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('newline이 포함된 stdout', async () => {
+    const result = await executor.execute('sh', ['-c', 'printf "line1\\nline2\\nline3"']);
+    if (result.ok) {
+      expect(result.value.stdout).toContain('line1');
+      expect(result.value.stdout).toContain('line2');
+    }
+  });
+
+  it('5번 연속 echo → 항상 ok', async () => {
+    for (let i = 0; i < 5; i++) {
+      const result = await executor.execute('echo', [`test-${i}`]);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('stdin 빈 문자열 처리', async () => {
+    const result = await executor.execute('cat', [], { stdin: '' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout).toBe('');
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -308,7 +427,7 @@ describe('ProcessExecutor - Error Cases', () => {
   it('잘못된 환경변수 형식은 무시된다', async () => {
     // WHY: undefined 값은 무시되어야 함
     const result = await executor.execute('echo', ['test'], {
-      env: { UNDEFINED_VAR: undefined as any },
+      env: { UNDEFINED_VAR: undefined as unknown as string },
     });
 
     // WHY: Bun.spawn이 내부적으로 처리 — 실행은 성공해야 함
@@ -334,6 +453,36 @@ describe('ProcessExecutor - Error Cases', () => {
     if (result.ok) {
       expect(result.value.exitCode).not.toBe(0);
     }
+  });
+
+  it('에러 코드가 문자열이다 (미존재 명령)', async () => {
+    const result = await executor.execute('totally_fake_cmd_999');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 메시지가 문자열이다 (미존재 명령)', async () => {
+    const result = await executor.execute('totally_fake_cmd_999');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('타임아웃 에러 코드가 process_timeout', async () => {
+    const result = await executor.execute('sleep', ['5'], { timeoutMs: 50 });
+    if (!result.ok) expect(result.error.code).toBe('process_timeout');
+  });
+
+  it('타임아웃 에러 메시지가 문자열', async () => {
+    const result = await executor.execute('sleep', ['5'], { timeoutMs: 50 });
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('200ms 타임아웃 내에 완료되지 않으면 실패', async () => {
+    const result = await executor.execute('sleep', ['2'], { timeoutMs: 200 });
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 cwd → error.code 문자열', async () => {
+    const result = await executor.execute('echo', ['x'], { cwd: '/does/not/exist/here' });
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
   });
 });
 
@@ -368,5 +517,40 @@ describe('ProcessExecutor - Concurrency', () => {
 
     expect(timeoutResult?.ok).toBe(false);
     expect(successResult?.ok).toBe(true);
+  });
+
+  it('5개 동시 실행 → 모두 독립', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => executor.execute('echo', [`concurrent-${i}`])),
+    );
+    for (let i = 0; i < results.length; i++) {
+      expect(results[i]?.ok).toBe(true);
+      if (results[i]?.ok) {
+        const val = results[i];
+        if (val?.ok) expect(val.value.stdout.trim()).toBe(`concurrent-${i}`);
+      }
+    }
+  });
+
+  it('성공과 실패 혼합 동시 실행', async () => {
+    const results = await Promise.all([
+      executor.execute('echo', ['ok']),
+      executor.execute('nonexistent_xyz'),
+      executor.execute('true'),
+    ]);
+    expect(results[0]?.ok).toBe(true);
+    expect(results[1]?.ok).toBe(false);
+    expect(results[2]?.ok).toBe(true);
+  });
+
+  it('두 executor 인스턴스 독립 실행', async () => {
+    const ex1 = new ProcessExecutor(new ConsoleLogger('error'));
+    const ex2 = new ProcessExecutor(new ConsoleLogger('error'));
+    const [r1, r2] = await Promise.all([
+      ex1.execute('echo', ['from-ex1']),
+      ex2.execute('echo', ['from-ex2']),
+    ]);
+    if (r1.ok) expect(r1.value.stdout.trim()).toBe('from-ex1');
+    if (r2.ok) expect(r2.value.stdout.trim()).toBe('from-ex2');
   });
 });

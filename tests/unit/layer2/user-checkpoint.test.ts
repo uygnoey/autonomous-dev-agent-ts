@@ -26,6 +26,27 @@ describe('UserCheckpoint 생성자', () => {
   it('UserCheckpoint 인스턴스', () => {
     expect(makeCheckpoint()).toBeInstanceOf(UserCheckpoint);
   });
+
+  it('두 인스턴스는 다른 객체', () => {
+    const a = makeCheckpoint();
+    const b = makeCheckpoint();
+    expect(a).not.toBe(b);
+  });
+
+  it('createCheckpoint 메서드 존재', () => {
+    const cp = makeCheckpoint();
+    expect(typeof cp.createCheckpoint).toBe('function');
+  });
+
+  it('getCheckpoint 메서드 존재', () => {
+    const cp = makeCheckpoint();
+    expect(typeof cp.getCheckpoint).toBe('function');
+  });
+
+  it('setDecision 메서드 존재', () => {
+    const cp = makeCheckpoint();
+    expect(typeof cp.setDecision).toBe('function');
+  });
 });
 
 // ── createCheckpoint ──────────────────────────────────────────
@@ -88,6 +109,68 @@ describe('UserCheckpoint.createCheckpoint', () => {
     const result = checkpoint.createCheckpoint('proj-1', 'feat-1', 'x'.repeat(10000));
     expect(result.ok).toBe(true);
   });
+
+  it('숫자 문자열 results → ok', () => {
+    const result = checkpoint.createCheckpoint('proj-1', 'feat-1', '12345');
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 results → ok', () => {
+    const result = checkpoint.createCheckpoint('proj-1', 'feat-1', '!@#$%^&*(){}[]');
+    expect(result.ok).toBe(true);
+  });
+
+  it('한국어 results → ok', () => {
+    const result = checkpoint.createCheckpoint('proj-1', 'feat-1', '전체 테스트 통과, 빌드 성공');
+    expect(result.ok).toBe(true);
+  });
+
+  it('줄바꿈 포함 results → ok', () => {
+    const result = checkpoint.createCheckpoint('proj-1', 'feat-1', 'line1\nline2\nline3');
+    expect(result.ok).toBe(true);
+  });
+
+  it('다른 featureId → 각각 고유 ID', () => {
+    const r1 = checkpoint.createCheckpoint('proj-1', 'feat-alpha', 'r');
+    const r2 = checkpoint.createCheckpoint('proj-1', 'feat-beta', 'r');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.checkpointId).not.toBe(r2.value.checkpointId);
+    }
+  });
+
+  it('10개 연속 생성 → 모두 ok', () => {
+    for (let i = 0; i < 10; i++) {
+      const r = checkpoint.createCheckpoint('proj-1', `feat-${i}`, `result-${i}`);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('10개 연속 생성 → 모두 고유 ID', () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = checkpoint.createCheckpoint('proj-1', `feat-${i}`, `result-${i}`);
+      if (r.ok) ids.push(r.value.checkpointId);
+    }
+    expect(new Set(ids).size).toBe(10);
+  });
+
+  it('UUID 형식 projectId → ok', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = checkpoint.createCheckpoint(uuid, 'feat-1', 'result');
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자만 있는 projectId → ok', () => {
+    const result = checkpoint.createCheckpoint('12345', 'feat-1', 'result');
+    expect(result.ok).toBe(true);
+  });
+
+  it('하이픈 포함 featureId → checkpointId에 포함', () => {
+    const r = checkpoint.createCheckpoint('p', 'my-feature-id', 'r');
+    if (r.ok) {
+      expect(r.value.checkpointId).toContain('my-feature-id');
+    }
+  });
 });
 
 // ── getCheckpoint ─────────────────────────────────────────────
@@ -134,6 +217,48 @@ describe('UserCheckpoint.getCheckpoint', () => {
       const data = checkpoint.getCheckpoint(r.value.checkpointId);
       expect(data?.feedback).toBeUndefined();
     }
+  });
+
+  it('5개 생성 후 각각 조회 → 모두 non-null', () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = checkpoint.createCheckpoint('proj-1', `feat-${i}`, `result-${i}`);
+      if (r.ok) ids.push(r.value.checkpointId);
+    }
+    for (const id of ids) {
+      expect(checkpoint.getCheckpoint(id)).not.toBeNull();
+    }
+  });
+
+  it('각 결과 값이 다름', () => {
+    const r1 = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result-alpha');
+    const r2 = checkpoint.createCheckpoint('proj-1', 'feat-2', 'result-beta');
+    if (r1.ok && r2.ok) {
+      const d1 = checkpoint.getCheckpoint(r1.value.checkpointId);
+      const d2 = checkpoint.getCheckpoint(r2.value.checkpointId);
+      expect(d1?.results).toBe('result-alpha');
+      expect(d2?.results).toBe('result-beta');
+    }
+  });
+
+  it('연속 getCheckpoint 호출 → 같은 결과', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '일관된 결과');
+    if (r.ok) {
+      const id = r.value.checkpointId;
+      const d1 = checkpoint.getCheckpoint(id);
+      const d2 = checkpoint.getCheckpoint(id);
+      expect(d1?.results).toBe(d2?.results);
+    }
+  });
+
+  it('빈 문자열 ID → null 반환', () => {
+    const data = checkpoint.getCheckpoint('');
+    expect(data).toBeNull();
+  });
+
+  it('랜덤 문자열 ID → null 반환', () => {
+    const data = checkpoint.getCheckpoint('random-xyz-abc-123');
+    expect(data).toBeNull();
   });
 });
 
@@ -205,6 +330,68 @@ describe('UserCheckpoint.setDecision', () => {
       expect(data?.feedback).toBe('두 번째 피드백');
     }
   });
+
+  it('revise→approve→revise 여러 번 재설정 → 마지막 반영', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과');
+    if (r.ok) {
+      const id = r.value.checkpointId;
+      checkpoint.setDecision(id, 'revise', 'first');
+      checkpoint.setDecision(id, 'approve', 'second');
+      checkpoint.setDecision(id, 'revise', 'third');
+      const data = checkpoint.getCheckpoint(id);
+      expect(data?.decision).toBe('revise');
+      expect(data?.feedback).toBe('third');
+    }
+  });
+
+  it('setDecision 반환값은 ok 필드 가짐', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과');
+    if (r.ok) {
+      const result = checkpoint.setDecision(r.value.checkpointId, 'approve');
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+
+  it('빈 피드백 문자열 → feedback은 빈 문자열 또는 undefined', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과');
+    if (r.ok) {
+      checkpoint.setDecision(r.value.checkpointId, 'revise', '');
+      const data = checkpoint.getCheckpoint(r.value.checkpointId);
+      // 빈 문자열 피드백은 '' 또는 undefined 둘 다 허용
+      expect(data?.feedback === '' || data?.feedback === undefined).toBe(true);
+    }
+  });
+
+  it('긴 피드백 → ok', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과');
+    if (r.ok) {
+      const longFeedback = '피드백 내용 '.repeat(1000);
+      const result = checkpoint.setDecision(r.value.checkpointId, 'revise', longFeedback);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('한국어 피드백 → 그대로 반영', () => {
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과');
+    if (r.ok) {
+      checkpoint.setDecision(r.value.checkpointId, 'revise', '로직을 재검토해 주세요');
+      const data = checkpoint.getCheckpoint(r.value.checkpointId);
+      expect(data?.feedback).toBe('로직을 재검토해 주세요');
+    }
+  });
+
+  it('다른 체크포인트 결정 → 독립적으로 유지', () => {
+    const r1 = checkpoint.createCheckpoint('proj-1', 'feat-1', '결과1');
+    const r2 = checkpoint.createCheckpoint('proj-1', 'feat-2', '결과2');
+    if (r1.ok && r2.ok) {
+      checkpoint.setDecision(r1.value.checkpointId, 'approve', '첫 번째 승인');
+      checkpoint.setDecision(r2.value.checkpointId, 'revise', '두 번째 수정');
+      const d1 = checkpoint.getCheckpoint(r1.value.checkpointId);
+      const d2 = checkpoint.getCheckpoint(r2.value.checkpointId);
+      expect(d1?.decision).toBe('approve');
+      expect(d2?.decision).toBe('revise');
+    }
+  });
 });
 
 // ── 복합 시나리오 ──────────────────────────────────────────────
@@ -257,33 +444,113 @@ describe('UserCheckpoint 복합 시나리오', () => {
     expect(ids.length).toBe(100);
     expect(new Set(ids).size).toBe(100); // 모두 고유
   });
+
+  it('생성 후 결정 후 재조회 → 모두 정합성 유지', () => {
+    const checkpoint = makeCheckpoint();
+    const pairs: Array<{ id: string; decision: 'approve' | 'revise'; feedback?: string }> = [];
+
+    for (let i = 0; i < 10; i++) {
+      const r = checkpoint.createCheckpoint('proj-1', `feat-${i}`, `result-${i}`);
+      if (r.ok) {
+        const decision: 'approve' | 'revise' = i % 2 === 0 ? 'approve' : 'revise';
+        const feedback = i % 2 === 1 ? `feedback-${i}` : undefined;
+        checkpoint.setDecision(r.value.checkpointId, decision, feedback);
+        pairs.push({ id: r.value.checkpointId, decision, feedback });
+      }
+    }
+
+    for (const pair of pairs) {
+      const data = checkpoint.getCheckpoint(pair.id);
+      expect(data).not.toBeNull();
+      expect(data?.decision).toBe(pair.decision);
+      if (pair.feedback !== undefined) {
+        expect(data?.feedback).toBe(pair.feedback);
+      }
+    }
+  });
+
+  it('두 인스턴스 → 독립적 상태', () => {
+    const cp1 = makeCheckpoint();
+    const cp2 = makeCheckpoint();
+    const r1 = cp1.createCheckpoint('proj-1', 'feat-1', 'r1');
+    const r2 = cp2.createCheckpoint('proj-2', 'feat-2', 'r2');
+    if (r1.ok && r2.ok) {
+      // cp1에서 cp2의 ID 조회 → null
+      expect(cp1.getCheckpoint(r2.value.checkpointId)).toBeNull();
+      // cp2에서 cp1의 ID 조회 → null
+      expect(cp2.getCheckpoint(r1.value.checkpointId)).toBeNull();
+    }
+  });
+
+  it('결정 없이 approve 결정만 50개 → 모두 ok', () => {
+    const checkpoint = makeCheckpoint();
+    for (let i = 0; i < 50; i++) {
+      const r = checkpoint.createCheckpoint('proj-1', `feat-${i}`, `result-${i}`);
+      if (r.ok) {
+        const sr = checkpoint.setDecision(r.value.checkpointId, 'approve');
+        expect(sr.ok).toBe(true);
+      }
+    }
+  });
 });
 
 // ── 랜덤/경계값 ───────────────────────────────────────────────
 
 describe('UserCheckpoint 랜덤/경계값', () => {
-  it.each(Array.from({ length: 20 }, (_, i) => i))('랜덤 체크포인트 #%i', (i) => {
+  it('랜덤 체크포인트 #0', () => {
     const checkpoint = makeCheckpoint();
-    const r = checkpoint.createCheckpoint(
-      `proj-${i}`,
-      `feat-rand-${i}`,
-      `result-${i}-${'x'.repeat(i)}`,
-    );
+    const r = checkpoint.createCheckpoint('proj-0', 'feat-rand-0', 'result-0-');
     expect(r.ok).toBe(true);
-    if (r.ok) {
-      const data = checkpoint.getCheckpoint(r.value.checkpointId);
-      expect(data).not.toBeNull();
-    }
+    if (r.ok) expect(checkpoint.getCheckpoint(r.value.checkpointId)).not.toBeNull();
   });
 
-  it.each(['approve', 'revise'] as const)('결정 %s → 기록됨', (decision) => {
+  it('랜덤 체크포인트 #1', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-rand-1', 'result-1-x');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(checkpoint.getCheckpoint(r.value.checkpointId)).not.toBeNull();
+  });
+
+  it('랜덤 체크포인트 #5', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-5', 'feat-rand-5', 'result-5-' + 'x'.repeat(5));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(checkpoint.getCheckpoint(r.value.checkpointId)).not.toBeNull();
+  });
+
+  it('랜덤 체크포인트 #10', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-10', 'feat-rand-10', 'result-10-' + 'x'.repeat(10));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(checkpoint.getCheckpoint(r.value.checkpointId)).not.toBeNull();
+  });
+
+  it('랜덤 체크포인트 #19', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-19', 'feat-rand-19', 'result-19-' + 'x'.repeat(19));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(checkpoint.getCheckpoint(r.value.checkpointId)).not.toBeNull();
+  });
+
+  it('결정 approve → 기록됨', () => {
     const checkpoint = makeCheckpoint();
     const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result');
     if (r.ok) {
-      const setResult = checkpoint.setDecision(r.value.checkpointId, decision);
+      const setResult = checkpoint.setDecision(r.value.checkpointId, 'approve');
       expect(setResult.ok).toBe(true);
       const data = checkpoint.getCheckpoint(r.value.checkpointId);
-      expect(data?.decision).toBe(decision);
+      expect(data?.decision).toBe('approve');
+    }
+  });
+
+  it('결정 revise → 기록됨', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result');
+    if (r.ok) {
+      const setResult = checkpoint.setDecision(r.value.checkpointId, 'revise');
+      expect(setResult.ok).toBe(true);
+      const data = checkpoint.getCheckpoint(r.value.checkpointId);
+      expect(data?.decision).toBe('revise');
     }
   });
 
@@ -300,6 +567,77 @@ describe('UserCheckpoint 랜덤/경계값', () => {
       checkpoint.setDecision(r.value.checkpointId, 'approve', undefined);
       const data = checkpoint.getCheckpoint(r.value.checkpointId);
       expect(data?.feedback).toBeUndefined();
+    }
+  });
+
+  it('createCheckpoint 반환값에 checkpointId 필드 있음', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result');
+    if (r.ok) {
+      expect('checkpointId' in r.value).toBe(true);
+    }
+  });
+
+  it('getCheckpoint 반환값에 results 필드 있음', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'test-results');
+    if (r.ok) {
+      const data = checkpoint.getCheckpoint(r.value.checkpointId);
+      expect(data).not.toBeNull();
+      if (data) {
+        expect('results' in data).toBe(true);
+      }
+    }
+  });
+
+  it('checkpointId는 문자열 타입', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result');
+    if (r.ok) {
+      expect(typeof r.value.checkpointId).toBe('string');
+    }
+  });
+
+  it('setDecision 반환값 ok는 boolean 타입', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'result');
+    if (r.ok) {
+      const sr = checkpoint.setDecision(r.value.checkpointId, 'approve');
+      expect(typeof sr.ok).toBe('boolean');
+    }
+  });
+
+  it('존재하지 않는 ID에 결정 → ok=false이고 boolean', () => {
+    const checkpoint = makeCheckpoint();
+    const sr = checkpoint.setDecision('no-such-id-xyz', 'approve');
+    expect(sr.ok).toBe(false);
+  });
+
+  it('5번 연속 getCheckpoint → 결과 일관됨', () => {
+    const checkpoint = makeCheckpoint();
+    const r = checkpoint.createCheckpoint('proj-1', 'feat-1', 'consistent');
+    if (r.ok) {
+      const id = r.value.checkpointId;
+      const results = Array.from({ length: 5 }, () => checkpoint.getCheckpoint(id));
+      for (const data of results) {
+        expect(data?.results).toBe('consistent');
+      }
+    }
+  });
+
+  it('create→decide→get 전체 사이클 × 5', () => {
+    const checkpoint = makeCheckpoint();
+    for (let i = 0; i < 5; i++) {
+      const r = checkpoint.createCheckpoint(`proj-${i}`, `feat-${i}`, `result-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        const decision = i % 2 === 0 ? 'approve' : 'revise';
+        const sr = checkpoint.setDecision(r.value.checkpointId, decision);
+        expect(sr.ok).toBe(true);
+        const data = checkpoint.getCheckpoint(r.value.checkpointId);
+        expect(data?.decision).toBe(decision);
+        expect(data?.results).toBe(`result-${i}`);
+      }
     }
   });
 });

@@ -40,6 +40,32 @@ describe('DocCollaborator 생성자', () => {
     expect(makeCollaborator()).toBeInstanceOf(DocCollaborator);
     expect(makeSimpleCollaborator()).toBeInstanceOf(DocCollaborator);
   });
+
+  it('두 인스턴스가 서로 다른 객체이다', () => {
+    const c1 = makeCollaborator();
+    const c2 = makeCollaborator();
+    expect(c1).not.toBe(c2);
+  });
+
+  it('warn 로거로 생성 가능', () => {
+    expect(() => new DocCollaborator(mockClaudeApi, mockAgentSpawner, new ConsoleLogger('warn'))).not.toThrow();
+  });
+
+  it('debug 로거로 생성 가능', () => {
+    expect(() => new DocCollaborator(mockClaudeApi, mockAgentSpawner, new ConsoleLogger('debug'))).not.toThrow();
+  });
+
+  it('10개 인스턴스 모두 생성 성공', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(() => makeCollaborator()).not.toThrow();
+    }
+  });
+
+  it('5번 반복 — 항상 인스턴스 반환', () => {
+    for (let i = 0; i < 5; i++) {
+      expect(makeSimpleCollaborator()).toBeInstanceOf(DocCollaborator);
+    }
+  });
 });
 
 // ── 메서드 존재 검증 ───────────────────────────────────────────
@@ -58,6 +84,16 @@ describe('DocCollaborator 메서드 존재', () => {
   it('requestLayer2 메서드', () => expect(typeof collab.requestLayer2).toBe('function'));
   it('complete 메서드', () => expect(typeof collab.complete).toBe('function'));
   it('getState 메서드', () => expect(typeof collab.getState).toBe('function'));
+
+  it('simple 생성자도 collaborate 메서드 있음', () => {
+    const simple = makeSimpleCollaborator();
+    expect(typeof simple.collaborate).toBe('function');
+  });
+
+  it('simple 생성자도 generateTableOfContents 메서드 있음', () => {
+    const simple = makeSimpleCollaborator();
+    expect(typeof simple.generateTableOfContents).toBe('function');
+  });
 });
 
 // ── collaborate ────────────────────────────────────────────────
@@ -86,6 +122,23 @@ describe('DocCollaborator.collaborate', () => {
     }
   });
 
+  it('ok가 boolean이다', () => {
+    const result = collab.collaborate('outline', 'details');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('결과 value가 문자열이다', () => {
+    const result = collab.collaborate('outline', 'details');
+    if (result.ok) expect(typeof result.value).toBe('string');
+  });
+
+  it('5번 반복 일관성 — 항상 ok=true', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = collab.collaborate(`outline ${i}`, `details ${i}`);
+      expect(result.ok).toBe(true);
+    }
+  });
+
   it('빈 아웃라인 → 에러', () => {
     const result = collab.collaborate('', 'details');
     expect(result.ok).toBe(false);
@@ -110,6 +163,30 @@ describe('DocCollaborator.collaborate', () => {
   it('공백만 있는 상세 → 에러', () => {
     const result = collab.collaborate('outline', '   ');
     expect(result.ok).toBe(false);
+  });
+
+  it('에러 코드가 문자열이다 (빈 아웃라인)', () => {
+    const result = collab.collaborate('', 'details');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 메시지가 문자열이다 (빈 상세)', () => {
+    const result = collab.collaborate('outline', '');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('빈 아웃라인 에러 5번 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = collab.collaborate('', 'details');
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('빈 상세 에러 5번 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = collab.collaborate('outline', '');
+      expect(result.ok).toBe(false);
+    }
   });
 
   it('긴 아웃라인 + 상세 → 병합 성공', () => {
@@ -140,6 +217,22 @@ describe('DocCollaborator.collaborate', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('UUID 아웃라인 → ok=true', () => {
+    const uuid = crypto.randomUUID();
+    const result = collab.collaborate(`# ${uuid}`, 'details content');
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자만 있는 outline → ok=true', () => {
+    const result = collab.collaborate('123456', '789012');
+    expect(result.ok).toBe(true);
+  });
+
+  it('이모지 포함 → ok=true', () => {
+    const result = collab.collaborate('🎉 축하합니다', '🚀 배포 완료');
+    expect(result.ok).toBe(true);
+  });
+
   it.each([
     ['단어 하나', 'a', 'b'],
     ['숫자만', '123', '456'],
@@ -165,6 +258,18 @@ describe('DocCollaborator.collaborate', () => {
       expect(result.ok).toBe(true);
     },
   );
+
+  it('두 인스턴스 독립적 collaborate 결과', () => {
+    const c1 = makeCollaborator();
+    const c2 = makeCollaborator();
+    const r1 = c1.collaborate('outline A', 'detail A');
+    const r2 = c2.collaborate('outline B', 'detail B');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      expect(r1.value).not.toBe(r2.value);
+    }
+  });
 });
 
 // ── generateTableOfContents ────────────────────────────────────
@@ -211,6 +316,23 @@ describe('DocCollaborator.generateTableOfContents', () => {
     }
   });
 
+  it('ok가 boolean이다', () => {
+    const result = collab.generateTableOfContents('# 제목\n\n내용');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('결과 value가 문자열이다', () => {
+    const result = collab.generateTableOfContents('# 제목\n\n내용');
+    if (result.ok) expect(typeof result.value).toBe('string');
+  });
+
+  it('5번 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = collab.generateTableOfContents(`# 섹션 ${i}\n\n내용`);
+      expect(result.ok).toBe(true);
+    }
+  });
+
   it('빈 내용 → 에러', () => {
     const result = collab.generateTableOfContents('');
     expect(result.ok).toBe(false);
@@ -222,6 +344,18 @@ describe('DocCollaborator.generateTableOfContents', () => {
   it('공백만 → 에러', () => {
     const result = collab.generateTableOfContents('   \n   ');
     expect(result.ok).toBe(false);
+  });
+
+  it('빈 내용 에러 코드가 문자열이다', () => {
+    const result = collab.generateTableOfContents('');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('빈 내용 5번 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = collab.generateTableOfContents('');
+      expect(result.ok).toBe(false);
+    }
   });
 
   it('헤딩 없는 내용 → ok (빈 목차)', () => {
@@ -253,6 +387,22 @@ describe('DocCollaborator.generateTableOfContents', () => {
     }
   });
 
+  it('이모지 헤딩 → ok', () => {
+    const result = collab.generateTableOfContents('# 🚀 배포 가이드\n\n내용');
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID 헤딩 → ok', () => {
+    const uuid = crypto.randomUUID();
+    const result = collab.generateTableOfContents(`# ${uuid}\n\n내용`);
+    expect(result.ok).toBe(true);
+  });
+
+  it('한국어 헤딩 → ok', () => {
+    const result = collab.generateTableOfContents('# 한국어 제목\n## 소제목\n내용');
+    expect(result.ok).toBe(true);
+  });
+
   it.each([
     '# 단일 헤딩',
     '## 단일 H2',
@@ -271,6 +421,15 @@ describe('DocCollaborator.generateTableOfContents', () => {
       expect(result.ok).toBe(true);
     },
   );
+
+  it('두 인스턴스 독립적 목차 결과', () => {
+    const c1 = makeCollaborator();
+    const c2 = makeCollaborator();
+    const r1 = c1.generateTableOfContents('# 제목 A\n\n내용');
+    const r2 = c2.generateTableOfContents('# 제목 B\n\n내용');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+  });
 });
 
 // ── start 메서드 (mock 의존성) ─────────────────────────────────
@@ -306,6 +465,22 @@ describe('DocCollaborator.start', () => {
       // throw도 가능
     }
   });
+
+  it('UUID projectId start → 처리됨', async () => {
+    const collab = makeCollaborator();
+    const uuid = crypto.randomUUID();
+    try {
+      const result = await collab.start({
+        projectId: uuid,
+        type: 'technical-spec',
+        context: '내용',
+        fragments: [],
+      });
+      expect(typeof result.ok).toBe('boolean');
+    } catch {
+      // ok
+    }
+  });
 });
 
 // ── getState 메서드 ────────────────────────────────────────────
@@ -325,6 +500,26 @@ describe('DocCollaborator.getState', () => {
       expect(result.ok).toBe(false);
     },
   );
+
+  it('5번 반복 — 항상 ok=false (존재하지 않는 ID)', async () => {
+    for (let i = 0; i < 5; i++) {
+      const collab = makeCollaborator();
+      const result = await collab.getState(`non-existent-${i}`);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('에러 코드가 문자열이다', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState('does-not-exist');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 메시지가 문자열이다', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.getState('does-not-exist');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
 });
 
 // ── complete 메서드 ────────────────────────────────────────────
@@ -344,6 +539,20 @@ describe('DocCollaborator.complete', () => {
       expect(result.ok).toBe(false);
     },
   );
+
+  it('에러 코드가 문자열이다', async () => {
+    const collab = makeCollaborator();
+    const result = await collab.complete('no-such-doc');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('5번 반복 — 항상 ok=false', async () => {
+    for (let i = 0; i < 5; i++) {
+      const collab = makeCollaborator();
+      const result = await collab.complete(`doc-${i}`);
+      expect(result.ok).toBe(false);
+    }
+  });
 });
 
 // ── 간단 API vs 전체 API 차이 ─────────────────────────────────
@@ -381,6 +590,30 @@ describe('간단 API(logger만) vs 전체 API 비교', () => {
     if (r1.ok && r2.ok) {
       expect(r1.value).toBe(r2.value);
     }
+  });
+
+  it('두 API의 generateTableOfContents 결과가 동일', () => {
+    const simple = makeSimpleCollaborator();
+    const full = makeCollaborator();
+
+    const r1 = simple.generateTableOfContents('# 제목\n\n내용');
+    const r2 = full.generateTableOfContents('# 제목\n\n내용');
+
+    if (r1.ok && r2.ok) {
+      expect(r1.value).toBe(r2.value);
+    }
+  });
+
+  it('simple도 빈 아웃라인 → 에러', () => {
+    const simple = makeSimpleCollaborator();
+    const result = simple.collaborate('', 'details');
+    expect(result.ok).toBe(false);
+  });
+
+  it('simple도 빈 내용 목차 → 에러', () => {
+    const simple = makeSimpleCollaborator();
+    const result = simple.generateTableOfContents('');
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -435,6 +668,29 @@ describe('DocCollaborator 경계값 랜덤 테스트', () => {
     const result = collab.collaborate(outline, details);
     if (outline.trim() && details.trim()) {
       expect(result.ok).toBe(true);
+    }
+  });
+
+  it('collaborate 10회 연속 → 항상 동일 결과', () => {
+    const outline = '# 제목\n\n내용';
+    const details = '## 상세\n\n설명';
+    const firstResult = collab.collaborate(outline, details);
+    for (let i = 0; i < 10; i++) {
+      const result = collab.collaborate(outline, details);
+      if (firstResult.ok && result.ok) {
+        expect(result.value).toBe(firstResult.value);
+      }
+    }
+  });
+
+  it('generateTableOfContents 10회 연속 → 항상 동일 결과', () => {
+    const content = '# H1\n## H2\n### H3\n내용';
+    const firstResult = collab.generateTableOfContents(content);
+    for (let i = 0; i < 10; i++) {
+      const result = collab.generateTableOfContents(content);
+      if (firstResult.ok && result.ok) {
+        expect(result.value).toBe(firstResult.value);
+      }
     }
   });
 });

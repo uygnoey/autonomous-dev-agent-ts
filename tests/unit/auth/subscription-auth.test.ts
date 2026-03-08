@@ -26,6 +26,51 @@ function makeUsageBody(inputTokens: number, outputTokens: number): unknown {
   return { usage: { input_tokens: inputTokens, output_tokens: outputTokens } };
 }
 
+// ── 생성자 ──────────────────────────────────────────────────
+
+describe('SubscriptionAuth 생성자', () => {
+  it('인스턴스 생성됨', () => {
+    expect(createAuth()).toBeInstanceOf(SubscriptionAuth);
+  });
+
+  it('두 인스턴스는 다른 객체', () => {
+    const a = createAuth();
+    const b = createAuth();
+    expect(a).not.toBe(b);
+  });
+
+  it('getAuthHeader 메서드 존재', () => {
+    expect(typeof createAuth().getAuthHeader).toBe('function');
+  });
+
+  it('getRateLimitStatus 메서드 존재', () => {
+    expect(typeof createAuth().getRateLimitStatus).toBe('function');
+  });
+
+  it('updateFromResponse 메서드 존재', () => {
+    expect(typeof createAuth().updateFromResponse).toBe('function');
+  });
+
+  it('authMode 프로퍼티 존재', () => {
+    expect('authMode' in createAuth()).toBe(true);
+  });
+
+  it('estimatedLimit=1 → requestsRemaining=1 초기값', () => {
+    const auth = createAuth({ estimatedLimit: 1 });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(1);
+  });
+
+  it('estimatedLimit=100 → requestsRemaining=100 초기값', () => {
+    const auth = createAuth({ estimatedLimit: 100 });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(100);
+  });
+
+  it('estimatedLimit=0 → requestsRemaining=0 초기값', () => {
+    const auth = createAuth({ estimatedLimit: 0 });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+});
+
 // ── getAuthHeader ───────────────────────────────────────────
 
 describe('SubscriptionAuth.getAuthHeader', () => {
@@ -51,6 +96,65 @@ describe('SubscriptionAuth.getAuthHeader', () => {
 
     expect(auth.authMode).toBe('oauth-token');
   });
+
+  it('반환값은 객체', () => {
+    const auth = createAuth();
+    const headers = auth.getAuthHeader();
+    expect(typeof headers).toBe('object');
+    expect(headers).not.toBeNull();
+  });
+
+  it('authorization 키는 소문자', () => {
+    const auth = createAuth();
+    const headers = auth.getAuthHeader();
+    expect('authorization' in headers).toBe(true);
+  });
+
+  it('anthropic-version 키 존재', () => {
+    const auth = createAuth();
+    const headers = auth.getAuthHeader();
+    expect('anthropic-version' in headers).toBe(true);
+  });
+
+  it('연속 호출 → 동일한 결과', () => {
+    const auth = createAuth({ token: 'test-token-abc' });
+    const h1 = auth.getAuthHeader();
+    const h2 = auth.getAuthHeader();
+    expect(h1.authorization).toBe(h2.authorization);
+    expect(h1['anthropic-version']).toBe(h2['anthropic-version']);
+  });
+
+  it('특수문자 포함 토큰 → 그대로 Bearer에 포함', () => {
+    const auth = createAuth({ token: 'sk-ant-oat01-abc!@#123' });
+    const headers = auth.getAuthHeader();
+    expect(headers.authorization).toContain('sk-ant-oat01-abc!@#123');
+  });
+
+  it('긴 토큰 → authorization에 포함', () => {
+    const longToken = 'sk-ant-oat01-' + 'x'.repeat(200);
+    const auth = createAuth({ token: longToken });
+    const headers = auth.getAuthHeader();
+    expect(headers.authorization).toContain(longToken);
+  });
+
+  it('authMode는 string 타입', () => {
+    expect(typeof createAuth().authMode).toBe('string');
+  });
+
+  it('5개의 다른 토큰 형식 → 각각 Bearer에 올바르게 포함', () => {
+    const tokens = [
+      'sk-ant-oat01-token1',
+      'sk-ant-api01-token2',
+      'test-token-3',
+      'abc',
+      '123456',
+    ];
+    for (const token of tokens) {
+      const auth = createAuth({ token });
+      const headers = auth.getAuthHeader();
+      expect(headers.authorization).toBe(`Bearer ${token}`);
+    }
+  });
 });
 
 // ── getRateLimitStatus (초기 상태) ──────────────────────────
@@ -66,6 +170,51 @@ describe('SubscriptionAuth.getRateLimitStatus (초기 상태)', () => {
     expect(status.outputTokensRemaining).toBeNull();
     expect(status.retryAfterSeconds).toBeNull();
     expect(status.isLimitApproaching).toBe(false);
+  });
+
+  it('반환값은 객체', () => {
+    const auth = createAuth();
+    const status = auth.getRateLimitStatus();
+    expect(typeof status).toBe('object');
+    expect(status).not.toBeNull();
+  });
+
+  it('requestsRemaining 필드 있음', () => {
+    const auth = createAuth();
+    expect('requestsRemaining' in auth.getRateLimitStatus()).toBe(true);
+  });
+
+  it('isLimitApproaching 필드 있음', () => {
+    const auth = createAuth();
+    expect('isLimitApproaching' in auth.getRateLimitStatus()).toBe(true);
+  });
+
+  it('연속 호출 → 동일한 결과', () => {
+    const auth = createAuth({ estimatedLimit: 30 });
+    const s1 = auth.getRateLimitStatus();
+    const s2 = auth.getRateLimitStatus();
+    expect(s1.requestsRemaining).toBe(s2.requestsRemaining);
+    expect(s1.isLimitApproaching).toBe(s2.isLimitApproaching);
+  });
+
+  it('requestsRemaining은 number 타입', () => {
+    const auth = createAuth();
+    expect(typeof auth.getRateLimitStatus().requestsRemaining).toBe('number');
+  });
+
+  it('isLimitApproaching는 boolean 타입', () => {
+    const auth = createAuth();
+    expect(typeof auth.getRateLimitStatus().isLimitApproaching).toBe('boolean');
+  });
+
+  it('estimatedLimit=10 → requestsRemaining=10', () => {
+    const auth = createAuth({ estimatedLimit: 10 });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(10);
+  });
+
+  it('estimatedLimit=1000 → requestsRemaining=1000', () => {
+    const auth = createAuth({ estimatedLimit: 1000 });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(1000);
   });
 });
 
@@ -157,6 +306,32 @@ describe('SubscriptionAuth.updateFromResponse', () => {
     expect(result2.ok).toBe(true);
     expect(result3.ok).toBe(true);
   });
+
+  it('updateFromResponse 반환값 ok는 boolean', () => {
+    const result = auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('undefined body → ok=true, 사용량 변화 없음', () => {
+    const result = auth.updateFromResponse({}, undefined);
+    expect(result.ok).toBe(true);
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(45);
+  });
+
+  it('빈 객체 usage → 1회 카운트', () => {
+    auth.updateFromResponse({}, { usage: {} });
+    // usage 있지만 토큰 없음 → 1회 메시지 카운트
+    const remaining = auth.getRateLimitStatus().requestsRemaining;
+    expect(remaining).toBeLessThanOrEqual(45);
+  });
+
+  it('10회 연속 updateFromResponse → requestsRemaining 감소', () => {
+    const auth10 = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 10; i++) {
+      auth10.updateFromResponse({}, makeUsageBody(100, 50));
+    }
+    expect(auth10.getRateLimitStatus().requestsRemaining).toBe(35);
+  });
 });
 
 // ── 5시간 롤링 윈도우 ──────────────────────────────────────
@@ -237,6 +412,33 @@ describe('SubscriptionAuth 5시간 롤링 윈도우', () => {
     currentTime = FIVE_HOURS_MS + 1;
     expect(auth.getRateLimitStatus().requestsRemaining).toBe(10);
   });
+
+  it('1ms 전에는 만료 안 됨', () => {
+    let currentTime = 0;
+    const auth = createAuth({
+      estimatedLimit: 45,
+      nowFn: () => currentTime,
+    });
+
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+
+    // 5시간보다 1ms 적게 → 만료 안 됨
+    currentTime = FIVE_HOURS_MS - 1;
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
+
+  it('1시간 경과 → 아직 만료 안 됨', () => {
+    let currentTime = 0;
+    const auth = createAuth({
+      estimatedLimit: 45,
+      nowFn: () => currentTime,
+    });
+
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+
+    currentTime = 60 * 60 * 1_000; // 1시간
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
 });
 
 // ── isLimitApproaching (80% 임계값) ─────────────────────────
@@ -308,5 +510,35 @@ describe('SubscriptionAuth.isLimitApproaching', () => {
     // 전부 만료
     currentTime = FIVE_HOURS_MS + 1;
     expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('초기 상태 → isLimitApproaching=false', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('1개 사용 (estimatedLimit=100) → 1%이므로 false', () => {
+    const auth = createAuth({ estimatedLimit: 100 });
+    auth.updateFromResponse({}, makeUsageBody(10, 5));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('79개 사용 (estimatedLimit=100) → 79%이므로 false', () => {
+    const auth = createAuth({ estimatedLimit: 100 });
+    for (let i = 0; i < 79; i++) {
+      auth.updateFromResponse({}, makeUsageBody(10, 5));
+    }
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('isLimitApproaching는 boolean 타입', () => {
+    const auth = createAuth();
+    expect(typeof auth.getRateLimitStatus().isLimitApproaching).toBe('boolean');
+  });
+
+  it('estimatedLimit=1 사용 1개 → approaching=true (100%)', () => {
+    const auth = createAuth({ estimatedLimit: 1 });
+    auth.updateFromResponse({}, makeUsageBody(10, 5));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
   });
 });

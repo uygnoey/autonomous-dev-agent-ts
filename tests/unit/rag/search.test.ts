@@ -71,6 +71,23 @@ describe('RagSearcher', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  // ── 생성자 ──────────────────────────────────────────────────
+
+  describe('RagSearcher 생성자', () => {
+    it('인스턴스가 생성된다', () => {
+      expect(searcher).toBeDefined();
+    });
+
+    it('RagSearcher 인스턴스이다', () => {
+      expect(searcher).toBeInstanceOf(RagSearcher);
+    });
+
+    it('debug logger로 생성 가능', async () => {
+      const debugSearcher = new RagSearcher(store, provider, new ConsoleLogger('debug'));
+      expect(debugSearcher).toBeInstanceOf(RagSearcher);
+    });
+  });
+
   // ── searchCode ────────────────────────────────────────────────
 
   describe('searchCode', () => {
@@ -179,6 +196,108 @@ describe('RagSearcher', () => {
         expect(result.value).toEqual([]);
       }
     });
+
+    it('반환값이 배열이다', async () => {
+      const result = await searcher.searchCode('test');
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('ok=true 반환', async () => {
+      await store.insert(createTestCodeRecord({ id: 'check-ok', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('check');
+      expect(result.ok).toBe(true);
+    });
+
+    it('score가 숫자이다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'score-check', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]?.score).toBe('number');
+      }
+    });
+
+    it('record.chunk가 문자열이다', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'chunk-str',
+        chunk: 'function test() { return true; }',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]?.record.chunk).toBe('string');
+      }
+    });
+
+    it('record.filePath가 문자열이다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'path-str', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]?.record.filePath).toBe('string');
+      }
+    });
+
+    it('limit=1 → 최대 1개 반환', async () => {
+      for (let i = 0; i < 3; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `lim1-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test', 1);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('limit=10 → 최대 10개 반환', async () => {
+      for (let i = 0; i < 15; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `lim10-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test', 10);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(10);
+      }
+    });
+
+    it('결과 record에 id 필드가 있다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'id-check', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.record.id).toBeDefined();
+      }
+    });
+
+    it('결과 record에 metadata 필드가 있다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'meta-check', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.record.metadata).toBeDefined();
+      }
+    });
+
+    it('filter language=python → typescript 레코드 제외', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'lang-ts',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src', functionName: 'f', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      await store.insert(createTestCodeRecord({
+        id: 'lang-py',
+        embedding: new Float32Array([0.9, 0.1, 0, 0]),
+        metadata: { language: 'python', module: 'src', functionName: 'g', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('test', 10, { language: 'python' });
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.record.metadata.language).toBe('python');
+        }
+      }
+    });
   });
 
   // ── searchByFile ──────────────────────────────────────────────
@@ -235,6 +354,81 @@ describe('RagSearcher', () => {
         expect(result.value).toEqual([]);
       }
     });
+
+    it('반환값이 배열이다', async () => {
+      const result = await searcher.searchByFile('src/any.ts');
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('ok=true 반환', async () => {
+      const result = await searcher.searchByFile('src/any.ts');
+      expect(result.ok).toBe(true);
+    });
+
+    it('같은 파일 경로 레코드 삽입 후 searchByFile → ok', async () => {
+      const path = 'src/core/multi.ts';
+      await store.insert(createTestCodeRecord({
+        id: 'multi-only',
+        filePath: path,
+        embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]),
+      }));
+      const result = await searcher.searchByFile(path);
+      expect(result.ok).toBe(true);
+    });
+
+    it('빈 파일 경로 → 빈 배열 또는 ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'empty-path-test', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchByFile('');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toEqual([]);
+    });
+
+    it('반환 record들은 모두 filePath가 요청 경로와 일치', async () => {
+      const path = 'src/api/routes.ts';
+      await store.insert(createTestCodeRecord({
+        id: 'route-1',
+        filePath: path,
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      await store.insert(createTestCodeRecord({
+        id: 'other-1',
+        filePath: 'src/core/main.ts',
+        embedding: new Float32Array([0, 1, 0, 0]),
+      }));
+      const result = await searcher.searchByFile(path);
+      if (result.ok) {
+        for (const record of result.value) {
+          expect(record.filePath).toBe(path);
+        }
+      }
+    });
+
+    it('반환 record에 chunk 필드가 있다', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'chunk-field',
+        filePath: 'src/chunk.ts',
+        chunk: 'function chunk() {}',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchByFile('src/chunk.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]?.chunk).toBe('string');
+      }
+    });
+
+    it('반환 record에 metadata.language 필드가 있다', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'lang-field',
+        filePath: 'src/lang.ts',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchByFile('src/lang.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.metadata.language).toBeDefined();
+      }
+    });
   });
 
   // ── edge cases ────────────────────────────────────────────────
@@ -278,6 +472,72 @@ describe('RagSearcher', () => {
       const longQuery = 'search term '.repeat(1000);
       const result = await searcher.searchCode(longQuery);
 
+      expect(result.ok).toBe(true);
+    });
+
+    it('특수문자 쿼리로 검색한다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'special', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('!@#$%^&*()');
+      expect(result.ok).toBe(true);
+    });
+
+    it('숫자 쿼리로 검색한다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'num-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('1234567890');
+      expect(result.ok).toBe(true);
+    });
+
+    it('공백 쿼리로 검색한다', async () => {
+      await store.insert(createTestCodeRecord({ id: 'space-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('   ');
+      expect(result.ok).toBe(true);
+    });
+
+    it('검색 결과가 TypeScript이다', async () => {
+      const result = await searcher.searchCode('test');
+      if (result.ok) {
+        expect(typeof result.ok).toBe('boolean');
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('연속 searchCode 호출 → 모두 ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'seq-1', embedding: new Float32Array([1, 0, 0, 0]) }));
+      for (let i = 0; i < 5; i++) {
+        const result = await searcher.searchCode(`query-${i}`);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('연속 searchByFile 호출 → 모두 ok', async () => {
+      await store.insert(createTestCodeRecord({ id: 'seq-f-1', filePath: 'src/f.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      for (let i = 0; i < 5; i++) {
+        const result = await searcher.searchByFile('src/f.ts');
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('10개 레코드 삽입 후 검색 → ok', async () => {
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `bulk-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test');
+      expect(result.ok).toBe(true);
+    });
+
+    it('다양한 언어 레코드 → 검색 ok', async () => {
+      const langs = ['typescript', 'python', 'javascript', 'go', 'rust'];
+      for (const lang of langs) {
+        await store.insert(createTestCodeRecord({
+          id: `lang-${lang}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+          metadata: { language: lang, module: 'src', functionName: 'fn', lastModified: new Date(), modifiedBy: 'x' },
+        }));
+      }
+      const result = await searcher.searchCode('function');
       expect(result.ok).toBe(true);
     });
   });

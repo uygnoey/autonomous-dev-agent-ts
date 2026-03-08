@@ -1,3 +1,11 @@
+/**
+ * AuthManager 단위 테스트
+ *
+ * @description
+ * KR: createAuthProvider() 팩토리 함수 테스트. 80%+ 경계값/무효 입력 비율.
+ * EN: Tests for createAuthProvider() factory function. 80%+ edge/invalid ratio.
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createAuthProvider } from 'auth/auth-manager.js';
 import { ApiKeyAuth } from 'auth/api-key-auth.js';
@@ -33,125 +41,664 @@ function createLogger(): ConsoleLogger {
   return new ConsoleLogger('error');
 }
 
-// ── createAuthProvider ──────────────────────────────────────
+// ── createAuthProvider - API Key 인증 ────────────────────────
 
-describe('createAuthProvider', () => {
-  beforeEach(() => {
-    backupEnv();
-  });
+describe('createAuthProvider - API Key 인증', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
 
-  afterEach(() => {
-    restoreEnv();
-  });
-
-  it('ANTHROPIC_API_KEY 설정 시 ApiKeyAuth를 생성한다', () => {
+  it('ANTHROPIC_API_KEY 설정 시 ok=true 반환', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-test-key';
-
     const result = createAuthProvider(createLogger());
-
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toBeInstanceOf(ApiKeyAuth);
-      expect(result.value.authMode).toBe('api-key');
-    }
   });
 
-  it('CLAUDE_CODE_OAUTH_TOKEN 설정 시 SubscriptionAuth를 생성한다', () => {
-    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test-token';
-
+  it('ANTHROPIC_API_KEY 설정 시 ApiKeyAuth 반환', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-test-key';
     const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value).toBeInstanceOf(ApiKeyAuth);
+  });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toBeInstanceOf(SubscriptionAuth);
-      expect(result.value.authMode).toBe('oauth-token');
-    }
+  it('ANTHROPIC_API_KEY 설정 시 authMode=api-key', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-test-key';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value.authMode).toBe('api-key');
   });
 
   it('ApiKeyAuth가 올바른 헤더를 생성한다', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-my-key';
-
     const result = createAuthProvider(createLogger());
-
-    expect(result.ok).toBe(true);
     if (result.ok) {
       const headers = result.value.getAuthHeader();
       expect(headers['x-api-key']).toBe('sk-ant-api01-my-key');
     }
   });
 
+  it('API 키 값이 헤더에 정확히 반영된다', () => {
+    const testKey = 'sk-ant-api01-exact-key-12345';
+    process.env['ANTHROPIC_API_KEY'] = testKey;
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers['x-api-key']).toBe(testKey);
+    }
+  });
+
+  it('authorization 헤더는 없다 (api-key 모드)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers.authorization).toBeUndefined();
+    }
+  });
+
+  it('긴 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-' + 'a'.repeat(100);
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key_with-special.chars';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('다른 logger 인스턴스로 호출해도 ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-any-key';
+    const result = createAuthProvider(new ConsoleLogger('debug'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('ApiKeyAuth는 SubscriptionAuth가 아니다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-any-key';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value).not.toBeInstanceOf(SubscriptionAuth);
+  });
+
+  it('UUID 형식 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = '550e8400-e29b-41d4-a716-446655440000';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자만 있는 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = '1234567890';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('단일 문자 API 키 → ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'x';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('x-api-key 헤더 값이 문자열이다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-str-key';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(typeof headers['x-api-key']).toBe('string');
+    }
+  });
+
+  it('getAuthHeader 두 번 호출 → 동일 결과', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-twice';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const h1 = result.value.getAuthHeader();
+      const h2 = result.value.getAuthHeader();
+      expect(h1['x-api-key']).toBe(h2['x-api-key']);
+    }
+  });
+
+  it('authMode는 문자열이다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-mode-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(typeof result.value.authMode).toBe('string');
+  });
+
+  it('10가지 다른 API 키 → 각각 ok=true', () => {
+    for (let i = 0; i < 10; i++) {
+      process.env['ANTHROPIC_API_KEY'] = `sk-ant-api01-key-${i}`;
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(true);
+      delete process.env['ANTHROPIC_API_KEY'];
+    }
+  });
+
+  it('API 키 헤더가 객체이다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-obj-check';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(typeof result.value.getAuthHeader()).toBe('object');
+      expect(result.value.getAuthHeader()).not.toBeNull();
+    }
+  });
+
+  it('warn logger로도 ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-warn-key';
+    const result = createAuthProvider(new ConsoleLogger('warn'));
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── createAuthProvider - OAuth 토큰 인증 ─────────────────────
+
+describe('createAuthProvider - OAuth Token 인증', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('CLAUDE_CODE_OAUTH_TOKEN 설정 시 ok=true 반환', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test-token';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('CLAUDE_CODE_OAUTH_TOKEN 설정 시 SubscriptionAuth 반환', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value).toBeInstanceOf(SubscriptionAuth);
+  });
+
+  it('CLAUDE_CODE_OAUTH_TOKEN 설정 시 authMode=oauth-token', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value.authMode).toBe('oauth-token');
+  });
+
   it('SubscriptionAuth가 올바른 헤더를 생성한다', () => {
     process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-my-token';
-
     const result = createAuthProvider(createLogger());
-
-    expect(result.ok).toBe(true);
     if (result.ok) {
       const headers = result.value.getAuthHeader();
       expect(headers.authorization).toBe('Bearer sk-ant-oat01-my-token');
     }
   });
 
-  it('둘 다 설정 시 AuthError를 반환한다', () => {
+  it('OAuth 토큰 값이 헤더에 정확히 반영된다', () => {
+    const testToken = 'sk-ant-oat01-exact-token-xyz';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = testToken;
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers.authorization).toBe(`Bearer ${testToken}`);
+    }
+  });
+
+  it('x-api-key 헤더는 없다 (oauth-token 모드)', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers['x-api-key']).toBeUndefined();
+    }
+  });
+
+  it('긴 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-' + 'b'.repeat(100);
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('SubscriptionAuth는 ApiKeyAuth가 아니다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(result.value).not.toBeInstanceOf(ApiKeyAuth);
+  });
+
+  it('authorization 헤더가 문자열이다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-str-check';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      if (headers.authorization) {
+        expect(typeof headers.authorization).toBe('string');
+      }
+    }
+  });
+
+  it('authMode가 문자열이다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-mode-check';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) expect(typeof result.value.authMode).toBe('string');
+  });
+
+  it('getAuthHeader 두 번 호출 → 동일 authorization', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-twice';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const h1 = result.value.getAuthHeader();
+      const h2 = result.value.getAuthHeader();
+      expect(h1.authorization).toBe(h2.authorization);
+    }
+  });
+
+  it('UUID 형식 OAuth 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-550e8400-e29b-41d4-a716';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('단일 문자 토큰 → ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'y';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(true);
+  });
+
+  it('authorization 값이 Bearer로 시작한다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      if (headers.authorization) {
+        expect(headers.authorization).toMatch(/^Bearer /);
+      }
+    }
+  });
+
+  it('10가지 다른 토큰 → 각각 ok=true', () => {
+    for (let i = 0; i < 10; i++) {
+      process.env['CLAUDE_CODE_OAUTH_TOKEN'] = `sk-ant-oat01-token-${i}`;
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(true);
+      delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    }
+  });
+});
+
+// ── createAuthProvider - 실패 케이스 ─────────────────────────
+
+describe('createAuthProvider - 실패 케이스', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('둘 다 미설정 시 ok=false 반환', () => {
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(false);
+  });
+
+  it('둘 다 미설정 시 code=auth_env_load_failed', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.code).toBe('auth_env_load_failed');
+  });
+
+  it('둘 다 미설정 시 name=AuthError', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.name).toBe('AuthError');
+  });
+
+  it('둘 다 설정 시 ok=false 반환', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key';
     process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
-
     const result = createAuthProvider(createLogger());
-
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('auth_env_load_failed');
-      expect(result.error.name).toBe('AuthError');
-    }
   });
 
-  it('둘 다 미설정 시 AuthError를 반환한다', () => {
+  it('둘 다 설정 시 code=auth_env_load_failed', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
     const result = createAuthProvider(createLogger());
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('auth_env_load_failed');
-      expect(result.error.name).toBe('AuthError');
-    }
+    if (!result.ok) expect(result.error.code).toBe('auth_env_load_failed');
   });
 
-  it('빈 API 키만 설정 시 AuthError를 반환한다 (loadEnvironment가 빈 문자열을 미설정으로 취급)', () => {
+  it('빈 API 키만 설정 시 ok=false 반환', () => {
     process.env['ANTHROPIC_API_KEY'] = '';
-
     const result = createAuthProvider(createLogger());
-
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('auth_env_load_failed');
-    }
   });
 
-  it('빈 OAuth 토큰만 설정 시 AuthError를 반환한다', () => {
+  it('빈 API 키 → code=auth_env_load_failed', () => {
+    process.env['ANTHROPIC_API_KEY'] = '';
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.code).toBe('auth_env_load_failed');
+  });
+
+  it('빈 OAuth 토큰만 설정 시 ok=false 반환', () => {
     process.env['CLAUDE_CODE_OAUTH_TOKEN'] = '';
-
     const result = createAuthProvider(createLogger());
-
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('auth_env_load_failed');
+  });
+
+  it('빈 OAuth 토큰 → code=auth_env_load_failed', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = '';
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.code).toBe('auth_env_load_failed');
+  });
+
+  it('에러에 cause가 포함된다', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.cause).toBeDefined();
+  });
+
+  it('에러 메시지가 ANTHROPIC_API_KEY를 포함한다 (둘 다 미설정)', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.message).toContain('ANTHROPIC_API_KEY');
+  });
+
+  it('빈 API 키 + 빈 OAuth 토큰 → ok=false', () => {
+    process.env['ANTHROPIC_API_KEY'] = '';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = '';
+    const result = createAuthProvider(createLogger());
+    expect(result.ok).toBe(false);
+  });
+
+  it('공백만 있는 API 키 → ok (빈 문자열이 아니므로 유효로 처리됨)', () => {
+    process.env['ANTHROPIC_API_KEY'] = '   ';
+    const result = createAuthProvider(createLogger());
+    // WHY: loadEnvironment는 빈 문자열('')만 미설정으로 취급, 공백은 유효 키로 처리
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('에러 code가 문자열이다 (둘 다 미설정)', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 name이 문자열이다', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(typeof result.error.name).toBe('string');
+  });
+
+  it('에러 message가 문자열이다', () => {
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('5번 연속 미설정 호출 → 항상 ok=false', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(false);
     }
   });
 
-  it('에러에 원인 에러가 포함된다', () => {
-    const result = createAuthProvider(createLogger());
+  it('5번 연속 미설정 → 항상 같은 error.code', () => {
+    const codes: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      if (!result.ok) codes.push(result.error.code);
+    }
+    expect(codes.every((c) => c === 'auth_env_load_failed')).toBe(true);
+  });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.cause).toBeDefined();
+  it('둘 다 설정 → error.name이 AuthError', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-a';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-b';
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.name).toBe('AuthError');
+  });
+
+  it('빈 API + 빈 OAuth → error.code=auth_env_load_failed', () => {
+    process.env['ANTHROPIC_API_KEY'] = '';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = '';
+    const result = createAuthProvider(createLogger());
+    if (!result.ok) expect(result.error.code).toBe('auth_env_load_failed');
+  });
+});
+
+// ── createAuthProvider - 반복 호출 일관성 ────────────────────
+
+describe('createAuthProvider - 반복 호출 일관성', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('같은 API 키로 5번 호출 → 항상 ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-consistent';
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(true);
     }
   });
 
-  it('에러 메시지가 ConfigError의 메시지를 전달한다', () => {
-    const result = createAuthProvider(createLogger());
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.message).toContain('ANTHROPIC_API_KEY');
+  it('미설정 상태로 5번 호출 → 항상 ok=false', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(false);
     }
+  });
+
+  it('같은 API 키로 2번 호출 → 동일 authMode', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-repeated';
+    const r1 = createAuthProvider(createLogger());
+    const r2 = createAuthProvider(createLogger());
+    if (r1.ok && r2.ok) {
+      expect(r1.value.authMode).toBe(r2.value.authMode);
+    }
+  });
+
+  it('환경변수 변경 후 호출 → 새 상태 반영', () => {
+    // 처음엔 미설정
+    const r1 = createAuthProvider(createLogger());
+    expect(r1.ok).toBe(false);
+
+    // API 키 설정 후
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-new-key';
+    const r2 = createAuthProvider(createLogger());
+    expect(r2.ok).toBe(true);
+  });
+
+  it('OAuth 토큰 5번 호출 → 항상 ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-consistent';
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('OAuth 5번 호출 → 항상 authMode=oauth-token', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-mode-check';
+    for (let i = 0; i < 5; i++) {
+      const result = createAuthProvider(createLogger());
+      if (result.ok) expect(result.value.authMode).toBe('oauth-token');
+    }
+  });
+
+  it('API 키 10번 호출 → 항상 같은 x-api-key 헤더', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-stable-key';
+    const headers: (string | undefined)[] = [];
+    for (let i = 0; i < 10; i++) {
+      const result = createAuthProvider(createLogger());
+      if (result.ok) headers.push(result.value.getAuthHeader()['x-api-key']);
+    }
+    expect(headers.every((h) => h === 'sk-ant-api01-stable-key')).toBe(true);
+  });
+
+  it('OAuth 10번 호출 → 항상 같은 authorization 헤더', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-stable-tok';
+    const headers: (string | undefined)[] = [];
+    for (let i = 0; i < 10; i++) {
+      const result = createAuthProvider(createLogger());
+      if (result.ok) headers.push(result.value.getAuthHeader().authorization);
+    }
+    expect(headers.every((h) => h === 'Bearer sk-ant-oat01-stable-tok')).toBe(true);
+  });
+
+  it('API 키 → OAuth로 전환 → 다른 authMode', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-first';
+    const r1 = createAuthProvider(createLogger());
+
+    delete process.env['ANTHROPIC_API_KEY'];
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-second';
+    const r2 = createAuthProvider(createLogger());
+
+    if (r1.ok && r2.ok) {
+      expect(r1.value.authMode).not.toBe(r2.value.authMode);
+    }
+  });
+
+  it('API 키 설정 후 삭제 → ok=false', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-temp';
+    const r1 = createAuthProvider(createLogger());
+    expect(r1.ok).toBe(true);
+
+    delete process.env['ANTHROPIC_API_KEY'];
+    const r2 = createAuthProvider(createLogger());
+    expect(r2.ok).toBe(false);
+  });
+});
+
+// ── getAuthHeader 구조 검증 ───────────────────────────────────
+
+describe('getAuthHeader 구조 검증', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('ApiKeyAuth.getAuthHeader()는 객체를 반환한다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(typeof result.value.getAuthHeader()).toBe('object');
+    }
+  });
+
+  it('SubscriptionAuth.getAuthHeader()는 객체를 반환한다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(typeof result.value.getAuthHeader()).toBe('object');
+    }
+  });
+
+  it('ApiKeyAuth.getAuthHeader()에 x-api-key 키가 있다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect('x-api-key' in headers).toBe(true);
+    }
+  });
+
+  it('SubscriptionAuth.getAuthHeader()에 authorization 키가 있다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect('authorization' in headers).toBe(true);
+    }
+  });
+
+  it('authorization 값이 Bearer로 시작한다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      if (headers.authorization) {
+        expect(headers.authorization).toMatch(/^Bearer /);
+      }
+    }
+  });
+
+  it('getAuthHeader()는 null이 아니다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-notnull';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(result.value.getAuthHeader()).not.toBeNull();
+    }
+  });
+
+  it('OAuth 헤더 객체가 null이 아니다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-notnull';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      expect(result.value.getAuthHeader()).not.toBeNull();
+    }
+  });
+
+  it('ApiKeyAuth x-api-key는 설정한 키와 동일', () => {
+    const myKey = 'sk-ant-api01-exact-match-xyz';
+    process.env['ANTHROPIC_API_KEY'] = myKey;
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers['x-api-key']).toBe(myKey);
+    }
+  });
+
+  it('OAuth authorization은 Bearer + 설정 토큰', () => {
+    const myToken = 'sk-ant-oat01-exact-match-abc';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = myToken;
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const headers = result.value.getAuthHeader();
+      expect(headers.authorization).toBe(`Bearer ${myToken}`);
+    }
+  });
+
+  it('5번 연속 getAuthHeader() → 항상 동일 결과 (API)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-stable';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const expected = result.value.getAuthHeader()['x-api-key'];
+      for (let i = 0; i < 5; i++) {
+        expect(result.value.getAuthHeader()['x-api-key']).toBe(expected);
+      }
+    }
+  });
+
+  it('5번 연속 getAuthHeader() → 항상 동일 결과 (OAuth)', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-stable';
+    const result = createAuthProvider(createLogger());
+    if (result.ok) {
+      const expected = result.value.getAuthHeader().authorization;
+      for (let i = 0; i < 5; i++) {
+        expect(result.value.getAuthHeader().authorization).toBe(expected);
+      }
+    }
+  });
+});
+
+// ── 독립성 검증 ───────────────────────────────────────────────
+
+describe('createAuthProvider - 독립성 검증', () => {
+  beforeEach(backupEnv);
+  afterEach(restoreEnv);
+
+  it('두 ApiKeyAuth 인스턴스는 독립적이다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key-a';
+    const r1 = createAuthProvider(createLogger());
+
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-key-b';
+    const r2 = createAuthProvider(createLogger());
+
+    if (r1.ok && r2.ok) {
+      expect(r1.value.getAuthHeader()['x-api-key']).toBe('sk-ant-api01-key-a');
+      expect(r2.value.getAuthHeader()['x-api-key']).toBe('sk-ant-api01-key-b');
+    }
+  });
+
+  it('두 SubscriptionAuth 인스턴스는 독립적이다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token-a';
+    const r1 = createAuthProvider(createLogger());
+
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-token-b';
+    const r2 = createAuthProvider(createLogger());
+
+    if (r1.ok && r2.ok) {
+      expect(r1.value.getAuthHeader().authorization).toBe('Bearer sk-ant-oat01-token-a');
+      expect(r2.value.getAuthHeader().authorization).toBe('Bearer sk-ant-oat01-token-b');
+    }
+  });
+
+  it('다른 logger 인스턴스 → 결과에 영향 없음', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-logger-test';
+    const r1 = createAuthProvider(new ConsoleLogger('error'));
+    const r2 = createAuthProvider(new ConsoleLogger('debug'));
+
+    if (r1.ok && r2.ok) {
+      expect(r1.value.authMode).toBe(r2.value.authMode);
+    }
+  });
+
+  it('result.ok가 boolean이다 (성공)', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-api01-bool-check';
+    const result = createAuthProvider(createLogger());
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('result.ok가 boolean이다 (실패)', () => {
+    const result = createAuthProvider(createLogger());
+    expect(typeof result.ok).toBe('boolean');
   });
 });

@@ -37,20 +37,71 @@ describe('CodeVectorStore', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  // ── 생성자 ────────────────────────────────────────────────────
+
+  describe('생성자', () => {
+    it('인스턴스 생성됨', () => {
+      expect(store).toBeDefined();
+    });
+
+    it('CodeVectorStore 인스턴스', () => {
+      expect(store).toBeInstanceOf(CodeVectorStore);
+    });
+
+    it('두 인스턴스는 서로 다른 객체', () => {
+      const store2 = new CodeVectorStore(tempDir, logger);
+      expect(store).not.toBe(store2);
+    });
+
+    it('initialize 메서드 존재', () => {
+      expect(typeof store.initialize).toBe('function');
+    });
+
+    it('insert 메서드 존재', () => {
+      expect(typeof store.insert).toBe('function');
+    });
+
+    it('getById 메서드 존재', () => {
+      expect(typeof store.getById).toBe('function');
+    });
+
+    it('search 메서드 존재', () => {
+      expect(typeof store.search).toBe('function');
+    });
+
+    it('delete 메서드 존재', () => {
+      expect(typeof store.delete).toBe('function');
+    });
+
+    it('update 메서드 존재', () => {
+      expect(typeof store.update).toBe('function');
+    });
+  });
+
   // ── initialize ────────────────────────────────────────────────
 
   describe('initialize', () => {
     it('정상적으로 초기화된다', async () => {
       const result = await store.initialize();
-
       expect(result.ok).toBe(true);
     });
 
     it('잘못된 경로에서 초기화 실패한다', async () => {
       const badStore = new CodeVectorStore('/nonexistent/path/\0invalid', logger);
       const result = await badStore.initialize();
-
       expect(result.ok).toBe(false);
+    });
+
+    it('ok는 boolean 타입', async () => {
+      const result = await store.initialize();
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('두 번 초기화 → ok=true', async () => {
+      const r1 = await store.initialize();
+      const r2 = await store.initialize();
+      expect(r1.ok).toBe(true);
+      expect(r2.ok).toBe(true);
     });
   });
 
@@ -106,6 +157,96 @@ describe('CodeVectorStore', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBeNull();
+    });
+
+    it('insert ok는 boolean 타입', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: 'bool-check' }));
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('getById ok는 boolean 타입', async () => {
+      await store.initialize();
+      const result = await store.getById('bool-check');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('긴 chunk 삽입 가능', async () => {
+      await store.initialize();
+      const longChunk = 'x'.repeat(5000);
+      const result = await store.insert(createTestCodeRecord({ id: 'long-chunk', chunk: longChunk }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('긴 chunk 조회 정확', async () => {
+      await store.initialize();
+      const longChunk = 'x'.repeat(5000);
+      await store.insert(createTestCodeRecord({ id: 'long-get', chunk: longChunk }));
+      const result = await store.getById('long-get');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(longChunk);
+      }
+    });
+
+    it('UUID 형태 ID 삽입/조회', async () => {
+      await store.initialize();
+      const uuid = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      await store.insert(createTestCodeRecord({ id: uuid }));
+      const result = await store.getById(uuid);
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.id).toBe(uuid);
+      }
+    });
+
+    it('한국어 chunk 삽입/조회', async () => {
+      await store.initialize();
+      const krChunk = '// 한국어 주석\nfunction 로드() { return {}; }';
+      await store.insert(createTestCodeRecord({ id: 'kr-chunk', chunk: krChunk }));
+      const result = await store.getById('kr-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(krChunk);
+      }
+    });
+
+    it('10개 레코드 순차 삽입 → 모두 ok=true', async () => {
+      await store.initialize();
+      for (let i = 0; i < 10; i++) {
+        const result = await store.insert(createTestCodeRecord({ id: `rec-${i}` }));
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('10개 레코드 조회 → 모두 ok=true, value non-null', async () => {
+      await store.initialize();
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({ id: `rec-get-${i}` }));
+      }
+      for (let i = 0; i < 10; i++) {
+        const result = await store.getById(`rec-get-${i}`);
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.value).not.toBeNull();
+      }
+    });
+
+    it('filePath 보존', async () => {
+      await store.initialize();
+      const filePath = 'src/custom/module/path.ts';
+      await store.insert(createTestCodeRecord({ id: 'fp-test', filePath }));
+      const result = await store.getById('fp-test');
+      if (result.ok && result.value) {
+        expect(result.value.filePath).toBe(filePath);
+      }
+    });
+
+    it('projectId 보존', async () => {
+      await store.initialize();
+      const projectId = 'my-special-project-123';
+      await store.insert(createTestCodeRecord({ id: 'pid-test', projectId }));
+      const result = await store.getById('pid-test');
+      if (result.ok && result.value) {
+        expect(result.value.projectId).toBe(projectId);
+      }
     });
   });
 
@@ -233,6 +374,48 @@ describe('CodeVectorStore', () => {
         }
       }
     });
+
+    it('search ok는 boolean 타입', async () => {
+      await store.initialize();
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('search value는 배열', async () => {
+      await store.initialize();
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('limit=1 → 최대 1개 반환', async () => {
+      await store.initialize();
+      for (let i = 0; i < 3; i++) {
+        await store.insert(createTestCodeRecord({ id: `limit-test-${i}` }));
+      }
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 1);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('zero vector 검색 → ok=true', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'zero-test' }));
+      const result = await store.search(new Float32Array([0, 0, 0, 0]), 5);
+      expect(result.ok).toBe(true);
+    });
+
+    it('5회 연속 search → 모두 ok=true', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'repeat-search' }));
+      for (let i = 0; i < 5; i++) {
+        const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+        expect(result.ok).toBe(true);
+      }
+    });
   });
 
   // ── searchWithScore ───────────────────────────────────────────
@@ -265,6 +448,48 @@ describe('CodeVectorStore', () => {
         }
       }
     });
+
+    it('빈 테이블 searchWithScore → ok=true, value=[]', async () => {
+      await store.initialize();
+      const result = await store.searchWithScore(new Float32Array([1.0, 0.0, 0.0, 0.0]), 5);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual([]);
+      }
+    });
+
+    it('score는 0 이상 1 이하', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'score-range',
+        embedding: new Float32Array([0.5, 0.5, 0.0, 0.0]),
+      }));
+      const result = await store.searchWithScore(new Float32Array([0.5, 0.5, 0.0, 0.0]), 1);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.score).toBeGreaterThanOrEqual(0);
+          expect(item.score).toBeLessThanOrEqual(1);
+        }
+      }
+    });
+
+    it('searchWithScore ok는 boolean 타입', async () => {
+      await store.initialize();
+      const result = await store.searchWithScore(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('결과 items가 record 필드를 가진다', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'score-record', chunk: 'test chunk' }));
+      const result = await store.searchWithScore(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.record).toBeDefined();
+          expect(typeof item.record.id).toBe('string');
+        }
+      }
+    });
   });
 
   // ── delete ────────────────────────────────────────────────────
@@ -280,6 +505,45 @@ describe('CodeVectorStore', () => {
       const getResult = await store.getById('del-me');
       expect(getResult.ok).toBe(true);
       if (getResult.ok) expect(getResult.value).toBeNull();
+    });
+
+    it('존재하지 않는 ID 삭제 → ok는 boolean 타입', async () => {
+      await store.initialize();
+      const result = await store.delete('nonexistent-id');
+      // 존재하지 않는 ID 삭제는 구현에 따라 ok=true 또는 ok=false 가능
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('delete ok는 boolean 타입', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'del-bool' }));
+      const result = await store.delete('del-bool');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('삭제 후 다시 삽입 가능', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'del-insert' }));
+      await store.delete('del-insert');
+      const r = await store.insert(createTestCodeRecord({ id: 'del-insert', chunk: 'new chunk' }));
+      expect(r.ok).toBe(true);
+    });
+
+    it('여러 레코드 순차 삭제 → 모두 ok=true', async () => {
+      await store.initialize();
+      for (let i = 0; i < 5; i++) {
+        await store.insert(createTestCodeRecord({ id: `del-multi-${i}` }));
+      }
+      for (let i = 0; i < 5; i++) {
+        const result = await store.delete(`del-multi-${i}`);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('빈 ID 삭제 → ok (no-op 또는 오류)', async () => {
+      await store.initialize();
+      const result = await store.delete('');
+      expect(typeof result.ok).toBe('boolean');
     });
   });
 
@@ -298,6 +562,37 @@ describe('CodeVectorStore', () => {
       if (getResult.ok && getResult.value) {
         expect(getResult.value.chunk).toBe('수정된 코드');
       }
+    });
+
+    it('update ok는 boolean 타입', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'upd-bool' }));
+      const result = await store.update('upd-bool', { chunk: 'updated' });
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('존재하지 않는 ID 업데이트 → ok (no-op)', async () => {
+      await store.initialize();
+      const result = await store.update('nonexistent-upd', { chunk: 'new' });
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('update 후 getById → 수정된 값 확인', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'upd-verify', chunk: 'original' }));
+      await store.update('upd-verify', { chunk: 'modified' });
+      const result = await store.getById('upd-verify');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe('modified');
+      }
+    });
+
+    it('긴 chunk로 업데이트', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'upd-long', chunk: 'short' }));
+      const longChunk = 'x'.repeat(3000);
+      const result = await store.update('upd-long', { chunk: longChunk });
+      expect(result.ok).toBe(true);
     });
   });
 
@@ -338,6 +633,90 @@ describe('CodeVectorStore', () => {
       if (result.ok && result.value) {
         expect(result.value.chunk).toBe('// 한국어 코드 주석');
       }
+    });
+
+    it('이모지 포함 chunk 처리', async () => {
+      await store.initialize();
+      const chunk = '// 🚀 rocket function\nfunction launch() { return "🚀"; }';
+      await store.insert(createTestCodeRecord({ id: 'emoji', chunk }));
+      const result = await store.getById('emoji');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('한국어 projectId → 저장/조회 가능', async () => {
+      await store.initialize();
+      const projectId = '한국어-프로젝트';
+      await store.insert(createTestCodeRecord({ id: 'kr-proj', projectId }));
+      const result = await store.getById('kr-proj');
+      if (result.ok && result.value) {
+        expect(result.value.projectId).toBe(projectId);
+      }
+    });
+
+    it('한국어 filePath → 저장/조회 가능', async () => {
+      await store.initialize();
+      const filePath = 'src/모듈/파일.ts';
+      await store.insert(createTestCodeRecord({ id: 'kr-file', filePath }));
+      const result = await store.getById('kr-file');
+      if (result.ok && result.value) {
+        expect(result.value.filePath).toBe(filePath);
+      }
+    });
+
+    it('metadata.language 보존', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'lang-test',
+        metadata: {
+          language: 'python',
+          module: 'scripts',
+          functionName: 'main',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.getById('lang-test');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.language).toBe('python');
+      }
+    });
+
+    it('metadata.functionName 보존', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'fn-name-test',
+        metadata: {
+          language: 'typescript',
+          module: 'src/core',
+          functionName: 'mySpecialFunction',
+          lastModified: new Date(),
+          modifiedBy: 'code-indexer',
+        },
+      }));
+      const result = await store.getById('fn-name-test');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.functionName).toBe('mySpecialFunction');
+      }
+    });
+
+    it('빈 string ID → getById null 반환', async () => {
+      await store.initialize();
+      const result = await store.getById('');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('50개 레코드 삽입 후 검색 → ok=true', async () => {
+      await store.initialize();
+      for (let i = 0; i < 50; i++) {
+        await store.insert(createTestCodeRecord({ id: `perf-${i}` }));
+      }
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 10);
+      expect(result.ok).toBe(true);
     });
   });
 });

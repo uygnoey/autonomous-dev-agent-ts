@@ -77,6 +77,24 @@ describe('AgentSpawner 생성자', () => {
     const executor = makeSuccessExecutor([]);
     expect(new AgentSpawner(executor, logger)).toBeInstanceOf(AgentSpawner);
   });
+
+  it('debug logger로 생성 가능', () => {
+    const executor = makeSuccessExecutor([]);
+    expect(() => new AgentSpawner(executor, new ConsoleLogger('debug'))).not.toThrow();
+  });
+
+  it('error executor로 생성 가능', () => {
+    const executor = makeErrorExecutor('fail');
+    expect(() => new AgentSpawner(executor, logger)).not.toThrow();
+  });
+
+  it('여러 인스턴스 독립적', () => {
+    const e1 = makeSuccessExecutor([]);
+    const e2 = makeSuccessExecutor([]);
+    const s1 = new AgentSpawner(e1, logger);
+    const s2 = new AgentSpawner(e2, logger);
+    expect(s1).not.toBe(s2);
+  });
 });
 
 // ── spawn ─────────────────────────────────────────────────────
@@ -179,6 +197,157 @@ describe('AgentSpawner.spawn', () => {
     }
     expect(received.length).toBe(100);
   });
+
+  it('이벤트 content 올바르게 전달', async () => {
+    const event = makeAgentEvent({ content: 'specific content' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.content).toBe('specific content');
+  });
+
+  it('이벤트 agentName 올바르게 전달', async () => {
+    const event = makeAgentEvent({ agentName: 'architect' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.agentName).toBe('architect');
+  });
+
+  it('이벤트 timestamp가 Date이다', async () => {
+    const now = new Date();
+    const event = makeAgentEvent({ timestamp: now });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('빈 tools 배열 config → 정상 동작', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig({ tools: [] }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('maxTurns=1 config → 정상 동작', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig({ maxTurns: 1 }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('maxTurns=0 config → 정상 동작', async () => {
+    const executor = makeSuccessExecutor([]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig({ maxTurns: 0 }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(0);
+  });
+
+  it('긴 systemPrompt config → 정상 동작', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig({ systemPrompt: 'A'.repeat(10000) }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('한국어 prompt config → 정상 동작', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig({ prompt: '기능 구현을 시작하세요' }))) {
+      events.push(e);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('연속 spawn 호출 → 각각 독립', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent(), makeAgentEvent()]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const e1: AgentEvent[] = [];
+    const e2: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) e1.push(e);
+    for await (const e of testSpawner.spawn(makeAgentConfig())) e2.push(e);
+    expect(e1.length).toBe(2);
+    expect(e2.length).toBe(2);
+  });
+
+  it('done 타입 이벤트 전달', async () => {
+    const event = makeAgentEvent({ type: 'done' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.type).toBe('done');
+  });
+
+  it('error 타입 이벤트 전달', async () => {
+    const event = makeAgentEvent({ type: 'error' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.type).toBe('error');
+  });
+
+  it('tool_use 타입 이벤트 전달', async () => {
+    const event = makeAgentEvent({ type: 'tool_use' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.type).toBe('tool_use');
+  });
+
+  it('tool_result 타입 이벤트 전달', async () => {
+    const event = makeAgentEvent({ type: 'tool_result' });
+    const executor = makeSuccessExecutor([event]);
+    const testSpawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of testSpawner.spawn(makeAgentConfig())) {
+      received.push(e);
+    }
+    expect(received[0]?.type).toBe('tool_result');
+  });
+
+  it('오류 메시지에 "Agent" 포함', async () => {
+    const errorExecutor = makeErrorExecutor('Agent crashed completely');
+    const errorSpawner = new AgentSpawner(errorExecutor, logger);
+    let caughtError: Error | null = null;
+    try {
+      for await (const _event of errorSpawner.spawn(makeAgentConfig())) {}
+    } catch (error) {
+      caughtError = error as Error;
+    }
+    expect(caughtError?.message).toContain('Agent');
+  });
 });
 
 // ── resumeSession ─────────────────────────────────────────────
@@ -237,6 +406,59 @@ describe('AgentSpawner.resumeSession', () => {
       expect(events.length).toBe(1);
     }
   });
+
+  it('여러 이벤트로 재개', async () => {
+    const mockEvents = [makeAgentEvent({ type: 'message' }), makeAgentEvent({ type: 'done' })];
+    const executor = makeSuccessExecutor(mockEvents);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.resumeSession('sess-multi')) {
+      events.push(event);
+    }
+    expect(events.length).toBe(2);
+  });
+
+  it('빈 세션 ID → 처리됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.resumeSession('')) {
+      events.push(event);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('UUID 형식 세션 ID → 처리됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.resumeSession(crypto.randomUUID())) {
+      events.push(event);
+    }
+    expect(events.length).toBe(1);
+  });
+
+  it('연속 resumeSession 호출 → 각각 독립', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const e1: AgentEvent[] = [];
+    const e2: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('sess-1')) e1.push(e);
+    for await (const e of spawner.resumeSession('sess-2')) e2.push(e);
+    expect(e1.length).toBe(1);
+    expect(e2.length).toBe(1);
+  });
+
+  it('재개 후 이벤트 content 확인', async () => {
+    const event = makeAgentEvent({ content: 'resume content' });
+    const executor = makeSuccessExecutor([event]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('sess')) {
+      received.push(e);
+    }
+    expect(received[0]?.content).toBe('resume content');
+  });
 });
 
 // ── 이벤트 타입별 전달 검증 ────────────────────────────────────
@@ -275,4 +497,35 @@ describe('AgentSpawner 랜덤/경계값', () => {
       expect(received.length).toBe(count);
     },
   );
+
+  it('1000개 이벤트 → 모두 수신', async () => {
+    const mockEvents = Array.from({ length: 1000 }, (_, i) =>
+      makeAgentEvent({ content: `big-event-${i}` }),
+    );
+    const executor = makeSuccessExecutor(mockEvents);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      received.push(event);
+    }
+    expect(received.length).toBe(1000);
+  });
+
+  it('모든 AgentName 타입으로 이벤트 생성 가능', () => {
+    const agentNames: AgentEvent['agentName'][] = [
+      'architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter',
+    ];
+    for (const agentName of agentNames) {
+      const event = makeAgentEvent({ agentName });
+      expect(event.agentName).toBe(agentName);
+    }
+  });
+
+  it('모든 Phase로 config 생성 가능', () => {
+    const phases: AgentConfig['phase'][] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const config = makeAgentConfig({ phase });
+      expect(config.phase).toBe(phase);
+    }
+  });
 });

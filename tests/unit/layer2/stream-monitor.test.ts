@@ -57,6 +57,47 @@ describe('StreamMonitor 생성자', () => {
   it('StreamMonitor 인스턴스', () => {
     expect(makeMonitor()).toBeInstanceOf(StreamMonitor);
   });
+
+  it('onEvent 메서드 존재', () => {
+    expect(typeof makeMonitor().onEvent).toBe('function');
+  });
+
+  it('getEventHistory 메서드 존재', () => {
+    expect(typeof makeMonitor().getEventHistory).toBe('function');
+  });
+
+  it('detectAnomalies 메서드 존재', () => {
+    expect(typeof makeMonitor().detectAnomalies).toBe('function');
+  });
+
+  it('두 인스턴스는 서로 다른 객체', () => {
+    expect(makeMonitor()).not.toBe(makeMonitor());
+  });
+
+  it('warn 로거로 생성 가능', () => {
+    expect(() => new StreamMonitor(new ConsoleLogger('warn'))).not.toThrow();
+  });
+
+  it('debug 로거로 생성 가능', () => {
+    expect(() => new StreamMonitor(new ConsoleLogger('debug'))).not.toThrow();
+  });
+
+  it('10개 인스턴스 모두 독립', () => {
+    const monitors = Array.from({ length: 10 }, () => makeMonitor());
+    for (let i = 0; i < monitors.length; i++) {
+      for (let j = i + 1; j < monitors.length; j++) {
+        expect(monitors[i]).not.toBe(monitors[j]);
+      }
+    }
+  });
+
+  it('초기 이벤트 이력 비어있음', () => {
+    expect(makeMonitor().getEventHistory()).toHaveLength(0);
+  });
+
+  it('초기 anomalies 빈 배열', () => {
+    expect(makeMonitor().detectAnomalies()).toHaveLength(0);
+  });
 });
 
 // ── onEvent ────────────────────────────────────────────────────
@@ -109,6 +150,55 @@ describe('StreamMonitor.onEvent', () => {
     const result = monitor.onEvent(event);
     expect(result.ok).toBe(true);
   });
+
+  it('ok는 boolean 타입', () => {
+    const result = monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('모든 에이전트 타입 PreToolUse → ok', () => {
+    const agents: AgentName[] = ['coder', 'architect', 'tester', 'qa', 'qc', 'reviewer', 'documenter'];
+    for (const agent of agents) {
+      const result = monitor.onEvent(makePreToolEvent(agent, 'Read'));
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('긴 toolName → ok', () => {
+    const result = monitor.onEvent(makePreToolEvent('coder', 'A'.repeat(100)));
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 toolName → ok', () => {
+    const result = monitor.onEvent(makePreToolEvent('coder', 'tool-name_v2.0'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('과거 timestamp 이벤트 → ok', () => {
+    const past = new Date(Date.now() - 86_400_000); // 1일 전
+    const result = monitor.onEvent(makePreToolEvent('coder', 'Read', past));
+    expect(result.ok).toBe(true);
+  });
+
+  it('미래 timestamp 이벤트 → ok', () => {
+    const future = new Date(Date.now() + 86_400_000); // 1일 후
+    const result = monitor.onEvent(makePreToolEvent('coder', 'Read', future));
+    expect(result.ok).toBe(true);
+  });
+
+  it('5번 반복 → 이력 5개 쌓임', () => {
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    expect(monitor.getEventHistory().length).toBe(5);
+  });
+
+  it('이벤트 추가 후 이력 개수 증가', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    monitor.onEvent(makePreToolEvent('architect', 'Glob'));
+    expect(monitor.getEventHistory().length).toBe(2);
+  });
 });
 
 // ── getEventHistory ────────────────────────────────────────────
@@ -153,6 +243,57 @@ describe('StreamMonitor.getEventHistory', () => {
     const history = monitor.getEventHistory();
     history.push(makePreToolEvent('architect', 'Glob'));
     expect(monitor.getEventHistory().length).toBe(1);
+  });
+
+  it('반환값은 배열 타입', () => {
+    expect(Array.isArray(monitor.getEventHistory())).toBe(true);
+  });
+
+  it('이벤트 agentName 필드 string 타입', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    const history = monitor.getEventHistory();
+    expect(typeof history[0]?.agentName).toBe('string');
+  });
+
+  it('이벤트 type 필드 string 타입', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    const history = monitor.getEventHistory();
+    expect(typeof history[0]?.type).toBe('string');
+  });
+
+  it('이벤트 timestamp 필드 Date', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    const history = monitor.getEventHistory();
+    expect(history[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('필터링된 이력도 복사본', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    monitor.onEvent(makePreToolEvent('coder', 'Write'));
+    const filtered = monitor.getEventHistory('coder');
+    filtered.pop();
+    expect(monitor.getEventHistory('coder').length).toBe(2);
+  });
+
+  it('10개 이벤트 → 전체 이력 10개', () => {
+    for (let i = 0; i < 10; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    expect(monitor.getEventHistory().length).toBe(10);
+  });
+
+  it('Mixed 이벤트 타입 모두 포함', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    monitor.onEvent(makePostToolEvent('coder', 'Read'));
+    monitor.onEvent(makeIdleEvent('coder'));
+    expect(monitor.getEventHistory('coder').length).toBe(3);
+  });
+
+  it('5번 getEventHistory 반복 호출 → 동일 결과', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    for (let i = 0; i < 5; i++) {
+      expect(monitor.getEventHistory().length).toBe(1);
+    }
   });
 });
 
@@ -248,6 +389,50 @@ describe('StreamMonitor.detectAnomalies — 반복 도구 호출', () => {
     const loopAlerts = alerts.filter((a) => a.type === 'infinite_loop');
     expect(loopAlerts.length).toBe(0);
   });
+
+  it('detectAnomalies 반환값은 배열', () => {
+    expect(Array.isArray(monitor.detectAnomalies())).toBe(true);
+  });
+
+  it('1회 반복 → 탐지 안 됨', () => {
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    const alerts = monitor.detectAnomalies();
+    const loopAlerts = alerts.filter((a) => a.type === 'infinite_loop');
+    expect(loopAlerts.length).toBe(0);
+  });
+
+  it('3회 반복 → 탐지 안 됨', () => {
+    for (let i = 0; i < 3; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Bash'));
+    }
+    const alerts = monitor.detectAnomalies();
+    const loopAlerts = alerts.filter((a) => a.type === 'infinite_loop');
+    expect(loopAlerts.length).toBe(0);
+  });
+
+  it('두 에이전트 모두 5회 반복 → 둘 다 탐지', () => {
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('architect', 'Glob'));
+    }
+    const alerts = monitor.detectAnomalies();
+    const coderLoops = alerts.filter((a) => a.type === 'infinite_loop' && a.agentName === 'coder');
+    const archLoops = alerts.filter((a) => a.type === 'infinite_loop' && a.agentName === 'architect');
+    expect(coderLoops.length).toBeGreaterThan(0);
+    expect(archLoops.length).toBeGreaterThan(0);
+  });
+
+  it('5번 detectAnomalies 반복 → 동일 결과', () => {
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    const first = monitor.detectAnomalies().length;
+    for (let i = 0; i < 4; i++) {
+      expect(monitor.detectAnomalies().length).toBe(first);
+    }
+  });
 });
 
 // ── detectAnomalies — 장기 유휴 탐지 ────────────────────────
@@ -309,6 +494,35 @@ describe('StreamMonitor.detectAnomalies — 장기 유휴', () => {
     if (idleAlerts.length > 0) {
       expect(idleAlerts[0]?.severity).toBe('medium');
     }
+  });
+
+  it('2분 유휴 → 미탐지', () => {
+    const now = new Date();
+    const past = new Date(now.getTime() - 120_000); // 2분 전
+    monitor.onEvent(makePreToolEvent('tester', 'Bash', past));
+    monitor.onEvent(makeIdleEvent('tester', now));
+    const alerts = monitor.detectAnomalies();
+    const idleAlerts = alerts.filter((a) => a.type === 'deadlock');
+    expect(idleAlerts.length).toBe(0);
+  });
+
+  it('7분 유휴 → deadlock 탐지됨', () => {
+    const now = new Date();
+    const past = new Date(now.getTime() - 420_000); // 7분 전
+    monitor.onEvent(makePreToolEvent('coder', 'Read', past));
+    monitor.onEvent(makeIdleEvent('coder', now));
+    const alerts = monitor.detectAnomalies();
+    const idleAlerts = alerts.filter((a) => a.type === 'deadlock');
+    expect(idleAlerts.length).toBeGreaterThan(0);
+  });
+
+  it('유휴 없이 도구 호출만 → deadlock 없음', () => {
+    for (let i = 0; i < 10; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    const alerts = monitor.detectAnomalies();
+    const idleAlerts = alerts.filter((a) => a.type === 'deadlock');
+    expect(idleAlerts.length).toBe(0);
   });
 });
 
@@ -372,20 +586,222 @@ describe('StreamMonitor 복합 시나리오', () => {
     }
     expect(monitor.getEventHistory().length).toBe(9);
   });
+
+  it('두 모니터 인스턴스 독립', () => {
+    const m1 = makeMonitor();
+    const m2 = makeMonitor();
+    m1.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(m1.getEventHistory().length).toBe(1);
+    expect(m2.getEventHistory().length).toBe(0);
+  });
+
+  it('이벤트 순서 보존', () => {
+    const monitor = makeMonitor();
+    const tools = ['Read', 'Write', 'Glob', 'Grep', 'Bash'];
+    for (const tool of tools) {
+      monitor.onEvent(makePreToolEvent('coder', tool));
+    }
+    const history = monitor.getEventHistory('coder');
+    for (let i = 0; i < tools.length; i++) {
+      expect(history[i]?.toolName).toBe(tools[i]);
+    }
+  });
+
+  it('50개 이벤트 후 필터링 정확도', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 30; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    for (let i = 0; i < 20; i++) {
+      monitor.onEvent(makePreToolEvent('architect', 'Glob'));
+    }
+    expect(monitor.getEventHistory('coder').length).toBe(30);
+    expect(monitor.getEventHistory('architect').length).toBe(20);
+    expect(monitor.getEventHistory().length).toBe(50);
+  });
+
+  it('anomalies type 필드 존재', () => {
+    const m = makeMonitor();
+    const alerts = m.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(typeof alerts.ok).toBe('boolean');
+  });
+
+  it('5개 도구 순환 → 루프 탐지 안 됨', () => {
+    const monitor = makeMonitor();
+    const tools = ['Read', 'Write', 'Glob', 'Grep', 'Bash'];
+    for (let i = 0; i < 25; i++) {
+      monitor.onEvent(makePreToolEvent('coder', tools[i % tools.length] as string));
+    }
+    const alerts = monitor.detectAnomalies();
+    const loopAlerts = alerts.filter((a) => a.type === 'infinite_loop');
+    expect(loopAlerts.length).toBe(0);
+  });
 });
 
 // ── 랜덤 이벤트 ───────────────────────────────────────────────
 
 describe('StreamMonitor 랜덤 이벤트', () => {
-  it.each(Array.from({ length: 30 }, (_, i) => i))('랜덤 이벤트 시나리오 #%i', (i) => {
+  it('에이전트 coder → Read 1회 기록', () => {
     const monitor = makeMonitor();
-    const agentNames: AgentName[] = ['coder', 'architect', 'tester', 'qa', 'qc', 'reviewer'];
-    const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'];
-    const agentName = agentNames[i % agentNames.length] as AgentName;
-    const tool = tools[i % tools.length] as string;
-
-    monitor.onEvent(makePreToolEvent(agentName, tool));
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
     expect(monitor.getEventHistory().length).toBe(1);
     expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 architect → Glob 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('architect', 'Glob'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 tester → Bash 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('tester', 'Bash'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 qa → Grep 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('qa', 'Grep'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 qc → Write 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('qc', 'Write'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 reviewer → Edit 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('reviewer', 'Edit'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('에이전트 documenter → Read 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('documenter', 'Read'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('PostToolUse 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePostToolEvent('coder', 'Read'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('TeammateIdle 1회 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makeIdleEvent('architect'));
+    expect(monitor.getEventHistory().length).toBe(1);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('Mixed 이벤트 3개 기록', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    monitor.onEvent(makePostToolEvent('coder', 'Read'));
+    monitor.onEvent(makeIdleEvent('coder'));
+    expect(monitor.getEventHistory().length).toBe(3);
+    expect(() => monitor.detectAnomalies()).not.toThrow();
+  });
+
+  it('2개 모니터 인스턴스 독립 검증', () => {
+    const m1 = makeMonitor();
+    const m2 = makeMonitor();
+    for (let i = 0; i < 3; i++) {
+      m1.onEvent(makePreToolEvent('coder', 'Read'));
+    }
+    expect(m1.getEventHistory().length).toBe(3);
+    expect(m2.getEventHistory().length).toBe(0);
+  });
+
+  it('이벤트 없는 상태에서 detectAnomalies → 빈 배열', () => {
+    const monitor = makeMonitor();
+    expect(monitor.detectAnomalies()).toHaveLength(0);
+  });
+
+  it('4회 반복 → loopAlert 없음', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 4; i++) {
+      monitor.onEvent(makePreToolEvent('tester', 'Bash'));
+    }
+    const loopAlerts = monitor.detectAnomalies().filter(a => a.type === 'infinite_loop');
+    expect(loopAlerts.length).toBe(0);
+  });
+
+  it('6회 반복 → loopAlert 있음', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 6; i++) {
+      monitor.onEvent(makePreToolEvent('qa', 'Glob'));
+    }
+    const loopAlerts = monitor.detectAnomalies().filter(a => a.type === 'infinite_loop');
+    expect(loopAlerts.length).toBeGreaterThan(0);
+  });
+
+  it('getEventHistory 필터 undefined → 전체 반환', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    monitor.onEvent(makePreToolEvent('architect', 'Glob'));
+    expect(monitor.getEventHistory().length).toBe(2);
+  });
+
+  it('이벤트 data 필드 추가 → ok', () => {
+    const monitor = makeMonitor();
+    const event: HookEvent = {
+      type: 'PreToolUse',
+      agentName: 'coder',
+      toolName: 'Read',
+      data: { extra: 'info', count: 42 },
+      timestamp: new Date(),
+    };
+    expect(monitor.onEvent(event).ok).toBe(true);
+  });
+
+  it('TeammateIdle 후 PreToolUse → 이력 2개', () => {
+    const monitor = makeMonitor();
+    monitor.onEvent(makeIdleEvent('coder'));
+    monitor.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(monitor.getEventHistory('coder').length).toBe(2);
+  });
+
+  it('detectAnomalies 반환 배열 원소 type 필드', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Bash'));
+    }
+    const alerts = monitor.detectAnomalies();
+    for (const alert of alerts) {
+      expect(typeof alert.type).toBe('string');
+    }
+  });
+
+  it('detectAnomalies 반환 배열 원소 severity 필드', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Bash'));
+    }
+    const alerts = monitor.detectAnomalies();
+    for (const alert of alerts) {
+      expect(typeof alert.severity).toBe('string');
+    }
+  });
+
+  it('detectAnomalies 반환 배열 원소 agentName 필드', () => {
+    const monitor = makeMonitor();
+    for (let i = 0; i < 5; i++) {
+      monitor.onEvent(makePreToolEvent('coder', 'Bash'));
+    }
+    const alerts = monitor.detectAnomalies();
+    for (const alert of alerts) {
+      expect(typeof alert.agentName).toBe('string');
+    }
   });
 });

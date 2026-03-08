@@ -45,6 +45,33 @@ describe('DeliverableBuilder', () => {
     }
   });
 
+  describe('생성자', () => {
+    it('인스턴스 생성됨', () => {
+      expect(builder).toBeInstanceOf(DeliverableBuilder);
+    });
+
+    it('두 인스턴스는 다른 객체', () => {
+      const b2 = new DeliverableBuilder(mockCollaborator, new ConsoleLogger('error'));
+      expect(builder).not.toBe(b2);
+    });
+
+    it('build 메서드 존재', () => {
+      expect(typeof builder.build).toBe('function');
+    });
+
+    it('buildAll 메서드 존재', () => {
+      expect(typeof builder.buildAll).toBe('function');
+    });
+
+    it('listTemplates 메서드 존재', () => {
+      expect(typeof builder.listTemplates).toBe('function');
+    });
+
+    it('registerTemplate 메서드 존재', () => {
+      expect(typeof builder.registerTemplate).toBe('function');
+    });
+  });
+
   describe('build / 산출물 생성', () => {
     it('portfolio 산출물을 생성한다 (PDF)', async () => {
       const metadata = createMetadata();
@@ -202,6 +229,143 @@ describe('DeliverableBuilder', () => {
         expect(result.value.content).toContain('1.0.0');
       }
     });
+
+    it('build 결과에 id 필드 있음', async () => {
+      const result = await builder.build({
+        projectId: 'proj-1',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      if (result.ok) {
+        expect(typeof result.value.id).toBe('string');
+        expect(result.value.id.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('build 결과에 content 필드 있음', async () => {
+      const result = await builder.build({
+        projectId: 'proj-1',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      if (result.ok) {
+        expect(typeof result.value.content).toBe('string');
+      }
+    });
+
+    it('build 결과에 outputPath 필드 있음', async () => {
+      const outPath = join(tempDir, 'out.pdf');
+      const result = await builder.build({
+        projectId: 'proj-1',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: outPath,
+      });
+      if (result.ok) {
+        expect(typeof result.value.outputPath).toBe('string');
+      }
+    });
+
+    it('projectId가 결과에 그대로 반영됨', async () => {
+      const result = await builder.build({
+        projectId: 'unique-proj-xyz',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.projectId).toBe('unique-proj-xyz');
+      }
+    });
+
+    it('status가 completed임', async () => {
+      const result = await builder.build({
+        projectId: 'proj-1',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+    });
+
+    it('한국어 프로젝트명 → content에 포함', async () => {
+      const result = await builder.build({
+        projectId: 'proj-kr',
+        type: 'portfolio',
+        metadata: createMetadata({ projectName: '한국어 프로젝트' }),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.content).toContain('한국어 프로젝트');
+      }
+    });
+
+    it('긴 projectId → ok', async () => {
+      const longId = 'proj-' + 'x'.repeat(100);
+      const result = await builder.build({
+        projectId: longId,
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.projectId).toBe(longId);
+      }
+    });
+
+    it('business-plan projectId 보존', async () => {
+      const result = await builder.build({
+        projectId: 'bp-proj-999',
+        type: 'business-plan',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'bp.docx'),
+      });
+      if (result.ok) {
+        expect(result.value.projectId).toBe('bp-proj-999');
+      }
+    });
+
+    it('investment-proposal 결과에 projectId 보존', async () => {
+      const result = await builder.build({
+        projectId: 'inv-proj-001',
+        type: 'investment-proposal',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'inv.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.projectId).toBe('inv-proj-001');
+      }
+    });
+
+    it('presentation 결과에 projectId 보존', async () => {
+      const result = await builder.build({
+        projectId: 'pres-proj-777',
+        type: 'presentation',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'pres.pptx'),
+      });
+      if (result.ok) {
+        expect(result.value.projectId).toBe('pres-proj-777');
+      }
+    });
+
+    it('에러 반환 시 ok=false이고 error.code는 string', async () => {
+      const result = await builder.build({
+        projectId: '',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'out.pdf'),
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(typeof result.error.code).toBe('string');
+      }
+    });
   });
 
   describe('buildAll / 모든 산출물 생성', () => {
@@ -239,6 +403,58 @@ describe('DeliverableBuilder', () => {
         expect(presentation?.format).toBe('pptx');
       }
     });
+
+    it('모든 산출물 ID가 고유함', async () => {
+      const result = await builder.buildAll('proj-uniq', createMetadata(), tempDir);
+      if (result.ok) {
+        const ids = result.value.map((d) => d.id);
+        expect(new Set(ids).size).toBe(ids.length);
+      }
+    });
+
+    it('모든 산출물 status가 completed', async () => {
+      const result = await builder.buildAll('proj-status', createMetadata(), tempDir);
+      if (result.ok) {
+        for (const d of result.value) {
+          expect(d.status).toBe('completed');
+        }
+      }
+    });
+
+    it('모든 산출물 content는 string', async () => {
+      const result = await builder.buildAll('proj-content', createMetadata(), tempDir);
+      if (result.ok) {
+        for (const d of result.value) {
+          expect(typeof d.content).toBe('string');
+        }
+      }
+    });
+
+    it('모든 산출물 projectId 보존', async () => {
+      const result = await builder.buildAll('proj-preserved', createMetadata(), tempDir);
+      if (result.ok) {
+        for (const d of result.value) {
+          expect(d.projectId).toBe('proj-preserved');
+        }
+      }
+    });
+
+    it('빈 projectId → err', async () => {
+      const result = await builder.buildAll('', createMetadata(), tempDir);
+      expect(result.ok).toBe(false);
+    });
+
+    it('한국어 프로젝트명 → content에 포함됨', async () => {
+      const result = await builder.buildAll(
+        'proj-kr',
+        createMetadata({ projectName: '한국어 테스트 프로젝트' }),
+        tempDir,
+      );
+      if (result.ok) {
+        const portfolio = result.value.find((d) => d.type === 'portfolio');
+        expect(portfolio?.content).toContain('한국어 테스트 프로젝트');
+      }
+    });
   });
 
   describe('listTemplates / 템플릿 목록', () => {
@@ -262,6 +478,49 @@ describe('DeliverableBuilder', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.length).toBeGreaterThanOrEqual(4);
+      }
+    });
+
+    it('반환값은 배열', async () => {
+      const result = await builder.listTemplates(false);
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('각 템플릿에 id 필드 있음', async () => {
+      const result = await builder.listTemplates(false);
+      if (result.ok) {
+        for (const t of result.value) {
+          expect(typeof t.id).toBe('string');
+          expect(t.id.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('각 템플릿에 type 필드 있음', async () => {
+      const result = await builder.listTemplates(false);
+      if (result.ok) {
+        for (const t of result.value) {
+          expect(typeof t.type).toBe('string');
+        }
+      }
+    });
+
+    it('각 템플릿에 format 필드 있음', async () => {
+      const result = await builder.listTemplates(false);
+      if (result.ok) {
+        for (const t of result.value) {
+          expect(typeof t.format).toBe('string');
+        }
+      }
+    });
+
+    it('연속 2번 호출 → 결과 동일', async () => {
+      const r1 = await builder.listTemplates(false);
+      const r2 = await builder.listTemplates(false);
+      if (r1.ok && r2.ok) {
+        expect(r1.value.length).toBe(r2.value.length);
       }
     });
   });
@@ -302,6 +561,51 @@ describe('DeliverableBuilder', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('layer3_deliverable_template_duplicate');
+      }
+    });
+
+    it('에러 시 ok=false이고 error.code는 string', async () => {
+      const result = await builder.registerTemplate({
+        id: 'custom-report-2',
+        name: 'custom-report-2',
+        type: 'portfolio',
+        templatePath: '/no/such/file.hbs',
+        format: 'pdf',
+        description: 'Test',
+        custom: true,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(typeof result.error.code).toBe('string');
+      }
+    });
+
+    it('중복 ID "default-portfolio" → 에러 반환', async () => {
+      const result = await builder.registerTemplate({
+        id: 'default-portfolio',
+        name: 'dup',
+        type: 'portfolio',
+        templatePath: 'any',
+        format: 'pdf',
+        description: 'dup',
+        custom: false,
+      });
+      expect(result.ok).toBe(false);
+    });
+
+    it('존재하지 않는 경로 → not_found 에러', async () => {
+      const result = await builder.registerTemplate({
+        id: 'brand-new-template',
+        name: 'brand-new-template',
+        type: 'portfolio',
+        templatePath: '/absolutely/nonexistent/path.hbs',
+        format: 'pdf',
+        description: 'new',
+        custom: true,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('layer3_deliverable_template_not_found');
       }
     });
   });

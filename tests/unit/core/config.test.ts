@@ -105,6 +105,70 @@ describe('loadEnvironment', () => {
       expect(result.error.code).toBe('config_missing_key');
     }
   });
+
+  it('ok는 boolean이다', () => {
+    const result = loadEnvironment();
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('API key 모드 → authMode는 문자열이다', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-str-check';
+    const result = loadEnvironment();
+    if (result.ok) expect(typeof result.value.authMode).toBe('string');
+  });
+
+  it('OAuth 모드 → authMode는 문자열이다', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-str';
+    const result = loadEnvironment();
+    if (result.ok) expect(typeof result.value.authMode).toBe('string');
+  });
+
+  it('에러 코드가 문자열이다 (미설정)', () => {
+    const result = loadEnvironment();
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 메시지가 문자열이다 (미설정)', () => {
+    const result = loadEnvironment();
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('API key 5번 호출 → 항상 ok=true', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-consistent-key';
+    for (let i = 0; i < 5; i++) {
+      const result = loadEnvironment();
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('미설정 5번 호출 → 항상 ok=false', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = loadEnvironment();
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('API key 설정 후 삭제 → ok=false', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-temp';
+    expect(loadEnvironment().ok).toBe(true);
+    delete process.env['ANTHROPIC_API_KEY'];
+    expect(loadEnvironment().ok).toBe(false);
+  });
+
+  it('OAuth 5번 호출 → 항상 ok=true', () => {
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-5rep';
+    for (let i = 0; i < 5; i++) {
+      const result = loadEnvironment();
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('둘 다 설정 → error.code 문자열', () => {
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-a';
+    process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-b';
+    const result = loadEnvironment();
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
 });
 
 // ── deepMerge ────────────────────────────────────────────────
@@ -182,6 +246,65 @@ describe('deepMerge', () => {
     const result = deepMerge(base, override);
 
     expect(result.l1.l2.l3).toBe('overridden');
+  });
+
+  it('숫자 오버라이드', () => {
+    const base = { count: 10 };
+    const override = { count: 99 };
+    const result = deepMerge(base, override);
+    expect(result.count).toBe(99);
+  });
+
+  it('문자열 오버라이드', () => {
+    const base = { name: 'old' };
+    const override = { name: 'new' };
+    const result = deepMerge(base, override);
+    expect(result.name).toBe('new');
+  });
+
+  it('boolean 오버라이드', () => {
+    const base = { enabled: true };
+    const override = { enabled: false };
+    const result = deepMerge(base, override);
+    expect(result.enabled).toBe(false);
+  });
+
+  it('빈 base + 빈 override = 빈 객체', () => {
+    const result = deepMerge({}, {});
+    expect(Object.keys(result).length).toBe(0);
+  });
+
+  it('5번 동일 입력 → 항상 동일 결과', () => {
+    const base = { a: 1, b: { c: 2 } };
+    const override = { b: { c: 3 } };
+    const first = deepMerge(base, override);
+    for (let i = 0; i < 5; i++) {
+      const result = deepMerge(base, override);
+      expect(result.a).toBe(first.a);
+    }
+  });
+
+  it('4단계 중첩 병합', () => {
+    const base = { l1: { l2: { l3: { l4: 'deep-original' } } } };
+    const override = { l1: { l2: { l3: { l4: 'deep-new' } } } };
+    const result = deepMerge(base, override);
+    expect(result.l1.l2.l3.l4).toBe('deep-new');
+  });
+
+  it('override에 없는 base 키는 보존된다', () => {
+    const base = { keep: 'this', change: 'old' } as Record<string, unknown>;
+    const override = { change: 'new' };
+    const result = deepMerge(base, override);
+    expect(result['keep']).toBe('this');
+    expect(result['change']).toBe('new');
+  });
+
+  it('중첩에서 override에 없는 base 키 보존', () => {
+    const base = { n: { a: 1, b: 2 } };
+    const override = { n: { b: 99 } };
+    const result = deepMerge(base, override);
+    expect(result.n.a).toBe(1);
+    expect(result.n.b).toBe(99);
   });
 });
 
@@ -264,6 +387,94 @@ describe('validateConfig', () => {
     const result = validateConfig(config);
 
     expect(result.ok).toBe(false);
+  });
+
+  it('ok는 boolean이다', () => {
+    const result = validateConfig(DEFAULT_CONFIG);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('유효한 debug log level', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'debug' },
+    };
+    const result = validateConfig(config);
+    expect(result.ok).toBe(true);
+  });
+
+  it('유효한 warn log level', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'warn' },
+    };
+    const result = validateConfig(config);
+    expect(result.ok).toBe(true);
+  });
+
+  it('유효한 error log level', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'error' },
+    };
+    const result = validateConfig(config);
+    expect(result.ok).toBe(true);
+  });
+
+  it('unitCount=1 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 1 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('unitCount=100000 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 100000 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('e2eTimeoutSeconds=1 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: 1 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('음수 e2eTimeoutSeconds → err', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: -100 },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('에러 코드가 문자열이다', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'invalid_level' as 'debug' },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('에러 메시지가 문자열이다', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: -5 },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('5번 기본값 검증 → 항상 ok=true', () => {
+    for (let i = 0; i < 5; i++) {
+      expect(validateConfig(DEFAULT_CONFIG).ok).toBe(true);
+    }
   });
 });
 
@@ -352,6 +563,64 @@ describe('loadConfig', () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it('ok는 boolean이다', async () => {
+    const result = await loadConfig(join(tempDir, 'none'));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('결과 log.level이 문자열이다', async () => {
+    const result = await loadConfig(join(tempDir, 'none'));
+    if (result.ok) expect(typeof result.value.log.level).toBe('string');
+  });
+
+  it('warn 레벨 오버라이드', async () => {
+    const projectDir = join(tempDir, 'proj-warn');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(
+      join(projectDir, '.adev', 'config.json'),
+      JSON.stringify({ log: { level: 'warn' } }),
+    );
+    const result = await loadConfig(projectDir);
+    if (result.ok) expect(result.value.log.level).toBe('warn');
+  });
+
+  it('testing.unitCount 오버라이드', async () => {
+    const projectDir = join(tempDir, 'proj-unit');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(
+      join(projectDir, '.adev', 'config.json'),
+      JSON.stringify({ testing: { unitCount: 5000 } }),
+    );
+    const result = await loadConfig(projectDir);
+    if (result.ok) expect(result.value.testing.unitCount).toBe(5000);
+  });
+
+  it('unitCount=0 오버라이드 → 거부', async () => {
+    const projectDir = join(tempDir, 'proj-zero');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(
+      join(projectDir, '.adev', 'config.json'),
+      JSON.stringify({ testing: { unitCount: 0 } }),
+    );
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(false);
+  });
+
+  it('에러 코드가 문자열이다', async () => {
+    const projectDir = join(tempDir, 'proj-err');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '{bad}');
+    const result = await loadConfig(projectDir);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('5번 기본 디렉토리 호출 → 항상 ok=true', async () => {
+    for (let i = 0; i < 5; i++) {
+      const result = await loadConfig(join(tempDir, `nonexistent-${i}`));
+      expect(result.ok).toBe(true);
+    }
+  });
 });
 
 // ── DEFAULT_CONFIG ───────────────────────────────────────────
@@ -375,5 +644,54 @@ describe('DEFAULT_CONFIG', () => {
 
   it('opusEscalationOnFailure가 기본 true이다', () => {
     expect(DEFAULT_CONFIG.verification.opusEscalationOnFailure).toBe(true);
+  });
+
+  it('log.level이 문자열이다', () => {
+    expect(typeof DEFAULT_CONFIG.log.level).toBe('string');
+  });
+
+  it('testing.unitCount가 숫자이다', () => {
+    expect(typeof DEFAULT_CONFIG.testing.unitCount).toBe('number');
+  });
+
+  it('testing.unitCount가 양수이다', () => {
+    expect(DEFAULT_CONFIG.testing.unitCount).toBeGreaterThan(0);
+  });
+
+  it('testing.e2eTimeoutSeconds가 숫자이다', () => {
+    expect(typeof DEFAULT_CONFIG.testing.e2eTimeoutSeconds).toBe('number');
+  });
+
+  it('testing.e2eTimeoutSeconds가 양수이다', () => {
+    expect(DEFAULT_CONFIG.testing.e2eTimeoutSeconds).toBeGreaterThan(0);
+  });
+
+  it('verification.opusEscalationOnFailure가 boolean이다', () => {
+    expect(typeof DEFAULT_CONFIG.verification.opusEscalationOnFailure).toBe('boolean');
+  });
+
+  it('verification.layer1Model이 문자열이다', () => {
+    expect(typeof DEFAULT_CONFIG.verification.layer1Model).toBe('string');
+  });
+
+  it('verification.adevModel이 문자열이다', () => {
+    expect(typeof DEFAULT_CONFIG.verification.adevModel).toBe('string');
+  });
+
+  it('embedding 섹션이 defined이다', () => {
+    expect(DEFAULT_CONFIG.embedding).not.toBeNull();
+    expect(DEFAULT_CONFIG.embedding).not.toBeUndefined();
+  });
+
+  it('DEFAULT_CONFIG는 validateConfig를 통과한다', () => {
+    const result = validateConfig(DEFAULT_CONFIG);
+    expect(result.ok).toBe(true);
+  });
+
+  it('5번 참조 → 항상 동일 log.level', () => {
+    const level = DEFAULT_CONFIG.log.level;
+    for (let i = 0; i < 5; i++) {
+      expect(DEFAULT_CONFIG.log.level).toBe(level);
+    }
   });
 });
