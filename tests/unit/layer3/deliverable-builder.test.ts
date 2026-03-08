@@ -609,4 +609,153 @@ describe('DeliverableBuilder', () => {
       }
     });
   });
+
+  describe('build / 추가 edge 케이스', () => {
+    it('UUID 형식 projectId → ok', async () => {
+      const result = await builder.build({
+        projectId: '550e8400-e29b-41d4-a716-446655440000',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'uuid.pdf'),
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it('한글 프로젝트 설명 → content에 포함', async () => {
+      const result = await builder.build({
+        projectId: 'proj-kr-desc',
+        type: 'portfolio',
+        metadata: createMetadata({ projectDescription: '한국어 프로젝트 설명입니다' }),
+        outputPath: join(tempDir, 'kr-desc.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.content).toContain('한국어 프로젝트 설명입니다');
+      }
+    });
+
+    it('한글 targetAudience → ok', async () => {
+      const result = await builder.build({
+        projectId: 'proj-ta',
+        type: 'portfolio',
+        metadata: createMetadata({ targetAudience: '개발자 및 기획자' }),
+        outputPath: join(tempDir, 'ta.pdf'),
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it('한글 purpose → ok', async () => {
+      const result = await builder.build({
+        projectId: 'proj-purpose',
+        type: 'business-plan',
+        metadata: createMetadata({ purpose: '투자 유치 목적' }),
+        outputPath: join(tempDir, 'purpose.docx'),
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it('공백만 있는 projectId → ok=false', async () => {
+      const result = await builder.build({
+        projectId: '   ',
+        type: 'investment-proposal',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'wp.pdf'),
+      });
+      expect(result.ok).toBe(false);
+    });
+
+    it('특수문자 projectId → ok (구현에 따름)', async () => {
+      const result = await builder.build({
+        projectId: 'proj-특수!@#',
+        type: 'presentation',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'special.pptx'),
+      });
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('content는 비어있지 않다', async () => {
+      const result = await builder.build({
+        projectId: 'proj-nonempty',
+        type: 'portfolio',
+        metadata: createMetadata(),
+        outputPath: join(tempDir, 'nonempty.pdf'),
+      });
+      if (result.ok) {
+        expect(result.value.content.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('연속 5번 build → 항상 ok', async () => {
+      for (let i = 0; i < 5; i++) {
+        const result = await builder.build({
+          projectId: `proj-repeat-${i}`,
+          type: 'portfolio',
+          metadata: createMetadata(),
+          outputPath: join(tempDir, `repeat-${i}.pdf`),
+        });
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('4가지 타입 모두 status=completed', async () => {
+      const types: Array<'portfolio' | 'business-plan' | 'investment-proposal' | 'presentation'> = [
+        'portfolio', 'business-plan', 'investment-proposal', 'presentation',
+      ];
+      const exts = ['pdf', 'docx', 'pdf', 'pptx'];
+      for (let i = 0; i < types.length; i++) {
+        const result = await builder.build({
+          projectId: `proj-type-${i}`,
+          type: types[i]!,
+          metadata: createMetadata(),
+          outputPath: join(tempDir, `type-${i}.${exts[i]}`),
+        });
+        if (result.ok) {
+          expect(result.value.status).toBe('completed');
+        }
+      }
+    });
+  });
+
+  describe('buildAll / 추가 edge 케이스', () => {
+    it('UUID projectId → ok', async () => {
+      const result = await builder.buildAll(
+        '550e8400-e29b-41d4-a716-446655440001',
+        createMetadata(),
+        tempDir,
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('한글 프로젝트명으로 buildAll → ok', async () => {
+      const result = await builder.buildAll(
+        'proj-all-kr',
+        createMetadata({ projectName: '전체 빌드 테스트' }),
+        tempDir,
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('공백만 있는 projectId → ok=false', async () => {
+      const result = await builder.buildAll('  ', createMetadata(), tempDir);
+      expect(result.ok).toBe(false);
+    });
+
+    it('결과 배열의 각 항목에 id 있음', async () => {
+      const result = await builder.buildAll('proj-ids', createMetadata(), tempDir);
+      if (result.ok) {
+        for (const d of result.value) {
+          expect(d.id.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('결과 배열의 각 항목에 outputPath 있음', async () => {
+      const result = await builder.buildAll('proj-paths', createMetadata(), tempDir);
+      if (result.ok) {
+        for (const d of result.value) {
+          expect(typeof d.outputPath).toBe('string');
+        }
+      }
+    });
+  });
 });

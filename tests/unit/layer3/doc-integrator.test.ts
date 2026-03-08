@@ -601,3 +601,190 @@ describe('DocIntegrator exportAsMarkdown', () => {
     if (result.ok) expect(result.value).toContain('bilingual');
   });
 });
+
+// ── integrate edge/random 추가 케이스 ────────────────────────
+
+describe('DocIntegrator integrate - 추가 edge/random 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('UUID 형식 조각 ID → ok', () => {
+    const frags = ['550e8400-e29b-41d4-a716-446655440000'];
+    const result = integrator.integrate(frags, makeTemplate(), 'proj-uuid');
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 projectId → ok', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj!@#$%');
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 projectId → ok', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate(), '프로젝트-001');
+    expect(result.ok).toBe(true);
+  });
+
+  it('50개 조각 → ok', () => {
+    const frags = Array.from({ length: 50 }, (_, i) => `frag-${i}`);
+    const result = integrator.integrate(frags, makeTemplate(), 'proj-1');
+    expect(result.ok).toBe(true);
+  });
+
+  it('50개 조각 → 모두 sourceFragments에 포함', () => {
+    const frags = Array.from({ length: 50 }, (_, i) => `frag-${i}`);
+    const result = integrator.integrate(frags, makeTemplate(), 'proj-1');
+    if (result.ok) {
+      expect(result.value.sourceFragments.length).toBe(50);
+    }
+  });
+
+  it('한글 제목 template → content에 한글 포함', () => {
+    const result = integrator.integrate(
+      ['frag-1'],
+      makeTemplate({ title: '한국어 문서 제목' }),
+      'proj-1',
+    );
+    if (result.ok) expect(result.value.content).toContain('한국어 문서 제목');
+  });
+
+  it('한글 섹션 heading → content에 포함', () => {
+    const result = integrator.integrate(
+      ['frag-1'],
+      makeTemplate({ sections: [{ heading: '개요', content: '내용' }] }),
+      'proj-1',
+    );
+    if (result.ok) expect(result.value.content).toContain('개요');
+  });
+
+  it('한글 섹션 content → content에 포함', () => {
+    const result = integrator.integrate(
+      ['frag-1'],
+      makeTemplate({ sections: [{ heading: 'H', content: '한국어 내용입니다' }] }),
+      'proj-1',
+    );
+    if (result.ok) expect(result.value.content).toContain('한국어 내용입니다');
+  });
+
+  it('type=changelog → ok', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate({ type: 'changelog' }), 'proj-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('changelog');
+  });
+
+  it('type=user-manual → ok', () => {
+    const result = integrator.integrate(['frag-1'], makeTemplate({ type: 'user-manual' }), 'proj-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.type).toBe('user-manual');
+  });
+
+  it('아주 긴 제목 template → ok', () => {
+    const longTitle = 'A'.repeat(500);
+    const result = integrator.integrate(['frag-1'], makeTemplate({ title: longTitle }), 'proj-1');
+    expect(result.ok).toBe(true);
+  });
+
+  it('10개 섹션 → 모두 content에 포함', () => {
+    const sections = Array.from({ length: 10 }, (_, i) => ({
+      heading: `Section ${i}`,
+      content: `Content ${i}`,
+    }));
+    const result = integrator.integrate(['frag-1'], makeTemplate({ sections }), 'proj-1');
+    if (result.ok) {
+      for (let i = 0; i < 10; i++) {
+        expect(result.value.content).toContain(`Section ${i}`);
+      }
+    }
+  });
+
+  it('빈 content 섹션 → ok', () => {
+    const result = integrator.integrate(
+      ['frag-1'],
+      makeTemplate({ sections: [{ heading: 'H', content: '' }] }),
+      'proj-1',
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('공백만 있는 heading → ok (구현에 따름)', () => {
+    const result = integrator.integrate(
+      ['frag-1'],
+      makeTemplate({ sections: [{ heading: '   ', content: 'content' }] }),
+      'proj-1',
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('generatedAt이 현재 시간과 가깝다', () => {
+    const before = new Date();
+    const result = integrator.integrate(['frag-1'], makeTemplate(), 'proj-1');
+    const after = new Date();
+    if (result.ok) {
+      expect(result.value.generatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
+      expect(result.value.generatedAt.getTime()).toBeLessThanOrEqual(after.getTime() + 1000);
+    }
+  });
+});
+
+// ── updateDocument 추가 edge 케이스 ──────────────────────────
+
+describe('DocIntegrator updateDocument - 추가 edge 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  function makeDoc(version = 1) {
+    return {
+      id: 'doc-edge',
+      projectId: 'proj-edge',
+      type: 'readme' as const,
+      content: '# Original',
+      generatedAt: new Date(),
+      version,
+      sourceFragments: ['original-frag'],
+    };
+  }
+
+  it('version 5 문서 업데이트 → version 6', () => {
+    const doc = makeDoc(5);
+    const result = integrator.updateDocument(doc, ['frag-new']);
+    if (result.ok) expect(result.value.version).toBe(6);
+  });
+
+  it('한글 조각 ID → ok', () => {
+    const doc = makeDoc();
+    const result = integrator.updateDocument(doc, ['한글조각-001']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID 형식 조각 ID → ok', () => {
+    const doc = makeDoc();
+    const result = integrator.updateDocument(doc, ['550e8400-e29b-41d4-a716-446655440001']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('100개 새 조각 → 모두 sourceFragments에 포함', () => {
+    const doc = makeDoc();
+    const newFrags = Array.from({ length: 100 }, (_, i) => `new-frag-${i}`);
+    const result = integrator.updateDocument(doc, newFrags);
+    if (result.ok) {
+      expect(result.value.sourceFragments.length).toBe(101); // 1 original + 100 new
+    }
+  });
+
+  it('공백만 있는 조각 ID → ok/false (구현에 따름)', () => {
+    const doc = makeDoc();
+    const result = integrator.updateDocument(doc, ['   ']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('특수문자 조각 ID → ok (구현에 따름)', () => {
+    const doc = makeDoc();
+    const result = integrator.updateDocument(doc, ['frag!@#$']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+});

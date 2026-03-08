@@ -617,3 +617,186 @@ describe('서버 설정 불변성', () => {
     }
   });
 });
+
+// ── 서버 설정 세부 검증 ───────────────────────────────────────
+
+describe('각 서버 설정 세부 검증', () => {
+  it('OS_CONTROL_SERVER.args는 빈 배열이다 (length=0)', () => {
+    expect(OS_CONTROL_SERVER.args.length).toBe(0);
+  });
+
+  it('BROWSER_SERVER.args는 빈 배열이다 (length=0)', () => {
+    expect(BROWSER_SERVER.args.length).toBe(0);
+  });
+
+  it('WEB_SEARCH_SERVER.args는 빈 배열이다 (length=0)', () => {
+    expect(WEB_SEARCH_SERVER.args.length).toBe(0);
+  });
+
+  it('GIT_SERVER.args는 빈 배열이다 (length=0)', () => {
+    expect(GIT_SERVER.args.length).toBe(0);
+  });
+
+  it('OS_CONTROL_SERVER는 McpServerConfig 구조를 만족한다', () => {
+    const config = OS_CONTROL_SERVER;
+    expect('name' in config).toBe(true);
+    expect('command' in config).toBe(true);
+    expect('args' in config).toBe(true);
+    expect('enabled' in config).toBe(true);
+  });
+
+  it('BROWSER_SERVER는 McpServerConfig 구조를 만족한다', () => {
+    const config = BROWSER_SERVER;
+    expect('name' in config).toBe(true);
+    expect('command' in config).toBe(true);
+    expect('args' in config).toBe(true);
+    expect('enabled' in config).toBe(true);
+  });
+
+  it('WEB_SEARCH_SERVER는 McpServerConfig 구조를 만족한다', () => {
+    const config = WEB_SEARCH_SERVER;
+    expect('name' in config).toBe(true);
+    expect('command' in config).toBe(true);
+    expect('args' in config).toBe(true);
+    expect('enabled' in config).toBe(true);
+  });
+
+  it('GIT_SERVER는 McpServerConfig 구조를 만족한다', () => {
+    const config = GIT_SERVER;
+    expect('name' in config).toBe(true);
+    expect('command' in config).toBe(true);
+    expect('args' in config).toBe(true);
+    expect('enabled' in config).toBe(true);
+  });
+
+  it('OS_CONTROL_SERVER.name은 최소 2글자', () => {
+    expect(OS_CONTROL_SERVER.name.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('BROWSER_SERVER.name은 최소 2글자', () => {
+    expect(BROWSER_SERVER.name.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('WEB_SEARCH_SERVER.name은 최소 2글자', () => {
+    expect(WEB_SEARCH_SERVER.name.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('GIT_SERVER.name은 최소 2글자', () => {
+    expect(GIT_SERVER.name.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('모든 서버 name이 최소 3글자 이상', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect(config.name.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('모든 서버 command가 빈 문자열이 아님', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect(config.command).not.toBe('');
+    }
+  });
+
+  it('os-control name은 10글자', () => {
+    expect(OS_CONTROL_SERVER.name.length).toBe(10);
+  });
+
+  it('git name은 3글자', () => {
+    expect(GIT_SERVER.name.length).toBe(3);
+  });
+
+  it('browser name은 7글자', () => {
+    expect(BROWSER_SERVER.name.length).toBe(7);
+  });
+
+  it('web-search name은 10글자', () => {
+    expect(WEB_SEARCH_SERVER.name.length).toBe(10);
+  });
+});
+
+// ── BUILTIN_SERVERS 인덱스 접근 ───────────────────────────────
+
+describe('BUILTIN_SERVERS 인덱스 접근', () => {
+  it('인덱스 0 항목이 존재한다', () => {
+    expect(BUILTIN_SERVERS[0]).toBeDefined();
+  });
+
+  it('인덱스 1 항목이 존재한다', () => {
+    expect(BUILTIN_SERVERS[1]).toBeDefined();
+  });
+
+  it('인덱스 2 항목이 존재한다', () => {
+    expect(BUILTIN_SERVERS[2]).toBeDefined();
+  });
+
+  it('인덱스 3 항목이 존재한다', () => {
+    expect(BUILTIN_SERVERS[3]).toBeDefined();
+  });
+
+  it('인덱스 4 항목은 undefined이다', () => {
+    expect(BUILTIN_SERVERS[4]).toBeUndefined();
+  });
+
+  it('각 인덱스 항목의 name은 string이다', () => {
+    for (let i = 0; i < BUILTIN_SERVERS.length; i++) {
+      expect(typeof BUILTIN_SERVERS[i]?.name).toBe('string');
+    }
+  });
+
+  it('각 인덱스 항목의 enabled는 boolean이다', () => {
+    for (let i = 0; i < BUILTIN_SERVERS.length; i++) {
+      expect(typeof BUILTIN_SERVERS[i]?.enabled).toBe('boolean');
+    }
+  });
+
+  it('find로 os-control 서버를 찾을 수 있다', () => {
+    const found = BUILTIN_SERVERS.find(s => s.name === 'os-control');
+    expect(found).toBeDefined();
+    expect(found?.command).toBe('builtin');
+  });
+
+  it('find로 browser 서버를 찾을 수 있다', () => {
+    const found = BUILTIN_SERVERS.find(s => s.name === 'browser');
+    expect(found).toBeDefined();
+    expect(found?.enabled).toBe(true);
+  });
+
+  it('find로 web-search 서버를 찾을 수 있다', () => {
+    const found = BUILTIN_SERVERS.find(s => s.name === 'web-search');
+    expect(found).toBeDefined();
+    expect(found?.args).toHaveLength(0);
+  });
+
+  it('find로 git 서버를 찾을 수 있다', () => {
+    const found = BUILTIN_SERVERS.find(s => s.name === 'git');
+    expect(found).toBeDefined();
+    expect(found?.name).toBe('git');
+  });
+
+  it('존재하지 않는 서버 이름으로 find → undefined', () => {
+    const found = BUILTIN_SERVERS.find(s => s.name === 'nonexistent-server');
+    expect(found).toBeUndefined();
+  });
+
+  it('map으로 이름 배열 생성 → length=4', () => {
+    const names = BUILTIN_SERVERS.map(s => s.name);
+    expect(names.length).toBe(4);
+  });
+
+  it('reduce로 command 집합 → size=1', () => {
+    const cmds = new Set(BUILTIN_SERVERS.map(s => s.command));
+    expect(cmds.size).toBe(1);
+  });
+
+  it('every로 모든 enabled=true 확인', () => {
+    expect(BUILTIN_SERVERS.every(s => s.enabled)).toBe(true);
+  });
+
+  it('some으로 os-control 존재 확인', () => {
+    expect(BUILTIN_SERVERS.some(s => s.name === 'os-control')).toBe(true);
+  });
+
+  it('some으로 존재하지 않는 이름 → false', () => {
+    expect(BUILTIN_SERVERS.some(s => s.name === 'phantom-server')).toBe(false);
+  });
+});
