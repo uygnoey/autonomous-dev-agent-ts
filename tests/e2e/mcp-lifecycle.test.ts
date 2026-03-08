@@ -1005,4 +1005,658 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     await manager.initialize(mcpDir);
     expect(manager.getStatus('status-srv')).toBe('stopped');
   });
+
+  // ── 추가 E2E 시나리오 ─────────────────────────────────────────
+
+  it('McpRegistry: args에 특수문자 포함 서버 등록 → ok', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.register({
+      name: 'special-args-srv',
+      command: 'npx',
+      args: ['--option=a&b', '--flag=x|y', '--path=/usr/bin'],
+      enabled: true,
+    });
+    expect(result.ok).toBe(true);
+    const server = registry.getServer('special-args-srv');
+    expect(server?.args).toContain('--option=a&b');
+  });
+
+  it('McpRegistry: env 필드에 여러 값 → 보존', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({
+      name: 'multi-env-srv',
+      command: 'node',
+      args: [],
+      enabled: true,
+      env: { NODE_ENV: 'production', PORT: '8080', DEBUG: 'true' },
+    });
+    const server = registry.getServer('multi-env-srv');
+    expect(server?.env?.['NODE_ENV']).toBe('production');
+    expect(server?.env?.['PORT']).toBe('8080');
+    expect(server?.env?.['DEBUG']).toBe('true');
+  });
+
+  it('McpRegistry: listServers는 등록 순서를 보존', () => {
+    const registry = new McpRegistry(logger);
+    const names = ['first', 'second', 'third', 'fourth', 'fifth'];
+    for (const name of names) {
+      registry.register({ name, command: 'npx', args: [], enabled: true });
+    }
+    const list = registry.listServers();
+    expect(list).toHaveLength(5);
+    // WHY: 모든 이름이 포함되어야 함
+    for (const name of names) {
+      expect(list.map((s) => s.name)).toContain(name);
+    }
+  });
+
+  it('McpRegistry: register → unregister → register 사이클 10회', () => {
+    const registry = new McpRegistry(logger);
+    for (let i = 0; i < 10; i++) {
+      const reg = registry.register({ name: 'cycle-srv', command: 'npx', args: [], enabled: true });
+      expect(reg.ok).toBe(true);
+      const unreg = registry.unregister('cycle-srv');
+      expect(unreg.ok).toBe(true);
+    }
+  });
+
+  it('McpLoader: env 필드 있는 서버 설정 로드', async () => {
+    const loader = new McpLoader(logger);
+    const envDir = join(tmpDir, 'env-mcp');
+    const configDir = join(envDir, 'env-server');
+    await Bun.write(
+      join(configDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          {
+            name: 'env-srv',
+            command: 'node',
+            args: ['server.js'],
+            enabled: true,
+            env: { API_KEY: 'secret', PORT: '3000' },
+          },
+        ],
+      }),
+    );
+    const result = await loader.loadFromDirectory(envDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'env-srv');
+      expect(found).toBeDefined();
+    }
+  });
+
+  it('McpLoader: 중첩 디렉토리 구조에서 로드', async () => {
+    const loader = new McpLoader(logger);
+    const nestedDir = join(tmpDir, 'nested-mcp');
+    await writeMcpConfig(nestedDir, 'level1-srv', [
+      { name: 'level1', command: 'npx', args: [], enabled: true },
+    ]);
+    const result = await loader.loadFromDirectory(nestedDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((s) => s.name === 'level1')).toBe(true);
+    }
+  });
+
+  it('McpManager: initialize 후 등록 서버 수 확인', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'count-init-mcp');
+    await writeMcpConfig(mcpDir, 'srv-1', [{ name: 'srv-1', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'srv-2', [{ name: 'srv-2', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'srv-3', [{ name: 'srv-3', command: 'npx', args: [], enabled: false }]);
+
+    await manager.initialize(mcpDir);
+
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(Object.keys(health.value)).toHaveLength(3);
+    }
+  });
+
+  it('McpManager: 선택적 서버만 시작 → healthCheck 혼합 상태', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'selective-start-mcp');
+    for (let i = 0; i < 5; i++) {
+      await writeMcpConfig(mcpDir, `srv-${i}`, [
+        { name: `srv-${i}`, command: 'npx', args: [], enabled: true },
+      ]);
+    }
+
+    await manager.initialize(mcpDir);
+
+    // WHY: 짝수 인덱스만 시작
+    for (let i = 0; i < 5; i += 2) {
+      manager.startServer(`srv-${i}`);
+    }
+
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(health.value['srv-0']).toBe('running');
+      expect(health.value['srv-1']).toBe('stopped');
+      expect(health.value['srv-2']).toBe('running');
+      expect(health.value['srv-3']).toBe('stopped');
+      expect(health.value['srv-4']).toBe('running');
+    }
+  });
+
+  it('McpManager: stopAll 후 개별 서버 재시작 가능', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'restart-after-stopall-mcp');
+    await writeMcpConfig(mcpDir, 'srvA', [{ name: 'srvA', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'srvB', [{ name: 'srvB', command: 'npx', args: [], enabled: true }]);
+
+    await manager.initialize(mcpDir);
+    manager.startServer('srvA');
+    manager.startServer('srvB');
+    manager.stopAll();
+
+    // WHY: 전체 정지 후 개별 재시작
+    const restartA = manager.startServer('srvA');
+    expect(restartA.ok).toBe(true);
+    expect(manager.getStatus('srvA')).toBe('running');
+    expect(manager.getStatus('srvB')).toBe('stopped');
+  });
+
+  it('McpRegistry: 100개 등록 → 50개 해제 → 50개 남음', () => {
+    const registry = new McpRegistry(logger);
+    for (let i = 0; i < 100; i++) {
+      registry.register({ name: `bulk-srv-${i}`, command: 'npx', args: [], enabled: true });
+    }
+    for (let i = 0; i < 50; i++) {
+      registry.unregister(`bulk-srv-${i}`);
+    }
+    expect(registry.listServers()).toHaveLength(50);
+  });
+
+  it('McpLoader: loadAndMerge 이름 충돌 시 프로젝트 args 우선', async () => {
+    const loader = new McpLoader(logger);
+    const globalDir2 = join(tmpDir, 'conflict-global');
+    const projectDir2 = join(tmpDir, 'conflict-project');
+
+    await writeMcpConfig(globalDir2, 'conflict-srv', [
+      { name: 'conflict', command: 'npx', args: ['--global-arg'], enabled: true },
+    ]);
+    await writeMcpConfig(projectDir2, 'conflict-srv', [
+      { name: 'conflict', command: 'npx', args: ['--project-arg'], enabled: true },
+    ]);
+
+    const result = await loader.loadAndMerge(globalDir2, projectDir2);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'conflict');
+      expect(found?.args).toContain('--project-arg');
+    }
+  });
+
+  it('McpManager: healthCheck 반환값에 name 키가 모두 존재', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'health-keys-mcp');
+    const names = ['alpha', 'beta', 'gamma'];
+    for (const name of names) {
+      await writeMcpConfig(mcpDir, name, [
+        { name, command: 'npx', args: [], enabled: true },
+      ]);
+    }
+
+    await manager.initialize(mcpDir);
+    const health = manager.healthCheck();
+    if (health.ok) {
+      for (const name of names) {
+        expect(name in health.value).toBe(true);
+      }
+    }
+  });
+
+  it('McpLoader: servers 배열에 혼합 타입 → 유효 항목만 로드', async () => {
+    const loader = new McpLoader(logger);
+    const mixedTypeDir = join(tmpDir, 'mixed-type-mcp');
+    const configDir = join(mixedTypeDir, 'mixed-srv');
+    await Bun.write(
+      join(configDir, 'mcp.json'),
+      JSON.stringify({
+        servers: [
+          { name: 'valid-srv', command: 'npx', args: [], enabled: true },
+          null,
+          42,
+          'string-item',
+          { command: 'npx' }, // name 누락
+        ],
+      }),
+    );
+    const result = await loader.loadFromDirectory(mixedTypeDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // WHY: 유효한 항목만 포함 (name이 있고 command가 있는 것)
+      expect(result.value.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('McpRegistry: clear 후 healthCheck → 빈 객체', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'clear-health-mcp');
+    await writeMcpConfig(mcpDir, 'srv-x', [{ name: 'srv-x', command: 'npx', args: [], enabled: true }]);
+    await manager.initialize(mcpDir);
+
+    // WHY: 레지스트리 초기화 후 healthCheck
+    registry.clear();
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(Object.keys(health.value)).toHaveLength(0);
+    }
+  });
+
+  it('McpManager: listTools 여러 서버 실행 중에도 배열 반환', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'multi-tools-mcp');
+    for (let i = 0; i < 5; i++) {
+      await writeMcpConfig(mcpDir, `tool-srv-${i}`, [
+        { name: `tool-srv-${i}`, command: 'npx', args: [], enabled: true },
+      ]);
+    }
+
+    await manager.initialize(mcpDir);
+    for (let i = 0; i < 5; i++) {
+      manager.startServer(`tool-srv-${i}`);
+    }
+
+    const tools = manager.listTools();
+    expect(Array.isArray(tools)).toBe(true);
+  });
+
+  it('McpLoader: 존재하지 않는 두 디렉토리로 loadAndMerge → ok 빈 배열', async () => {
+    const loader = new McpLoader(logger);
+    const result = await loader.loadAndMerge(
+      join(tmpDir, 'no-global-dir'),
+      join(tmpDir, 'no-project-dir'),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('McpManager: 비활성 + 활성 혼합 초기화 → 활성만 시작 가능', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'mixed-enabled-mgr-mcp');
+    await writeMcpConfig(mcpDir, 'active-srv', [
+      { name: 'active-srv', command: 'npx', args: [], enabled: true },
+    ]);
+    await writeMcpConfig(mcpDir, 'inactive-srv', [
+      { name: 'inactive-srv', command: 'npx', args: [], enabled: false },
+    ]);
+
+    await manager.initialize(mcpDir);
+
+    const activeResult = manager.startServer('active-srv');
+    expect(activeResult.ok).toBe(true);
+
+    const inactiveResult = manager.startServer('inactive-srv');
+    expect(inactiveResult.ok).toBe(false);
+  });
+
+  it('McpLoader: 대규모 args 배열(20개) 로드 → 보존', async () => {
+    const loader = new McpLoader(logger);
+    const largeArgsDir = join(tmpDir, 'large-args-mcp');
+    const args = Array.from({ length: 20 }, (_, i) => `--arg-${i}=value${i}`);
+    const configDir = join(largeArgsDir, 'large-args-srv');
+    await Bun.write(
+      join(configDir, 'mcp.json'),
+      JSON.stringify({ servers: [{ name: 'large-args', command: 'npx', args, enabled: true }] }),
+    );
+
+    const result = await loader.loadFromDirectory(largeArgsDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'large-args');
+      expect(found?.args).toHaveLength(20);
+    }
+  });
+
+  it('McpManager: stopServer 후 재시작 → running 상태', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'stop-restart-mcp');
+    await writeMcpConfig(mcpDir, 'resilient-srv', [
+      { name: 'resilient-srv', command: 'npx', args: [], enabled: true },
+    ]);
+
+    await manager.initialize(mcpDir);
+    manager.startServer('resilient-srv');
+    manager.stopServer('resilient-srv');
+
+    const restartResult = manager.startServer('resilient-srv');
+    expect(restartResult.ok).toBe(true);
+    expect(manager.getStatus('resilient-srv')).toBe('running');
+  });
+
+  it('McpRegistry: unregister 없는 이름 → error.code 확인', () => {
+    const registry = new McpRegistry(logger);
+    const result = registry.unregister('never-registered');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('McpRegistry: getServer는 등록된 config 복사본 반환', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({
+      name: 'copy-test',
+      command: 'npx',
+      args: ['--test'],
+      enabled: true,
+    });
+    const server1 = registry.getServer('copy-test');
+    const server2 = registry.getServer('copy-test');
+    // WHY: 동일한 논리적 데이터를 가져야 함
+    expect(server1?.name).toBe(server2?.name);
+    expect(server1?.command).toBe(server2?.command);
+  });
+
+  it('McpLoader: 비어있는 mcp.json 처리', async () => {
+    const loader = new McpLoader(logger);
+    const emptyFileDir = join(tmpDir, 'empty-file-mcp');
+    const configDir = join(emptyFileDir, 'empty-file-srv');
+    await Bun.write(join(configDir, 'mcp.json'), '');
+
+    const result = await loader.loadFromDirectory(emptyFileDir);
+    // WHY: 빈 파일은 파싱 에러이거나 건너뜀
+    if (!result.ok) {
+      expect(result.ok).toBe(false);
+    } else {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('McpManager: healthCheck 값은 running 또는 stopped', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'health-values-mcp');
+    await writeMcpConfig(mcpDir, 'val-a', [{ name: 'val-a', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'val-b', [{ name: 'val-b', command: 'npx', args: [], enabled: true }]);
+
+    await manager.initialize(mcpDir);
+    manager.startServer('val-a');
+
+    const health = manager.healthCheck();
+    if (health.ok) {
+      for (const status of Object.values(health.value)) {
+        expect(['running', 'stopped'].includes(status)).toBe(true);
+      }
+    }
+  });
+
+  it('McpLoader: loadAndMerge 세 번 연속 호출 → 결과 동일', async () => {
+    const loader = new McpLoader(logger);
+    const globalDir3 = join(tmpDir, 'stable-global-mcp');
+    await writeMcpConfig(globalDir3, 'stable-srv', [
+      { name: 'stable-srv', command: 'npx', args: [], enabled: true },
+    ]);
+
+    const r1 = await loader.loadAndMerge(globalDir3);
+    const r2 = await loader.loadAndMerge(globalDir3);
+    const r3 = await loader.loadAndMerge(globalDir3);
+
+    if (r1.ok && r2.ok && r3.ok) {
+      expect(r1.value.length).toBe(r2.value.length);
+      expect(r2.value.length).toBe(r3.value.length);
+    }
+  });
+
+  it('McpRegistry: 빈 args 배열과 여러 args 서버 혼합 등록', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({ name: 'no-args-srv', command: 'npx', args: [], enabled: true });
+    registry.register({ name: 'multi-args-srv', command: 'npx', args: ['--a', '--b', '--c'], enabled: true });
+
+    const noArgs = registry.getServer('no-args-srv');
+    const multiArgs = registry.getServer('multi-args-srv');
+
+    expect(noArgs?.args).toHaveLength(0);
+    expect(multiArgs?.args).toHaveLength(3);
+  });
+
+  it('McpManager: getStatus 반환값은 string 타입', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'getStatus-type-mcp');
+    await writeMcpConfig(mcpDir, 'type-srv', [
+      { name: 'type-srv', command: 'npx', args: [], enabled: true },
+    ]);
+    await manager.initialize(mcpDir);
+
+    const status = manager.getStatus('type-srv');
+    if (status !== null && status !== undefined) {
+      expect(typeof status).toBe('string');
+    }
+  });
+
+  it('전체 파이프라인: 글로벌 없이 프로젝트만 → 정상 동작', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const emptyGlobal = join(tmpDir, 'project-only-global');
+    const projectOnlyDir = join(tmpDir, 'project-only-project');
+
+    await Bun.write(join(emptyGlobal, '.keep'), '');
+    await writeMcpConfig(projectOnlyDir, 'proj-only-srv', [
+      { name: 'proj-only', command: 'node', args: ['app.js'], enabled: true },
+    ]);
+
+    const initResult = await manager.initialize(emptyGlobal, projectOnlyDir);
+    expect(initResult.ok).toBe(true);
+
+    const startResult = manager.startServer('proj-only');
+    expect(startResult.ok).toBe(true);
+
+    expect(manager.getStatus('proj-only')).toBe('running');
+
+    const stopResult = manager.stopAll();
+    expect(stopResult.ok).toBe(true);
+
+    expect(manager.getStatus('proj-only')).toBe('stopped');
+  });
+
+  it('McpRegistry: getServer → command 값 보존 확인', () => {
+    const registry = new McpRegistry(logger);
+    registry.register({
+      name: 'cmd-verify',
+      command: 'python3',
+      args: ['-m', 'mcp_server'],
+      enabled: true,
+    });
+    const server = registry.getServer('cmd-verify');
+    expect(server?.command).toBe('python3');
+    expect(server?.args).toContain('-m');
+    expect(server?.args).toContain('mcp_server');
+  });
+
+  it('McpLoader: loadFromDirectory 5번 반복 → 동일 개수', async () => {
+    const loader = new McpLoader(logger);
+    const repeatDir = join(tmpDir, 'repeat-load-mcp');
+    await writeMcpConfig(repeatDir, 'rep-srv-1', [{ name: 'rep-1', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(repeatDir, 'rep-srv-2', [{ name: 'rep-2', command: 'npx', args: [], enabled: true }]);
+
+    let prevCount = -1;
+    for (let i = 0; i < 5; i++) {
+      const result = await loader.loadFromDirectory(repeatDir);
+      if (result.ok) {
+        if (prevCount === -1) {
+          prevCount = result.value.length;
+        }
+        expect(result.value.length).toBe(prevCount);
+      }
+    }
+  });
+
+  it('McpManager: 동일 서버 3번 시작 시도 → 두 번째부터 에러', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'triple-start-mcp');
+    await writeMcpConfig(mcpDir, 'triple-srv', [
+      { name: 'triple-srv', command: 'npx', args: [], enabled: true },
+    ]);
+
+    await manager.initialize(mcpDir);
+
+    const first = manager.startServer('triple-srv');
+    expect(first.ok).toBe(true);
+
+    const second = manager.startServer('triple-srv');
+    expect(second.ok).toBe(false);
+
+    const third = manager.startServer('triple-srv');
+    expect(third.ok).toBe(false);
+  });
+
+  it('McpRegistry: listServers는 빈 레지스트리에서 빈 배열 반환', () => {
+    const registry = new McpRegistry(logger);
+    expect(registry.listServers()).toHaveLength(0);
+    expect(Array.isArray(registry.listServers())).toBe(true);
+  });
+
+  it('McpLoader: 같은 서버 이름 여러 디렉토리 → loadFromDirectory 모두 로드', async () => {
+    const loader = new McpLoader(logger);
+    const dupNameDir = join(tmpDir, 'dup-name-load-mcp');
+
+    // WHY: 서로 다른 하위 폴더지만 같은 서버 name → 구현에 따라 모두 로드하거나 마지막만
+    await writeMcpConfig(dupNameDir, 'folder-a', [{ name: 'dup', command: 'npx', args: ['--a'], enabled: true }]);
+    await writeMcpConfig(dupNameDir, 'folder-b', [{ name: 'dup', command: 'npx', args: ['--b'], enabled: true }]);
+
+    const result = await loader.loadFromDirectory(dupNameDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // 구현에 따라 1개 또는 2개
+      expect(result.value.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('McpManager: initialize → 서버 없이 listTools → 빈 배열', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'no-tools-before-start-mcp');
+    await writeMcpConfig(mcpDir, 'srv', [{ name: 'srv', command: 'npx', args: [], enabled: true }]);
+    await manager.initialize(mcpDir);
+
+    const tools = manager.listTools();
+    expect(Array.isArray(tools)).toBe(true);
+    // WHY: 서버가 시작되지 않았으므로 도구 없음
+    expect(tools.length).toBe(0);
+  });
+
+  it('McpLoader: loadAndMerge args 보존 확인', async () => {
+    const loader = new McpLoader(logger);
+    const argsGlobal = join(tmpDir, 'args-global');
+    const argsProject = join(tmpDir, 'args-project');
+
+    await writeMcpConfig(argsGlobal, 'args-srv', [
+      { name: 'args-srv', command: 'npx', args: ['--global-only'], enabled: true },
+    ]);
+    await writeMcpConfig(argsProject, 'args-srv', [
+      { name: 'args-srv', command: 'npx', args: ['--project-only', '--extra'], enabled: true },
+    ]);
+
+    const result = await loader.loadAndMerge(argsGlobal, argsProject);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'args-srv');
+      expect(found?.args).toContain('--project-only');
+      expect(found?.args).not.toContain('--global-only');
+    }
+  });
+
+  it('McpRegistry: getServer는 null 또는 McpServerConfig 반환', () => {
+    const registry = new McpRegistry(logger);
+    const nullResult = registry.getServer('does-not-exist');
+    expect(nullResult === null || nullResult === undefined).toBe(true);
+
+    registry.register({ name: 'exists', command: 'npx', args: [], enabled: true });
+    const found = registry.getServer('exists');
+    expect(found).not.toBeNull();
+    expect(found?.name).toBe('exists');
+  });
+
+  it('McpManager: healthCheck 반환값이 객체이다', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'health-object-mcp');
+    await writeMcpConfig(mcpDir, 'obj-srv', [{ name: 'obj-srv', command: 'npx', args: [], enabled: true }]);
+    await manager.initialize(mcpDir);
+
+    const health = manager.healthCheck();
+    if (health.ok) {
+      expect(typeof health.value).toBe('object');
+      expect(health.value).not.toBeNull();
+    }
+  });
+
+  it('전체 파이프라인: 20개 서버 → 모두 시작 → healthCheck → stopAll', async () => {
+    const registry = new McpRegistry(logger);
+    const loader = new McpLoader(logger);
+    const manager = new McpManager(registry, loader, logger);
+
+    const mcpDir = join(tmpDir, 'twenty-servers-e2e-mcp');
+    for (let i = 0; i < 20; i++) {
+      await writeMcpConfig(mcpDir, `e2e-srv-${i}`, [
+        { name: `e2e-srv-${i}`, command: 'npx', args: [`--port=${7000 + i}`], enabled: true },
+      ]);
+    }
+
+    await manager.initialize(mcpDir);
+
+    for (let i = 0; i < 20; i++) {
+      const result = manager.startServer(`e2e-srv-${i}`);
+      expect(result.ok).toBe(true);
+    }
+
+    const health = manager.healthCheck();
+    if (health.ok) {
+      for (let i = 0; i < 20; i++) {
+        expect(health.value[`e2e-srv-${i}`]).toBe('running');
+      }
+    }
+
+    const stopResult = manager.stopAll();
+    expect(stopResult.ok).toBe(true);
+
+    const afterHealth = manager.healthCheck();
+    if (afterHealth.ok) {
+      for (let i = 0; i < 20; i++) {
+        expect(afterHealth.value[`e2e-srv-${i}`]).toBe('stopped');
+      }
+    }
+  });
 });

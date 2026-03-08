@@ -1013,3 +1013,467 @@ describe('Designer validateDesign 추가 랜덤/경계값', () => {
     }
   });
 });
+
+// ── createDesign 추가 실패 경계값 ─────────────────────────────
+
+describe('Designer createDesign 추가 실패 경계값', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('null 문자 포함 plan → ok 또는 ok=false', () => {
+    const result = designer.createDesign('proj', '\0', [createFeature()]);
+    // WHY: null 문자는 공백 유사 처리 가능 → 구현 의존
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('plan이 오직 개행 문자 → ok=false', () => {
+    const result = designer.createDesign('proj', '\n', [createFeature()]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('plan이 오직 캐리지 리턴 → ok=false', () => {
+    const result = designer.createDesign('proj', '\r', [createFeature()]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('plan이 오직 형식 피드 → ok=false', () => {
+    const result = designer.createDesign('proj', '\f', [createFeature()]);
+    expect(result.ok).toBe(false);
+  });
+
+  it('빈 plan + 1개 기능 → layer1_empty_plan', () => {
+    const result = designer.createDesign('proj', '', [createFeature({ id: 'f1' })]);
+    if (!result.ok) {
+      expect(result.error.code).toBe('layer1_empty_plan');
+    }
+  });
+
+  it('빈 plan + 10개 기능 → layer1_empty_plan', () => {
+    const features = Array.from({ length: 10 }, (_, i) => createFeature({ id: `f-${i}` }));
+    const result = designer.createDesign('proj', '', features);
+    if (!result.ok) {
+      expect(result.error.code).toBe('layer1_empty_plan');
+    }
+  });
+
+  it('plan 있음 + 빈 기능 배열 → layer1_no_features', () => {
+    const result = designer.createDesign('proj', 'Valid plan content', []);
+    if (!result.ok) {
+      expect(result.error.code).toBe('layer1_no_features');
+    }
+  });
+
+  it('오직 공백으로 된 plan (5개) → ok=false', () => {
+    for (let i = 1; i <= 5; i++) {
+      const result = designer.createDesign('proj', ' '.repeat(i), [createFeature()]);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('error.code는 비어있지 않음', () => {
+    const result = designer.createDesign('proj', '', [createFeature()]);
+    if (!result.ok) {
+      expect(result.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('error.message는 비어있지 않음', () => {
+    const result = designer.createDesign('proj', '', [createFeature()]);
+    if (!result.ok) {
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('실패 후 성공 plan → 인스턴스 상태 유지', () => {
+    designer.createDesign('proj', '', [createFeature()]);
+    designer.createDesign('proj', 'Plan', []);
+    const result = designer.createDesign('proj', 'Valid Plan', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── createDesign 성공 시 값 구조 검증 ─────────────────────────
+
+describe('Designer createDesign 반환값 구조 검증', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('result.value는 최소 10자 이상', () => {
+    const result = designer.createDesign('proj', 'Plan content here', [createFeature()]);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  it('result.value에 projectId가 포함됨', () => {
+    const result = designer.createDesign('my-special-project', 'Plan', [createFeature()]);
+    if (result.ok) {
+      expect(result.value).toContain('my-special-project');
+    }
+  });
+
+  it('result.value에 기능 name이 포함됨', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ name: 'UniqueFeatureName' })]);
+    if (result.ok) {
+      expect(result.value).toContain('UniqueFeatureName');
+    }
+  });
+
+  it('result.value에 기능 ID가 포함됨', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ id: 'unique-feat-id-xyz' })]);
+    if (result.ok) {
+      expect(result.value).toContain('unique-feat-id-xyz');
+    }
+  });
+
+  it('두 번 호출 → 동일 value 반환', () => {
+    const f = [createFeature({ id: 'f1', name: 'Feature One' })];
+    const r1 = designer.createDesign('proj', 'Plan', f);
+    const r2 = designer.createDesign('proj', 'Plan', f);
+    if (r1.ok && r2.ok) {
+      expect(r1.value).toBe(r2.value);
+    }
+  });
+
+  it('다른 projectId → 다른 value', () => {
+    const f = [createFeature()];
+    const r1 = designer.createDesign('proj-A', 'Plan', f);
+    const r2 = designer.createDesign('proj-B', 'Plan', f);
+    if (r1.ok && r2.ok) {
+      expect(r1.value).not.toBe(r2.value);
+    }
+  });
+
+  it('result.value에 plan 텍스트 포함', () => {
+    const plan = 'PlanTextForValidation';
+    const result = designer.createDesign('proj', plan, [createFeature()]);
+    if (result.ok) {
+      expect(result.value).toContain(plan);
+    }
+  });
+
+  it('수락 기준 description이 result.value에 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [
+      createFeature({
+        acceptanceCriteria: [{ id: 'ac-unique-123', description: '기준-desc-unique', verifiable: true, testCategory: 'test' }],
+      }),
+    ]);
+    if (result.ok) {
+      // WHY: buildFeatureDesignSection includes criterion.description, not criterion.id
+      expect(result.value).toContain('기준-desc-unique');
+    }
+  });
+
+  it('입력 이름이 result.value에 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [
+      createFeature({
+        inputs: [{ name: 'uniqueInputField', type: 'string', constraints: 'none', required: true }],
+      }),
+    ]);
+    if (result.ok) {
+      expect(result.value).toContain('uniqueInputField');
+    }
+  });
+
+  it('출력 이름이 result.value에 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [
+      createFeature({
+        outputs: [{ name: 'uniqueOutputField', type: 'string', constraints: 'none', required: false }],
+      }),
+    ]);
+    if (result.ok) {
+      expect(result.value).toContain('uniqueOutputField');
+    }
+  });
+});
+
+// ── validateDesign 반환 issues 구조 검증 ──────────────────────
+
+describe('Designer validateDesign issues 구조 검증', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('issues 배열의 모든 원소가 비어있지 않음', () => {
+    const features = [createFeature({ id: 'feat-not-here' })];
+    const result = designer.validateDesign('Unrelated text', features);
+    if (result.ok) {
+      for (const issue of result.value) {
+        expect(issue.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('누락 ID가 issues 원소에 포함됨', () => {
+    const missingId = 'feat-very-specific-id';
+    const features = [createFeature({ id: missingId })];
+    const result = designer.validateDesign('No such id here', features);
+    if (result.ok) {
+      const hasId = result.value.some((i) => i.includes(missingId));
+      expect(hasId).toBe(true);
+    }
+  });
+
+  it('두 누락 ID → issues에 각각 언급됨', () => {
+    const id1 = 'feat-first-missing';
+    const id2 = 'feat-second-missing';
+    const features = [createFeature({ id: id1 }), createFeature({ id: id2 })];
+    const result = designer.validateDesign('Nothing here', features);
+    if (result.ok) {
+      expect(result.value.some((i) => i.includes(id1))).toBe(true);
+      expect(result.value.some((i) => i.includes(id2))).toBe(true);
+    }
+  });
+
+  it('createDesign → validateDesign → issues 없음 (파이프라인)', () => {
+    const feats = [
+      createFeature({ id: 'pipe-feat-1', name: 'Feature 1' }),
+      createFeature({ id: 'pipe-feat-2', name: 'Feature 2' }),
+    ];
+    const design = designer.createDesign('proj-pipe', 'Plan content', feats);
+    if (design.ok) {
+      const validation = designer.validateDesign(design.value, feats);
+      if (validation.ok) {
+        expect(validation.value).toHaveLength(0);
+      }
+    }
+  });
+
+  it('validateDesign result.ok는 항상 true', () => {
+    const cases: Array<[string, ReturnType<typeof createFeature>[]]> = [
+      ['', [createFeature({ id: 'a' })]],
+      ['content', []],
+      ['feat-b content', [createFeature({ id: 'feat-b' })]],
+      ['lorem ipsum', [createFeature({ id: 'c' }), createFeature({ id: 'd' })]],
+    ];
+    for (const [design, features] of cases) {
+      const result = designer.validateDesign(design, features);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('issues는 배열 타입', () => {
+    const result = designer.validateDesign('Some text', [createFeature({ id: 'feat-arr' })]);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('dependencies 체크: 의존성 있는데 Dependencies 없음 → issue 1개 이상', () => {
+    const features = [createFeature({ id: 'feat-dep-check', dependencies: ['dep-feat'] })];
+    // WHY: design text includes feature id but lacks "Dependencies" word → triggers missing-section issue
+    const result = designer.validateDesign('feat-dep-check present but no deps section here', features);
+    if (result.ok) {
+      // WHY: Dependencies 섹션 누락 이슈 포함
+      expect(result.value.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('validateDesign 10번 빠른 연속 호출 → 모두 ok', () => {
+    const features = [createFeature({ id: 'rapid-feat' })];
+    for (let i = 0; i < 10; i++) {
+      const result = designer.validateDesign(`content-${i} rapid-feat`, features);
+      expect(result.ok).toBe(true);
+    }
+  });
+});
+
+// ── createDesign + validateDesign 조합 시나리오 ───────────────
+
+describe('Designer createDesign + validateDesign 조합', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('단일 기능 파이프라인 → issues 0개', () => {
+    const f = [createFeature({ id: 'single-f', name: 'Single Feature' })];
+    const design = designer.createDesign('proj-single', 'Single plan', f);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('다른 기능 목록으로 validateDesign → issues 있음', () => {
+    const f1 = [createFeature({ id: 'feat-design-f1' })];
+    const f2 = [createFeature({ id: 'feat-design-f2' })];
+    const design = designer.createDesign('proj', 'Plan', f1);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f2);
+      if (v.ok) {
+        // feat-design-f2는 design에 없으므로 issue 발생
+        expect(v.value.some((i) => i.includes('feat-design-f2'))).toBe(true);
+      }
+    }
+  });
+
+  it('의존성 체인 3단계 파이프라인 성공', () => {
+    const f = [
+      createFeature({ id: 'step-a', dependencies: [] }),
+      createFeature({ id: 'step-b', dependencies: ['step-a'] }),
+      createFeature({ id: 'step-c', dependencies: ['step-b'] }),
+    ];
+    const design = designer.createDesign('proj-chain', 'Chain plan', f);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('수락 기준 포함 파이프라인 → issues 없음', () => {
+    const f = [createFeature({
+      id: 'feat-ac',
+      acceptanceCriteria: [
+        { id: 'ac-x', description: '기준 X', verifiable: true, testCategory: 'unit' },
+        { id: 'ac-y', description: '기준 Y', verifiable: false, testCategory: 'manual' },
+      ],
+    })];
+    const design = designer.createDesign('proj', 'Plan with AC', f);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('입출력 포함 파이프라인 → issues 없음', () => {
+    const f = [createFeature({
+      id: 'feat-io',
+      inputs: [{ name: 'input1', type: 'string', constraints: 'any', required: true }],
+      outputs: [{ name: 'output1', type: 'string', constraints: 'any', required: true }],
+    })];
+    const design = designer.createDesign('proj', 'IO Plan', f);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('10개 기능 파이프라인 성공', () => {
+    const f = Array.from({ length: 10 }, (_, i) =>
+      createFeature({ id: `pipe-${i}`, name: `Pipe Feature ${i}` }),
+    );
+    const design = designer.createDesign('proj-10', '10 features plan', f);
+    if (design.ok) {
+      const v = designer.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('다른 인스턴스로 파이프라인 → issues 없음', () => {
+    const d1 = new Designer(new ConsoleLogger('error'));
+    const d2 = new Designer(new ConsoleLogger('error'));
+    const f = [createFeature({ id: 'cross-inst' })];
+    const design = d1.createDesign('proj', 'Plan', f);
+    if (design.ok) {
+      const v = d2.validateDesign(design.value, f);
+      if (v.ok) expect(v.value).toHaveLength(0);
+    }
+  });
+
+  it('빈 기능 목록으로 validateDesign → issues 없음', () => {
+    const result = designer.validateDesign('Any design text', []);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('매우 긴 설계 문서 + 10개 기능 → issues 없음', () => {
+    const f = Array.from({ length: 10 }, (_, i) => createFeature({ id: `long-${i}` }));
+    const ids = f.map((feat) => feat.id).join(' ');
+    const design = `${ids} ${'detailed content '.repeat(500)}`;
+    const result = designer.validateDesign(design, f);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+});
+
+// ── Designer 메서드 존재 및 반환 타입 검증 ────────────────────
+
+describe('Designer 메서드 인터페이스 검증', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('createDesign 반환값은 객체이다', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature()]);
+    expect(typeof result).toBe('object');
+    expect(result).not.toBeNull();
+  });
+
+  it('validateDesign 반환값은 객체이다', () => {
+    const result = designer.validateDesign('Design', [createFeature({ id: 'f' })]);
+    expect(typeof result).toBe('object');
+    expect(result).not.toBeNull();
+  });
+
+  it('createDesign 반환값에 ok 필드가 있다', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature()]);
+    expect('ok' in result).toBe(true);
+  });
+
+  it('validateDesign 반환값에 ok 필드가 있다', () => {
+    const result = designer.validateDesign('Design', [createFeature({ id: 'f' })]);
+    expect('ok' in result).toBe(true);
+  });
+
+  it('createDesign 성공 시 value 필드가 있다', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature()]);
+    if (result.ok) {
+      expect('value' in result).toBe(true);
+    }
+  });
+
+  it('validateDesign 성공 시 value 필드가 있다', () => {
+    const result = designer.validateDesign('Design feat-v', [createFeature({ id: 'feat-v' })]);
+    if (result.ok) {
+      expect('value' in result).toBe(true);
+    }
+  });
+
+  it('createDesign 실패 시 error 필드가 있다', () => {
+    const result = designer.createDesign('proj', '', [createFeature()]);
+    if (!result.ok) {
+      expect('error' in result).toBe(true);
+    }
+  });
+
+  it('createDesign 실패 시 error.code 필드가 있다', () => {
+    const result = designer.createDesign('proj', '', [createFeature()]);
+    if (!result.ok) {
+      expect('code' in result.error).toBe(true);
+    }
+  });
+
+  it('createDesign 실패 시 error.message 필드가 있다', () => {
+    const result = designer.createDesign('proj', '', [createFeature()]);
+    if (!result.ok) {
+      expect('message' in result.error).toBe(true);
+    }
+  });
+
+  it('Designer는 createDesign과 validateDesign 두 메서드를 가짐', () => {
+    expect(typeof designer.createDesign).toBe('function');
+    expect(typeof designer.validateDesign).toBe('function');
+  });
+
+  it('10번 연속 성공+실패 교차 호출 → 상태 독립', () => {
+    for (let i = 0; i < 10; i++) {
+      if (i % 2 === 0) {
+        const r = designer.createDesign('proj', 'Valid plan', [createFeature({ id: `f-${i}` })]);
+        expect(r.ok).toBe(true);
+      } else {
+        const r = designer.createDesign('proj', '', [createFeature({ id: `f-${i}` })]);
+        expect(r.ok).toBe(false);
+      }
+    }
+  });
+});

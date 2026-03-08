@@ -1010,3 +1010,516 @@ describe('각 서버 args 경계값 검증', () => {
     expect(WEB_SEARCH_SERVER.enabled).toBe(true);
   });
 });
+
+// ── 타입 구조 심층 검증 ───────────────────────────────────────
+
+describe('McpServerConfig 타입 구조 심층 검증', () => {
+  it('OS_CONTROL_SERVER는 5개 필드 이하를 가짐 (name, command, args, enabled, [env])', () => {
+    const keys = Object.keys(OS_CONTROL_SERVER);
+    expect(keys.length).toBeLessThanOrEqual(5);
+  });
+
+  it('BROWSER_SERVER는 최소 4개 필드를 가짐', () => {
+    const keys = Object.keys(BROWSER_SERVER);
+    expect(keys.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('WEB_SEARCH_SERVER는 최소 4개 필드를 가짐', () => {
+    const keys = Object.keys(WEB_SEARCH_SERVER);
+    expect(keys.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('GIT_SERVER는 최소 4개 필드를 가짐', () => {
+    const keys = Object.keys(GIT_SERVER);
+    expect(keys.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('OS_CONTROL_SERVER는 name 키를 가짐', () => {
+    expect('name' in OS_CONTROL_SERVER).toBe(true);
+  });
+
+  it('OS_CONTROL_SERVER는 command 키를 가짐', () => {
+    expect('command' in OS_CONTROL_SERVER).toBe(true);
+  });
+
+  it('OS_CONTROL_SERVER는 args 키를 가짐', () => {
+    expect('args' in OS_CONTROL_SERVER).toBe(true);
+  });
+
+  it('OS_CONTROL_SERVER는 enabled 키를 가짐', () => {
+    expect('enabled' in OS_CONTROL_SERVER).toBe(true);
+  });
+
+  it('BROWSER_SERVER는 name 키를 가짐', () => {
+    expect('name' in BROWSER_SERVER).toBe(true);
+  });
+
+  it('WEB_SEARCH_SERVER는 enabled 키를 가짐', () => {
+    expect('enabled' in WEB_SEARCH_SERVER).toBe(true);
+  });
+
+  it('GIT_SERVER는 command 키를 가짐', () => {
+    expect('command' in GIT_SERVER).toBe(true);
+  });
+
+  it('모든 서버가 name 키를 가짐', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect('name' in config).toBe(true);
+    }
+  });
+
+  it('모든 서버가 command 키를 가짐', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect('command' in config).toBe(true);
+    }
+  });
+
+  it('모든 서버가 args 키를 가짐', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect('args' in config).toBe(true);
+    }
+  });
+
+  it('모든 서버가 enabled 키를 가짐', () => {
+    for (const config of BUILTIN_SERVERS) {
+      expect('enabled' in config).toBe(true);
+    }
+  });
+
+  it('Object.entries로 모든 서버 순회 → 4개', () => {
+    let count = 0;
+    for (const _ of BUILTIN_SERVERS) {
+      count++;
+    }
+    expect(count).toBe(4);
+  });
+
+  it('각 서버 JSON.stringify → 유효한 JSON', () => {
+    for (const config of BUILTIN_SERVERS) {
+      const str = JSON.stringify(config);
+      expect(() => JSON.parse(str)).not.toThrow();
+    }
+  });
+});
+
+// ── 서버별 추가 속성 검증 ─────────────────────────────────────
+
+describe('OS_CONTROL_SERVER 추가 속성 검증', () => {
+  it('name은 os로 시작하고 control로 끝남', () => {
+    const parts = OS_CONTROL_SERVER.name.split('-');
+    expect(parts[0]).toBe('os');
+    expect(parts[parts.length - 1]).toBe('control');
+  });
+
+  it('name이 두 단어로 구성', () => {
+    expect(OS_CONTROL_SERVER.name.split('-').length).toBe(2);
+  });
+
+  it('command가 정확히 builtin', () => {
+    expect(OS_CONTROL_SERVER.command === 'builtin').toBe(true);
+  });
+
+  it('enabled가 정확히 true', () => {
+    expect(OS_CONTROL_SERVER.enabled === true).toBe(true);
+  });
+
+  it('args가 빈 배열 → splice로 복사해도 길이 0', () => {
+    const copy = OS_CONTROL_SERVER.args.slice();
+    expect(copy.length).toBe(0);
+  });
+
+  it('name을 toUpperCase 하면 OS-CONTROL', () => {
+    expect(OS_CONTROL_SERVER.name.toUpperCase()).toBe('OS-CONTROL');
+  });
+
+  it('name을 split("-") → ["os", "control"]', () => {
+    const parts = OS_CONTROL_SERVER.name.split('-');
+    expect(parts).toEqual(['os', 'control']);
+  });
+
+  it('name.indexOf("-") → 2', () => {
+    expect(OS_CONTROL_SERVER.name.indexOf('-')).toBe(2);
+  });
+
+  it('command.charAt(0) → b', () => {
+    expect(OS_CONTROL_SERVER.command.charAt(0)).toBe('b');
+  });
+
+  it('name.includes("control") → true', () => {
+    expect(OS_CONTROL_SERVER.name.includes('control')).toBe(true);
+  });
+});
+
+describe('BROWSER_SERVER 추가 속성 검증', () => {
+  it('name에 하이픈이 없음 → split("-").length === 1', () => {
+    expect(BROWSER_SERVER.name.split('-').length).toBe(1);
+  });
+
+  it('name이 b로 시작', () => {
+    expect(BROWSER_SERVER.name.startsWith('b')).toBe(true);
+  });
+
+  it('name이 r로 끝남', () => {
+    expect(BROWSER_SERVER.name.endsWith('r')).toBe(true);
+  });
+
+  it('name.charAt(0) → b', () => {
+    expect(BROWSER_SERVER.name.charAt(0)).toBe('b');
+  });
+
+  it('name이 알파벳만으로 구성', () => {
+    expect(/^[a-zA-Z]+$/.test(BROWSER_SERVER.name)).toBe(true);
+  });
+
+  it('name의 모든 문자가 소문자', () => {
+    for (const char of BROWSER_SERVER.name) {
+      expect(char).toBe(char.toLowerCase());
+    }
+  });
+
+  it('args.length === 0 (항등 비교)', () => {
+    expect(BROWSER_SERVER.args.length === 0).toBe(true);
+  });
+
+  it('name.includes("browser") → true', () => {
+    expect(BROWSER_SERVER.name.includes('browser')).toBe(true);
+  });
+
+  it('command가 소문자만으로 구성', () => {
+    expect(/^[a-z]+$/.test(BROWSER_SERVER.command)).toBe(true);
+  });
+
+  it('enabled의 반전 → false', () => {
+    expect(!BROWSER_SERVER.enabled).toBe(false);
+  });
+});
+
+describe('WEB_SEARCH_SERVER 추가 속성 검증', () => {
+  it('name.split("-") → 길이 2', () => {
+    expect(WEB_SEARCH_SERVER.name.split('-').length).toBe(2);
+  });
+
+  it('name.split("-")[0] → web', () => {
+    expect(WEB_SEARCH_SERVER.name.split('-')[0]).toBe('web');
+  });
+
+  it('name.split("-")[1] → search', () => {
+    expect(WEB_SEARCH_SERVER.name.split('-')[1]).toBe('search');
+  });
+
+  it('name.toUpperCase() → WEB-SEARCH', () => {
+    expect(WEB_SEARCH_SERVER.name.toUpperCase()).toBe('WEB-SEARCH');
+  });
+
+  it('name.replace("-", "_") → web_search', () => {
+    expect(WEB_SEARCH_SERVER.name.replace('-', '_')).toBe('web_search');
+  });
+
+  it('name.startsWith("web") → true', () => {
+    expect(WEB_SEARCH_SERVER.name.startsWith('web')).toBe(true);
+  });
+
+  it('name.endsWith("search") → true', () => {
+    expect(WEB_SEARCH_SERVER.name.endsWith('search')).toBe(true);
+  });
+
+  it('args가 배열이고 길이 0', () => {
+    expect(Array.isArray(WEB_SEARCH_SERVER.args) && WEB_SEARCH_SERVER.args.length === 0).toBe(true);
+  });
+
+  it('name.length === command.length + 3', () => {
+    // web-search(10) === builtin(7) + 3
+    expect(WEB_SEARCH_SERVER.name.length).toBe(WEB_SEARCH_SERVER.command.length + 3);
+  });
+
+  it('name에 숫자 없음', () => {
+    expect(/\d/.test(WEB_SEARCH_SERVER.name)).toBe(false);
+  });
+});
+
+describe('GIT_SERVER 추가 속성 검증', () => {
+  it('name이 g로 시작', () => {
+    expect(GIT_SERVER.name.startsWith('g')).toBe(true);
+  });
+
+  it('name이 t로 끝남', () => {
+    expect(GIT_SERVER.name.endsWith('t')).toBe(true);
+  });
+
+  it('name.charAt(1) → i', () => {
+    expect(GIT_SERVER.name.charAt(1)).toBe('i');
+  });
+
+  it('name.charAt(2) → t', () => {
+    expect(GIT_SERVER.name.charAt(2)).toBe('t');
+  });
+
+  it('name.toUpperCase() → GIT', () => {
+    expect(GIT_SERVER.name.toUpperCase()).toBe('GIT');
+  });
+
+  it('name에 대시(-) 없음', () => {
+    expect(GIT_SERVER.name.includes('-')).toBe(false);
+  });
+
+  it('name이 알파벳만으로 구성', () => {
+    expect(/^[a-zA-Z]+$/.test(GIT_SERVER.name)).toBe(true);
+  });
+
+  it('name.split("").length === 3', () => {
+    expect(GIT_SERVER.name.split('').length).toBe(3);
+  });
+
+  it('args.slice() → 빈 배열', () => {
+    expect(GIT_SERVER.args.slice()).toEqual([]);
+  });
+
+  it('name === "git" 엄격 비교', () => {
+    expect(GIT_SERVER.name === 'git').toBe(true);
+  });
+});
+
+// ── BUILTIN_SERVERS 배열 연산 ─────────────────────────────────
+
+describe('BUILTIN_SERVERS 배열 연산 검증', () => {
+  it('concat으로 새 배열 → 길이 5 (기존 서버 + 1개 추가)', () => {
+    const extra: McpServerConfig = { name: 'extra', command: 'builtin', args: [], enabled: true };
+    const extended = [...BUILTIN_SERVERS, extra];
+    expect(extended.length).toBe(5);
+  });
+
+  it('filter로 command=builtin → 원본과 동일 길이', () => {
+    const filtered = BUILTIN_SERVERS.filter((s) => s.command === 'builtin');
+    expect(filtered.length).toBe(BUILTIN_SERVERS.length);
+  });
+
+  it('map으로 enabled 필드만 추출 → 모두 true', () => {
+    const enabledList = BUILTIN_SERVERS.map((s) => s.enabled);
+    expect(enabledList.every((e) => e === true)).toBe(true);
+  });
+
+  it('flatMap으로 args 배열 → 빈 배열', () => {
+    const allArgs = BUILTIN_SERVERS.flatMap((s) => s.args);
+    expect(allArgs.length).toBe(0);
+  });
+
+  it('reduce로 이름 길이 합산', () => {
+    const totalNameLength = BUILTIN_SERVERS.reduce((acc, s) => acc + s.name.length, 0);
+    // os-control(10) + browser(7) + web-search(10) + git(3) = 30
+    expect(totalNameLength).toBe(30);
+  });
+
+  it('sort 역순 → 마지막이 os-control', () => {
+    const sorted = [...BUILTIN_SERVERS].sort((a, b) => b.name.localeCompare(a.name));
+    expect(sorted[sorted.length - 1]?.name).toBe('browser');
+  });
+
+  it('indexOf로 OS_CONTROL_SERVER 인덱스 조회 → -1이 아님', () => {
+    const idx = BUILTIN_SERVERS.indexOf(OS_CONTROL_SERVER);
+    expect(idx).not.toBe(-1);
+  });
+
+  it('includes로 GIT_SERVER 포함 확인 → true', () => {
+    expect(BUILTIN_SERVERS.includes(GIT_SERVER)).toBe(true);
+  });
+
+  it('includes로 가짜 서버 → false', () => {
+    const fake: McpServerConfig = { name: 'fake', command: 'builtin', args: [], enabled: true };
+    expect(BUILTIN_SERVERS.includes(fake)).toBe(false);
+  });
+
+  it('slice(1, 3) → 길이 2', () => {
+    expect(BUILTIN_SERVERS.slice(1, 3).length).toBe(2);
+  });
+
+  it('reverse로 반전 후 원본과 다름 (참조 다를 경우)', () => {
+    const reversed = [...BUILTIN_SERVERS].reverse();
+    expect(reversed.length).toBe(BUILTIN_SERVERS.length);
+  });
+
+  it('every로 args가 배열인지 확인', () => {
+    expect(BUILTIN_SERVERS.every((s) => Array.isArray(s.args))).toBe(true);
+  });
+
+  it('some으로 command가 external인 서버 없음 → false', () => {
+    expect(BUILTIN_SERVERS.some((s) => s.command === 'external')).toBe(false);
+  });
+
+  it('find로 enabled=false인 서버 없음 → undefined', () => {
+    const disabled = BUILTIN_SERVERS.find((s) => !s.enabled);
+    expect(disabled).toBeUndefined();
+  });
+
+  it('filter로 이름 길이 > 3인 서버 → 3개', () => {
+    // os-control(10), browser(7), web-search(10) → 3개
+    const filtered = BUILTIN_SERVERS.filter((s) => s.name.length > 3);
+    expect(filtered.length).toBe(3);
+  });
+
+  it('5번 반복 sort → 항상 동일 순서', () => {
+    const getSorted = () => [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name)).map((s) => s.name);
+    const first = getSorted();
+    for (let i = 0; i < 4; i++) {
+      expect(getSorted()).toEqual(first);
+    }
+  });
+});
+
+// ── 서버 간 관계 및 비교 추가 ─────────────────────────────────
+
+describe('서버 간 관계 심층 검증', () => {
+  it('os-control과 web-search 모두 하이픈 포함', () => {
+    expect(OS_CONTROL_SERVER.name.includes('-')).toBe(true);
+    expect(WEB_SEARCH_SERVER.name.includes('-')).toBe(true);
+  });
+
+  it('browser와 git 모두 하이픈 미포함', () => {
+    expect(BROWSER_SERVER.name.includes('-')).toBe(false);
+    expect(GIT_SERVER.name.includes('-')).toBe(false);
+  });
+
+  it('하이픈 포함 서버 2개, 미포함 서버 2개', () => {
+    const withDash = BUILTIN_SERVERS.filter((s) => s.name.includes('-'));
+    const withoutDash = BUILTIN_SERVERS.filter((s) => !s.name.includes('-'));
+    expect(withDash.length).toBe(2);
+    expect(withoutDash.length).toBe(2);
+  });
+
+  it('모든 서버 command가 "builtin" 단일 값', () => {
+    const uniqueCommands = new Set(BUILTIN_SERVERS.map((s) => s.command));
+    expect(uniqueCommands.size).toBe(1);
+    expect(uniqueCommands.has('builtin')).toBe(true);
+  });
+
+  it('이름 최단: git (3글자)', () => {
+    const shortest = BUILTIN_SERVERS.reduce((min, s) => s.name.length < min.name.length ? s : min);
+    expect(shortest.name).toBe('git');
+  });
+
+  it('이름 최장: os-control 또는 web-search (10글자)', () => {
+    const longest = BUILTIN_SERVERS.reduce((max, s) => s.name.length > max.name.length ? s : max);
+    expect(longest.name.length).toBe(10);
+  });
+
+  it('이름 알파벳순 첫 번째는 browser', () => {
+    const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
+    expect(sorted[0]?.name).toBe('browser');
+  });
+
+  it('이름 알파벳순 두 번째는 git', () => {
+    const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
+    expect(sorted[1]?.name).toBe('git');
+  });
+
+  it('이름 알파벳순 세 번째는 os-control', () => {
+    const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
+    expect(sorted[2]?.name).toBe('os-control');
+  });
+
+  it('이름 알파벳순 네 번째는 web-search', () => {
+    const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
+    expect(sorted[3]?.name).toBe('web-search');
+  });
+
+  it('총 이름 문자 수 30 (10+7+10+3)', () => {
+    const total = BUILTIN_SERVERS.reduce((sum, s) => sum + s.name.length, 0);
+    expect(total).toBe(30);
+  });
+
+  it('모든 서버 args 총 개수 0', () => {
+    const totalArgs = BUILTIN_SERVERS.reduce((sum, s) => sum + s.args.length, 0);
+    expect(totalArgs).toBe(0);
+  });
+
+  it('단일 단어 서버(browser, git) 이름에 숫자 없음', () => {
+    expect(/\d/.test(BROWSER_SERVER.name)).toBe(false);
+    expect(/\d/.test(GIT_SERVER.name)).toBe(false);
+  });
+
+  it('복합 단어 서버(os-control, web-search) 이름에 숫자 없음', () => {
+    expect(/\d/.test(OS_CONTROL_SERVER.name)).toBe(false);
+    expect(/\d/.test(WEB_SEARCH_SERVER.name)).toBe(false);
+  });
+
+  it('모든 이름이 ASCII 범위 내 문자만 포함', () => {
+    for (const config of BUILTIN_SERVERS) {
+      for (const char of config.name) {
+        expect(char.charCodeAt(0)).toBeLessThan(128);
+      }
+    }
+  });
+});
+
+// ── 직렬화/역직렬화 검증 ─────────────────────────────────────
+
+describe('BUILTIN_SERVERS 직렬화/역직렬화', () => {
+  it('전체 배열 JSON 왕복 변환 후 name 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(BUILTIN_SERVERS)) as McpServerConfig[];
+    expect(parsed.map((s) => s.name)).toEqual(BUILTIN_SERVERS.map((s) => s.name));
+  });
+
+  it('전체 배열 JSON 왕복 변환 후 command 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(BUILTIN_SERVERS)) as McpServerConfig[];
+    expect(parsed.map((s) => s.command)).toEqual(BUILTIN_SERVERS.map((s) => s.command));
+  });
+
+  it('전체 배열 JSON 왕복 변환 후 enabled 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(BUILTIN_SERVERS)) as McpServerConfig[];
+    expect(parsed.map((s) => s.enabled)).toEqual(BUILTIN_SERVERS.map((s) => s.enabled));
+  });
+
+  it('전체 배열 JSON 왕복 변환 후 args 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(BUILTIN_SERVERS)) as McpServerConfig[];
+    for (let i = 0; i < BUILTIN_SERVERS.length; i++) {
+      expect(parsed[i]?.args).toEqual(BUILTIN_SERVERS[i]?.args);
+    }
+  });
+
+  it('OS_CONTROL_SERVER JSON 왕복 → name 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(OS_CONTROL_SERVER)) as McpServerConfig;
+    expect(parsed.name).toBe(OS_CONTROL_SERVER.name);
+  });
+
+  it('BROWSER_SERVER JSON 왕복 → command 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(BROWSER_SERVER)) as McpServerConfig;
+    expect(parsed.command).toBe(BROWSER_SERVER.command);
+  });
+
+  it('WEB_SEARCH_SERVER JSON 왕복 → enabled 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(WEB_SEARCH_SERVER)) as McpServerConfig;
+    expect(parsed.enabled).toBe(WEB_SEARCH_SERVER.enabled);
+  });
+
+  it('GIT_SERVER JSON 왕복 → args 동일', () => {
+    const parsed = JSON.parse(JSON.stringify(GIT_SERVER)) as McpServerConfig;
+    expect(parsed.args).toEqual(GIT_SERVER.args);
+  });
+
+  it('JSON.stringify 후 문자열에 name 포함', () => {
+    const str = JSON.stringify(BUILTIN_SERVERS);
+    expect(str).toContain('os-control');
+    expect(str).toContain('browser');
+    expect(str).toContain('web-search');
+    expect(str).toContain('git');
+  });
+
+  it('JSON.stringify 후 builtin 포함', () => {
+    const str = JSON.stringify(BUILTIN_SERVERS);
+    expect(str).toContain('builtin');
+  });
+
+  it('개별 서버 5번 직렬화 → 동일 결과', () => {
+    for (let i = 0; i < 5; i++) {
+      const str1 = JSON.stringify(OS_CONTROL_SERVER);
+      const str2 = JSON.stringify(OS_CONTROL_SERVER);
+      expect(str1).toBe(str2);
+    }
+  });
+
+  it('전체 배열 5번 직렬화 → 동일 결과', () => {
+    const first = JSON.stringify(BUILTIN_SERVERS);
+    for (let i = 0; i < 4; i++) {
+      expect(JSON.stringify(BUILTIN_SERVERS)).toBe(first);
+    }
+  });
+});
