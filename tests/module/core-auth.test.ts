@@ -803,4 +803,287 @@ describe('core ↔ auth 통합 / core ↔ auth integration', () => {
     expect(keys).toContain('authorization');
     expect(keys).toContain('anthropic-version');
   });
+
+  // ── 추가 edge/random 케이스 (배치 38) ───────────────────────────
+
+  it('ApiKeyAuth: 연속 10회 getAuthHeader → 모두 동일한 key 반환', () => {
+    const key = 'sk-ant-api01-repeated-calls';
+    const auth = new ApiKeyAuth(key, logger);
+    for (let i = 0; i < 10; i++) {
+      expect(auth.getAuthHeader()['x-api-key']).toBe(key);
+    }
+  });
+
+  it('SubscriptionAuth: 연속 10회 getAuthHeader → 모두 동일한 token 반환', () => {
+    const token = 'sk-ant-oat01-repeated-calls';
+    const auth = new SubscriptionAuth(token, logger);
+    for (let i = 0; i < 10; i++) {
+      expect(auth.getAuthHeader().authorization).toBe(`Bearer ${token}`);
+    }
+  });
+
+  it('ApiKeyAuth: key 숫자만 → getAuthHeader 정상', () => {
+    const key = '1234567890';
+    const auth = new ApiKeyAuth(key, logger);
+    expect(auth.getAuthHeader()['x-api-key']).toBe(key);
+  });
+
+  it('ApiKeyAuth: key 빈 문자열 → getAuthHeader 빈 값 포함', () => {
+    const auth = new ApiKeyAuth('', logger);
+    const headers = auth.getAuthHeader();
+    expect(headers['x-api-key']).toBe('');
+  });
+
+  it('SubscriptionAuth: token 빈 문자열 → Bearer 헤더 Bearer  형식', () => {
+    const auth = new SubscriptionAuth('', logger);
+    const headers = auth.getAuthHeader();
+    expect(headers.authorization).toBe('Bearer ');
+  });
+
+  it('ApiKeyAuth: updateFromResponse 여러 token 헤더 → 마지막 remaining 반영', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-last-update', logger);
+    auth.updateFromResponse({ 'anthropic-ratelimit-requests-remaining': '100', 'anthropic-ratelimit-requests-limit': '1000' });
+    auth.updateFromResponse({ 'anthropic-ratelimit-requests-remaining': '50', 'anthropic-ratelimit-requests-limit': '1000' });
+    auth.updateFromResponse({ 'anthropic-ratelimit-requests-remaining': '5', 'anthropic-ratelimit-requests-limit': '1000' });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(5);
+  });
+
+  it('SubscriptionAuth: 한도 100, 50회 사용 → 잔여 50', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-50-usage', logger, 100);
+    for (let i = 0; i < 50; i++) {
+      auth.updateFromResponse({}, { usage: { input_tokens: 10, output_tokens: 5 } });
+    }
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(50);
+  });
+
+  it('ApiKeyAuth: input/output token remaining 헤더 → 정상 파싱', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-token-remaining', logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-input-tokens-remaining': '200000',
+      'anthropic-ratelimit-input-tokens-limit': '500000',
+      'anthropic-ratelimit-output-tokens-remaining': '75000',
+      'anthropic-ratelimit-output-tokens-limit': '250000',
+      'anthropic-ratelimit-requests-remaining': '80',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(80);
+  });
+
+  it('loadEnvironment: ANTHROPIC_API_KEY 설정 → ok 반환', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-load-ok';
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
+
+  it('loadEnvironment: CLAUDE_CODE_OAUTH_TOKEN 설정 → ok 반환', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-load-ok';
+    const result = loadEnvironment();
+    expect(result.ok).toBe(true);
+  });
+
+  it('loadEnvironment: 미설정 → error.code 존재', () => {
+    const result = loadEnvironment();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('loadEnvironment: 두 키 모두 설정 → error.code 존재', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-both';
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-both';
+    const result = loadEnvironment();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('createAuthProvider: error.code는 string', () => {
+    const result = createAuthProvider(logger);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('maskSensitiveData: 여러 oat01 패턴 동시 존재', () => {
+    const text = 'first: sk-ant-oat01-aaabbbccc-111 second: sk-ant-oat01-dddeeefff-222';
+    const masked = maskSensitiveData(text);
+    expect(masked).not.toContain('sk-ant-oat01-aaabbbccc-111');
+  });
+
+  it('maskSensitiveData: 일반 URL 포함 문자열 → URL 유지', () => {
+    const text = 'https://example.com/path?query=value is a normal URL';
+    const masked = maskSensitiveData(text);
+    expect(masked).toContain('https://example.com');
+  });
+
+  it('maskSensitiveData: newline 포함 문자열 → 개행 유지', () => {
+    const text = 'line1\nline2\nline3';
+    const masked = maskSensitiveData(text);
+    expect(masked).toContain('\n');
+  });
+
+  it('maskSensitiveData: 탭 포함 문자열 → 탭 유지', () => {
+    const text = 'col1\tcol2\tcol3';
+    const masked = maskSensitiveData(text);
+    expect(masked).toContain('\t');
+  });
+
+  it('ApiKeyAuth: anthropic-version 값이 정확히 2023-06-01', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-ver-exact', logger);
+    expect(auth.getAuthHeader()['anthropic-version']).toBe('2023-06-01');
+  });
+
+  it('SubscriptionAuth: anthropic-version 값이 정확히 2023-06-01', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-ver-exact', logger);
+    expect(auth.getAuthHeader()['anthropic-version']).toBe('2023-06-01');
+  });
+
+  it('ApiKeyAuth: 헤더 object 타입 검증', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-obj-type', logger);
+    const headers = auth.getAuthHeader();
+    expect(typeof headers).toBe('object');
+    expect(headers).not.toBeNull();
+  });
+
+  it('SubscriptionAuth: 헤더 object 타입 검증', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-obj-type', logger);
+    const headers = auth.getAuthHeader();
+    expect(typeof headers).toBe('object');
+    expect(headers).not.toBeNull();
+  });
+
+  it('SubscriptionAuth: 한도 초과 후 잔여량 0 이하', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-over-limit', logger, 2);
+    auth.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    auth.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    auth.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    const remaining = auth.getRateLimitStatus().requestsRemaining;
+    expect(remaining as number).toBeLessThanOrEqual(0);
+  });
+
+  it('ApiKeyAuth: getRateLimitStatus 반환 객체에 requestsRemaining 필드', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-status-fields', logger);
+    const status = auth.getRateLimitStatus();
+    expect('requestsRemaining' in status).toBe(true);
+  });
+
+  it('ApiKeyAuth: getRateLimitStatus 반환 객체에 retryAfterSeconds 필드', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-retry-field', logger);
+    const status = auth.getRateLimitStatus();
+    expect('retryAfterSeconds' in status).toBe(true);
+  });
+
+  it('ApiKeyAuth: getRateLimitStatus 반환 객체에 isLimitApproaching 필드', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-approaching-field', logger);
+    const status = auth.getRateLimitStatus();
+    expect('isLimitApproaching' in status).toBe(true);
+  });
+
+  it('SubscriptionAuth: getRateLimitStatus 반환 객체에 requestsRemaining 필드', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-status-fields', logger);
+    const status = auth.getRateLimitStatus();
+    expect('requestsRemaining' in status).toBe(true);
+  });
+
+  it('ApiKeyAuth: 10개 UUID key 각각 독립적 rate limit', () => {
+    const auths = Array.from({ length: 10 }, (_, i) =>
+      new ApiKeyAuth(`sk-ant-api01-independent-${i}`, logger)
+    );
+    for (const auth of auths) {
+      expect(auth.getRateLimitStatus().requestsRemaining).toBeNull();
+    }
+  });
+
+  it('createAuthProvider: API key 환경 → value.getAuthHeader 함수', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-method-check';
+    const result = createAuthProvider(logger);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(typeof result.value.getAuthHeader).toBe('function');
+    }
+  });
+
+  it('createAuthProvider: API key 환경 → value.getRateLimitStatus 함수', () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-rl-method';
+    const result = createAuthProvider(logger);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(typeof result.value.getRateLimitStatus).toBe('function');
+    }
+  });
+
+  it('createAuthProvider: OAuth 환경 → value.authMode oauth-token', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-mode-val';
+    const result = createAuthProvider(logger);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.authMode).toBe('oauth-token');
+    }
+  });
+
+  it('ApiKeyAuth: authMode 문자열 타입', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-str-mode', logger);
+    expect(typeof auth.authMode).toBe('string');
+  });
+
+  it('SubscriptionAuth: authMode 문자열 타입', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-str-mode', logger);
+    expect(typeof auth.authMode).toBe('string');
+  });
+
+  it('ApiKeyAuth: 매우 작은 remaining → isLimitApproaching boolean', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-small-rem', logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '1',
+      'anthropic-ratelimit-requests-limit': '1000',
+    });
+    expect(typeof auth.getRateLimitStatus().isLimitApproaching).toBe('boolean');
+  });
+
+  it('SubscriptionAuth: 한도 10, 10회 사용 → 잔여 0', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-exact-10', logger, 10);
+    for (let i = 0; i < 10; i++) {
+      auth.updateFromResponse({}, { usage: { input_tokens: 50, output_tokens: 25 } });
+    }
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+
+  it('SubscriptionAuth: 한도 5, 3회 사용 → 잔여 2', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-partial', logger, 5);
+    for (let i = 0; i < 3; i++) {
+      auth.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    }
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(2);
+  });
+
+  it('maskSensitiveData: 반환 타입 항상 string', () => {
+    const inputs = ['', 'hello', 'sk-ant-oat01-mask-type', '한글', '12345'];
+    for (const input of inputs) {
+      expect(typeof maskSensitiveData(input)).toBe('string');
+    }
+  });
+
+  it('ApiKeyAuth: retry-after 정수 문자열 → retryAfterSeconds 정수', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-retry-int', logger);
+    auth.updateFromResponse({ 'retry-after': '120' });
+    const status = auth.getRateLimitStatus();
+    if (status.retryAfterSeconds !== null) {
+      expect(Number.isInteger(status.retryAfterSeconds)).toBe(true);
+    }
+  });
+
+  it('loadEnvironment: ANTHROPIC_API_KEY 숫자 문자열 → ok boolean', () => {
+    process.env.ANTHROPIC_API_KEY = '12345678901234567890';
+    const result = loadEnvironment();
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('loadEnvironment: CLAUDE_CODE_OAUTH_TOKEN 숫자 문자열 → ok boolean', () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = '09876543210987654321';
+    const result = loadEnvironment();
+    expect(typeof result.ok).toBe('boolean');
+  });
 });

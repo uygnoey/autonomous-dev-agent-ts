@@ -802,3 +802,267 @@ describe('FailureRepository 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 edge/random 케이스 ─────────────────────────────────────
+
+describe('FailureRepository 추가 edge 케이스 — insert 필드 다양성', () => {
+  it('insert() featureId 빈 문자열 → err', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), featureId: '' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() rootCause 한글 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), rootCause: '한글 원인' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() resolution 특수문자 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), resolution: '!@#$%^&*()' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() resolution 매우 긴 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), resolution: 'x'.repeat(5000) };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() embedding 최대값 Float32Array → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), embedding: new Float32Array(384).fill(Number.MAX_VALUE) };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() embedding 음수 값 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), embedding: new Float32Array(384).fill(-1) };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() id UUID 형식 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() id 빈 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), id: '' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() failureType 숫자 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), failureType: '42' };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() timestamp 과거 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const record = { ...makeRecord(0), timestamp: new Date(0) };
+    const result = await repo.insert(record);
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('FailureRepository 추가 edge 케이스 — update 필드 다양성', () => {
+  it('update() resolution 빈 문자열 → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('fail-0', { resolution: '' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('update() rootCause 한글 → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('fail-0', { rootCause: '한글 원인 수정' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('update() 여러 필드 동시 → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('fail-0', { resolution: 'fixed', rootCause: 'updated' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('update() UUID id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('a1b2c3d4-e5f6-7890-abcd-ef1234567890', { resolution: 'x' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('update() 한글 id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('한글-아이디', { resolution: 'x' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('update() 특수문자 id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('!@#$%^&*()', { resolution: 'x' });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('FailureRepository 추가 edge 케이스 — delete 다양성', () => {
+  it('delete() UUID id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
+    expect(result.ok).toBe(false);
+  });
+
+  it('delete() 한글 id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('한글-아이디-삭제');
+    expect(result.ok).toBe(false);
+  });
+
+  it('delete() 특수문자 id → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('!@#$%^&*()');
+    expect(result.ok).toBe(false);
+  });
+
+  it('delete() 숫자만 → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('1234567890');
+    expect(result.ok).toBe(false);
+  });
+
+  it('delete() 공백 → err', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('   ');
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe('FailureRepository 추가 edge 케이스 — search 벡터 다양성', () => {
+  it('search() NaN vector → ok([])', async () => {
+    const repo = makeRepo();
+    const v = new Float32Array(384).fill(Number.NaN);
+    const result = await repo.search(v, 5);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() Infinity vector → ok([])', async () => {
+    const repo = makeRepo();
+    const v = new Float32Array(384).fill(Number.POSITIVE_INFINITY);
+    const result = await repo.search(v, 5);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() limit 1 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.3), 1);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() limit 50 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.7), 50);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() limit 1000 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.9), 1000);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() 음수 limit → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.1), -1);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('search() 다양한 fill 값 5가지 → 모두 ok', async () => {
+    const repo = makeRepo();
+    const fills = [0.0, 0.25, 0.5, 0.75, 1.0];
+    for (const f of fills) {
+      const result = await repo.search(new Float32Array(384).fill(f), 5);
+      expect(result.ok).toBe(true);
+    }
+  });
+});
+
+describe('FailureRepository 추가 edge 케이스 — getByProject/getByPhase 다양성', () => {
+  it('getByProject() 숫자 문자열 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByProject('12345');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByProject() 특수문자 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByProject('!@#$%');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByProject() 공백만 → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByProject('   ');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase() CODE with 빈 projectId → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByPhase('CODE', '');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase() TEST with UUID projectId → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByPhase('TEST', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase() VERIFY with 한글 projectId → ok([])', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByPhase('VERIFY', '한글-프로젝트-아이디');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getById() 특수문자 → ok(null)', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('!@#$%^&*()');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+
+  it('getById() 한글 → ok(null)', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('한글-아이디');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+
+  it('getById() 숫자만 → ok(null)', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('9999999999');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeNull();
+  });
+});

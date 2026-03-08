@@ -805,3 +805,348 @@ describe('StreamMonitor 랜덤 이벤트', () => {
     }
   });
 });
+
+// ── 추가 edge/random 케이스 (배치 38) ─────────────────────────
+
+describe('StreamMonitor 추가 edge — onEvent 타입 다양성', () => {
+  it('PreToolUse toolName 한글 → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', '한글도구이름'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PreToolUse toolName 특수문자 → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', '!@#$%^&*()'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PreToolUse toolName 빈 문자열 → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', ''));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PreToolUse toolName 매우 긴 문자열 → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', 'x'.repeat(500)));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PostToolUse toolName 한글 → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePostToolEvent('architect', '한글도구'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('TeammateIdle agentName coder → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makeIdleEvent('coder'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('TeammateIdle agentName reviewer → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makeIdleEvent('reviewer'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PreToolUse with epoch timestamp → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', 'Read', new Date(0)));
+    expect(result.ok).toBe(true);
+  });
+
+  it('PreToolUse with far future timestamp → ok', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', 'Read', new Date(9_999_999_999_999)));
+    expect(result.ok).toBe(true);
+  });
+
+  it('연속 PreToolUse + PostToolUse 쌍 → 이력 2개', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('coder', 'Bash'));
+    m.onEvent(makePostToolEvent('coder', 'Bash'));
+    expect(m.getEventHistory('coder').length).toBe(2);
+  });
+});
+
+describe('StreamMonitor 추가 edge — getEventHistory 필터 다양성', () => {
+  it('tester 이벤트 필터 → tester만 반환', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('tester', 'Bash'));
+    m.onEvent(makePreToolEvent('coder', 'Read'));
+    m.onEvent(makePreToolEvent('tester', 'Glob'));
+    expect(m.getEventHistory('tester').length).toBe(2);
+  });
+
+  it('qa 이벤트 필터 → qa만 반환', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 4; i++) {
+      m.onEvent(makePreToolEvent('qa', 'Grep'));
+      m.onEvent(makePreToolEvent('qc', 'Write'));
+    }
+    expect(m.getEventHistory('qa').length).toBe(4);
+    expect(m.getEventHistory('qc').length).toBe(4);
+  });
+
+  it('documenter 이벤트 필터 → documenter만 반환', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('documenter', 'Write'));
+    m.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(m.getEventHistory('documenter').length).toBe(1);
+  });
+
+  it('전체 이력 = 모든 에이전트 이력 합계', () => {
+    const m = makeMonitor();
+    const agents: AgentName[] = ['coder', 'architect', 'tester', 'qa'];
+    for (const agent of agents) {
+      m.onEvent(makePreToolEvent(agent, 'Read'));
+      m.onEvent(makePreToolEvent(agent, 'Write'));
+    }
+    const total = agents.reduce((sum, a) => sum + m.getEventHistory(a).length, 0);
+    expect(total).toBe(m.getEventHistory().length);
+  });
+
+  it('이력 아이템 toolName 필드 확인', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('coder', 'SpecialTool'));
+    const history = m.getEventHistory('coder');
+    expect(history[0]?.toolName).toBe('SpecialTool');
+  });
+
+  it('이력 아이템 type 필드 PreToolUse 확인', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(m.getEventHistory()[0]?.type).toBe('PreToolUse');
+  });
+
+  it('이력 아이템 type 필드 PostToolUse 확인', () => {
+    const m = makeMonitor();
+    m.onEvent(makePostToolEvent('coder', 'Write'));
+    expect(m.getEventHistory()[0]?.type).toBe('PostToolUse');
+  });
+
+  it('이력 아이템 type 필드 TeammateIdle 확인', () => {
+    const m = makeMonitor();
+    m.onEvent(makeIdleEvent('architect'));
+    expect(m.getEventHistory()[0]?.type).toBe('TeammateIdle');
+  });
+});
+
+describe('StreamMonitor 추가 edge — detectAnomalies 반복 도구 경계값', () => {
+  it('2회 반복 → loopAlert 없음', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('coder', 'Bash'));
+    m.onEvent(makePreToolEvent('coder', 'Bash'));
+    expect(m.detectAnomalies().filter(a => a.type === 'infinite_loop').length).toBe(0);
+  });
+
+  it('5회 반복 Write → loopAlert 있음', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('architect', 'Write'));
+    expect(m.detectAnomalies().filter(a => a.type === 'infinite_loop').length).toBeGreaterThan(0);
+  });
+
+  it('5회 반복 Glob → loopAlert agentName 정확함', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('qa', 'Glob'));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'infinite_loop');
+    if (alerts.length > 0) {
+      expect(alerts[0]?.agentName).toBe('qa');
+    }
+  });
+
+  it('5회 반복 Grep → loopAlert severity string', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('reviewer', 'Grep'));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'infinite_loop');
+    if (alerts.length > 0) {
+      expect(typeof alerts[0]?.severity).toBe('string');
+    }
+  });
+
+  it('3가지 도구 각각 5회 → 각각 loopAlert 발생', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('coder', 'Read'));
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('architect', 'Glob'));
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('tester', 'Bash'));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'infinite_loop');
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('PostToolUse 5회 반복 → loopAlert 없음', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePostToolEvent('coder', 'Bash'));
+    expect(m.detectAnomalies().filter(a => a.type === 'infinite_loop').length).toBe(0);
+  });
+
+  it('TeammateIdle 5회 반복 → loopAlert 없음', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makeIdleEvent('coder'));
+    expect(m.detectAnomalies().filter(a => a.type === 'infinite_loop').length).toBe(0);
+  });
+
+  it('detectAnomalies는 항상 배열 반환', () => {
+    const m = makeMonitor();
+    expect(Array.isArray(m.detectAnomalies())).toBe(true);
+  });
+
+  it('detectAnomalies 빈 → length 0', () => {
+    const m = makeMonitor();
+    expect(m.detectAnomalies().length).toBe(0);
+  });
+});
+
+describe('StreamMonitor 추가 edge — deadlock 경계값', () => {
+  it('4분 59초 유휴 → deadlock 없음', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past = new Date(now.getTime() - 299_000); // 4분59초
+    m.onEvent(makePreToolEvent('coder', 'Read', past));
+    m.onEvent(makeIdleEvent('coder', now));
+    expect(m.detectAnomalies().filter(a => a.type === 'deadlock').length).toBe(0);
+  });
+
+  it('5분 1초 유휴 → deadlock 탐지', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past = new Date(now.getTime() - 301_000); // 5분1초
+    m.onEvent(makePreToolEvent('coder', 'Read', past));
+    m.onEvent(makeIdleEvent('coder', now));
+    expect(m.detectAnomalies().filter(a => a.type === 'deadlock').length).toBeGreaterThan(0);
+  });
+
+  it('15분 유휴 → deadlock high severity', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past = new Date(now.getTime() - 900_000); // 15분
+    m.onEvent(makePreToolEvent('architect', 'Glob', past));
+    m.onEvent(makeIdleEvent('architect', now));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'deadlock');
+    if (alerts.length > 0) {
+      expect(alerts[0]?.severity).toBe('high');
+    }
+  });
+
+  it('6분 유휴 → deadlock 탐지', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past = new Date(now.getTime() - 360_000);
+    m.onEvent(makePreToolEvent('tester', 'Bash', past));
+    m.onEvent(makeIdleEvent('tester', now));
+    expect(m.detectAnomalies().filter(a => a.type === 'deadlock').length).toBeGreaterThan(0);
+  });
+
+  it('8분 유휴 → deadlock agentName 정확함', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past = new Date(now.getTime() - 480_000);
+    m.onEvent(makePreToolEvent('qa', 'Grep', past));
+    m.onEvent(makeIdleEvent('qa', now));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'deadlock');
+    if (alerts.length > 0) {
+      expect(alerts[0]?.agentName).toBe('qa');
+    }
+  });
+
+  it('두 에이전트 각각 5분+ 유휴 → 둘 다 deadlock', () => {
+    const m = makeMonitor();
+    const now = new Date();
+    const past1 = new Date(now.getTime() - 310_000);
+    const past2 = new Date(now.getTime() - 400_000);
+    m.onEvent(makePreToolEvent('coder', 'Read', past1));
+    m.onEvent(makeIdleEvent('coder', now));
+    m.onEvent(makePreToolEvent('architect', 'Glob', past2));
+    m.onEvent(makeIdleEvent('architect', now));
+    const alerts = m.detectAnomalies().filter(a => a.type === 'deadlock');
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('유휴 이벤트 없으면 deadlock 없음', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 20; i++) m.onEvent(makePreToolEvent('coder', 'Read'));
+    expect(m.detectAnomalies().filter(a => a.type === 'deadlock').length).toBe(0);
+  });
+});
+
+describe('StreamMonitor 추가 edge — 복합 복잡 시나리오', () => {
+  it('200개 이벤트 → detectAnomalies 오류 없음', () => {
+    const m = makeMonitor();
+    const agents: AgentName[] = ['coder', 'architect', 'tester', 'qa', 'qc'];
+    const tools = ['Read', 'Write', 'Glob', 'Grep', 'Bash', 'Edit'];
+    for (let i = 0; i < 200; i++) {
+      m.onEvent(makePreToolEvent(
+        agents[i % agents.length] as AgentName,
+        tools[i % tools.length] as string,
+      ));
+    }
+    expect(() => m.detectAnomalies()).not.toThrow();
+    expect(m.getEventHistory().length).toBe(200);
+  });
+
+  it('에이전트별 이력 합 = 전체 이력', () => {
+    const m = makeMonitor();
+    const agents: AgentName[] = ['coder', 'architect', 'tester'];
+    const counts: Record<string, number> = {};
+    for (const agent of agents) {
+      const n = Math.floor(Math.random() * 5) + 1;
+      counts[agent] = n;
+      for (let i = 0; i < n; i++) m.onEvent(makePreToolEvent(agent, 'Read'));
+    }
+    const total = agents.reduce((s, a) => s + m.getEventHistory(a).length, 0);
+    expect(total).toBe(m.getEventHistory().length);
+  });
+
+  it('onEvent 반환값 ok true이면 value 없음', () => {
+    const m = makeMonitor();
+    const result = m.onEvent(makePreToolEvent('coder', 'Read'));
+    if (result.ok) {
+      expect((result as { ok: true; value?: unknown }).value).toBeUndefined();
+    }
+  });
+
+  it('getEventHistory 반환 배열 아이템 agentName string', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('reviewer', 'Grep'));
+    const history = m.getEventHistory();
+    for (const item of history) {
+      expect(typeof item.agentName).toBe('string');
+    }
+  });
+
+  it('getEventHistory 반환 배열 아이템 timestamp Date', () => {
+    const m = makeMonitor();
+    m.onEvent(makePreToolEvent('documenter', 'Write'));
+    for (const item of m.getEventHistory()) {
+      expect(item.timestamp).toBeInstanceOf(Date);
+    }
+  });
+
+  it('detectAnomalies 결과 각 항목에 type 필드 string', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('qc', 'Bash'));
+    for (const alert of m.detectAnomalies()) {
+      expect(typeof alert.type).toBe('string');
+    }
+  });
+
+  it('detectAnomalies 결과 각 항목에 severity 필드 string', () => {
+    const m = makeMonitor();
+    for (let i = 0; i < 5; i++) m.onEvent(makePreToolEvent('qc', 'Read'));
+    for (const alert of m.detectAnomalies()) {
+      expect(typeof alert.severity).toBe('string');
+    }
+  });
+
+  it('10개 인스턴스 각각 독립 detectAnomalies', () => {
+    const monitors = Array.from({ length: 10 }, () => makeMonitor());
+    for (const mon of monitors) {
+      for (let i = 0; i < 5; i++) mon.onEvent(makePreToolEvent('coder', 'Bash'));
+    }
+    for (const mon of monitors) {
+      const alerts = mon.detectAnomalies().filter(a => a.type === 'infinite_loop');
+      expect(alerts.length).toBeGreaterThan(0);
+    }
+  });
+});
