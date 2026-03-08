@@ -14,64 +14,9 @@ import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { CodeRecord, Result, VectorRepository } from 'core/types.js';
+import { buildWhereClause, escapeString } from 'rag/sql-utils.js';
 import type { SearchResult } from 'rag/types.js';
-
-// ── flat 레코드 (LanceDB 저장용) / Flat record for LanceDB ─────
-
-/**
- * LanceDB에 저장되는 flat CodeRecord 형식
- * LanceDB flat record format for CodeRecord
- */
-interface FlatCodeRecord {
-  id: string;
-  projectId: string;
-  filePath: string;
-  chunk: string;
-  vector: number[];
-  language: string;
-  module: string;
-  functionName: string;
-  lastModified: string;
-  modifiedBy: string;
-}
-
-/**
- * CodeRecord → flat LanceDB 레코드 변환 / Convert CodeRecord to flat LanceDB record
- */
-function toFlat(record: CodeRecord): FlatCodeRecord {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    filePath: record.filePath,
-    chunk: record.chunk,
-    vector: Array.from(record.embedding),
-    language: record.metadata.language,
-    module: record.metadata.module,
-    functionName: record.metadata.functionName,
-    lastModified: record.metadata.lastModified.toISOString(),
-    modifiedBy: record.metadata.modifiedBy,
-  };
-}
-
-/**
- * flat LanceDB 레코드 → CodeRecord 변환 / Convert flat LanceDB record to CodeRecord
- */
-function fromFlat(flat: FlatCodeRecord): CodeRecord {
-  return {
-    id: flat.id,
-    projectId: flat.projectId,
-    filePath: flat.filePath,
-    chunk: flat.chunk,
-    embedding: new Float32Array(flat.vector),
-    metadata: {
-      language: flat.language,
-      module: flat.module,
-      functionName: flat.functionName,
-      lastModified: new Date(flat.lastModified),
-      modifiedBy: flat.modifiedBy,
-    },
-  };
-}
+import { type FlatCodeRecord, fromFlat, toFlat } from 'rag/vector-store-types.js';
 
 // ── CodeVectorStore ─────────────────────────────────────────────
 
@@ -308,32 +253,4 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
       return err(new RagError('rag_db_error', `${operation} 실패: ${String(error)}`, error));
     }
   }
-}
-
-// ── 유틸리티 / Utilities ────────────────────────────────────────
-
-/**
- * SQL injection 방지를 위한 문자열 이스케이프 / Escape string for SQL injection prevention
- */
-function escapeString(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
-/**
- * filter 객체를 SQL where 절로 변환 / Convert filter object to SQL where clause
- */
-function buildWhereClause(filter: Record<string, unknown>): string {
-  const conditions: string[] = [];
-
-  for (const [key, value] of Object.entries(filter)) {
-    // WHY: LanceDB는 camelCase 컬럼명에 큰따옴표 필요 (예: "filePath")
-    const quotedKey = `"${key}"`;
-    if (typeof value === 'string') {
-      conditions.push(`${quotedKey} = '${escapeString(value)}'`);
-    } else if (typeof value === 'number') {
-      conditions.push(`${quotedKey} = ${value}`);
-    }
-  }
-
-  return conditions.join(' AND ');
 }

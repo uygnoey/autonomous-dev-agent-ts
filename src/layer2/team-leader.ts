@@ -12,22 +12,13 @@
  *     On VERIFY failure → analyze → rollback to appropriate phase → retry.
  */
 
-import type { Logger } from 'core/logger.js';
 import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
-import type { AgentGenerator } from 'layer2/agent-generator.js';
-import type { AgentSpawner } from 'layer2/agent-spawner.js';
-import type { BiasDetector } from 'layer2/bias-detector.js';
-import type { CoderAllocator } from 'layer2/coder-allocator.js';
-import type { FailureHandler } from 'layer2/failure-handler.js';
-import type { IntegrationTester } from 'layer2/integration-tester.js';
-import type { PhaseEngine } from 'layer2/phase-engine.js';
-import type { ProgressTracker } from 'layer2/progress-tracker.js';
-import type { SessionManager } from 'layer2/session-manager.js';
-import type { StreamMonitor } from 'layer2/stream-monitor.js';
-import type { TokenMonitor } from 'layer2/token-monitor.js';
+import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import type { AgentEvent } from 'layer2/types.js';
-import type { VerificationGate } from 'layer2/verification-gate.js';
+
+// Re-export for external consumers
+export type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 
 /**
  * 최대 Phase 루프 반복 횟수 / Maximum phase loop iterations
@@ -37,29 +28,6 @@ import type { VerificationGate } from 'layer2/verification-gate.js';
  * EN: Maximum iterations to prevent infinite loops.
  */
 const MAX_ITERATIONS = 10;
-
-/**
- * 팀 리더 의존성 / Team Leader dependencies
- *
- * @description
- * KR: 생성자 주입을 위한 의존성 인터페이스.
- * EN: Dependency interface for constructor injection.
- */
-export interface TeamLeaderDeps {
-  readonly phaseEngine: PhaseEngine;
-  readonly agentSpawner: AgentSpawner;
-  readonly sessionManager: SessionManager;
-  readonly tokenMonitor: TokenMonitor;
-  readonly progressTracker: ProgressTracker;
-  readonly agentGenerator: AgentGenerator;
-  readonly coderAllocator: CoderAllocator;
-  readonly streamMonitor: StreamMonitor;
-  readonly biasDetector: BiasDetector;
-  readonly failureHandler: FailureHandler;
-  readonly verificationGate: VerificationGate;
-  readonly integrationTester: IntegrationTester;
-  readonly logger: Logger;
-}
 
 /**
  * 팀 리더 (메인 오케스트레이터) / Team Leader (Main Orchestrator)
@@ -75,19 +43,19 @@ export interface TeamLeaderDeps {
  * }
  */
 export class TeamLeader {
-  private readonly phaseEngine: PhaseEngine;
-  private readonly agentSpawner: AgentSpawner;
-  private readonly sessionManager: SessionManager;
-  private readonly tokenMonitor: TokenMonitor;
-  private readonly progressTracker: ProgressTracker;
-  private readonly agentGenerator: AgentGenerator;
-  private readonly coderAllocator: CoderAllocator;
-  private readonly streamMonitor: StreamMonitor;
-  private readonly biasDetector: BiasDetector;
-  private readonly failureHandler: FailureHandler;
-  private readonly verificationGate: VerificationGate;
-  private readonly integrationTester: IntegrationTester;
-  private readonly logger: Logger;
+  private readonly phaseEngine: TeamLeaderDeps['phaseEngine'];
+  private readonly agentSpawner: TeamLeaderDeps['agentSpawner'];
+  private readonly sessionManager: TeamLeaderDeps['sessionManager'];
+  private readonly tokenMonitor: TeamLeaderDeps['tokenMonitor'];
+  private readonly progressTracker: TeamLeaderDeps['progressTracker'];
+  private readonly agentGenerator: TeamLeaderDeps['agentGenerator'];
+  private readonly coderAllocator: TeamLeaderDeps['coderAllocator'];
+  private readonly streamMonitor: TeamLeaderDeps['streamMonitor'];
+  private readonly biasDetector: TeamLeaderDeps['biasDetector'];
+  private readonly failureHandler: TeamLeaderDeps['failureHandler'];
+  private readonly verificationGate: TeamLeaderDeps['verificationGate'];
+  private readonly integrationTester: TeamLeaderDeps['integrationTester'];
+  private readonly logger: TeamLeaderDeps['logger'];
   private currentFeatureId: string | null = null;
 
   /**

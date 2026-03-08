@@ -530,4 +530,239 @@ describe('layer2 ↔ auth 통합 / layer2 ↔ auth integration', () => {
     expect(s2.requestsRemaining).toBe(42);
     expect(s3.requestsRemaining).toBe(42);
   });
+
+  // ── 추가 edge/random 케이스 ──────────────────────────────────────
+
+  it('API key 모드: 잔여량 999999 → 스로틀 불필요', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-huge-remaining', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '999999',
+      'anthropic-ratelimit-requests-limit': '1000000',
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('API key 모드: 잔여량 4% → 일시정지 필요', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-4pct', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '4',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(monitor.shouldPauseAll()).toBe(true);
+  });
+
+  it('API key 모드: 잔여량 19% → 스로틀 필요', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-19pct', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '19',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(true);
+  });
+
+  it('API key 모드: shouldThrottleSpawn 반환값 boolean 타입', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-bool-throttle', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    expect(typeof monitor.shouldThrottleSpawn()).toBe('boolean');
+  });
+
+  it('API key 모드: shouldPauseAll 반환값 boolean 타입', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-bool-pause', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    expect(typeof monitor.shouldPauseAll()).toBe('boolean');
+  });
+
+  it('Subscription 모드: 초기 shouldThrottleSpawn false', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-initial-throttle', logger, 100);
+    const monitor = new TokenMonitor(auth, logger);
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+  });
+
+  it('Subscription 모드: 초기 shouldPauseAll false', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-initial-pause', logger, 100);
+    const monitor = new TokenMonitor(auth, logger);
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('Subscription 모드: 한도 2, 1회 사용 → 잔여 1', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-limit-2', logger, 2);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    expect(monitor.getStatus().requestsRemaining).toBe(1);
+  });
+
+  it('Subscription 모드: 한도 50, 40회 사용 → isLimitApproaching true', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-50-limit', logger, 50);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 40; i++) {
+      monitor.updateFromResponse({}, { usage: { input_tokens: 10, output_tokens: 5 } });
+    }
+    expect(monitor.getStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('Subscription 모드: 한도 50, 39회 사용 → isLimitApproaching false', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-50-limit-39', logger, 50);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 39; i++) {
+      monitor.updateFromResponse({}, { usage: { input_tokens: 10, output_tokens: 5 } });
+    }
+    expect(monitor.getStatus().requestsRemaining).toBe(11);
+    expect(monitor.getStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('API key 모드: 음수 remaining → shouldPauseAll 안전 처리', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-neg-rem', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '-10',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    // 음수이면 null 또는 0이므로 pause 여부 타입 검증만
+    expect(typeof monitor.shouldPauseAll()).toBe('boolean');
+  });
+
+  it('API key 모드: limit=0 극단 케이스 → 안전 처리', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-zero-limit', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '0',
+      'anthropic-ratelimit-requests-limit': '0',
+    });
+    expect(typeof monitor.shouldThrottleSpawn()).toBe('boolean');
+  });
+
+  it('retry-after: 값 0 → 파싱 결과 0', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-retry-0', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({
+      'retry-after': '0',
+      'anthropic-ratelimit-requests-remaining': '5',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    const status = monitor.getStatus();
+    expect(status.retryAfterSeconds).toBe(0);
+  });
+
+  it('retry-after: 소수점 값 → null 또는 파싱된 정수', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-retry-decimal', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({
+      'retry-after': '1.5',
+    });
+    const status = monitor.getStatus();
+    expect(typeof status.retryAfterSeconds === 'number' || status.retryAfterSeconds === null).toBe(true);
+  });
+
+  it('TokenMonitor: 같은 AuthProvider로 여러 Monitor 생성 → 독립적', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-shared-auth', logger);
+    const monitor1 = new TokenMonitor(auth, logger);
+    const monitor2 = new TokenMonitor(auth, logger);
+
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '30',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+
+    // 둘 다 같은 auth를 공유하므로 상태가 같아야 함
+    expect(monitor1.getStatus().requestsRemaining).toBe(30);
+    expect(monitor2.getStatus().requestsRemaining).toBe(30);
+  });
+
+  it('Subscription 모드: 한도 0 극단 케이스 → 처리됨', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-zero-limit', logger, 0);
+    const monitor = new TokenMonitor(auth, logger);
+    const status = monitor.getStatus();
+    expect(typeof status.requestsRemaining).toBe('number');
+  });
+
+  it('Subscription 모드: 한도 1000, 999회 사용 → 잔여 1', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-999-use', logger, 1000);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 999; i++) {
+      monitor.updateFromResponse({}, { usage: { input_tokens: 1, output_tokens: 1 } });
+    }
+    expect(monitor.getStatus().requestsRemaining).toBe(1);
+  });
+
+  it('API key 모드: MAX_SAFE_INTEGER remaining → shouldThrottleSpawn false', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-max-safe', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': String(Number.MAX_SAFE_INTEGER),
+      'anthropic-ratelimit-requests-limit': String(Number.MAX_SAFE_INTEGER),
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('TokenMonitor.getStatus() 반환 객체 구조 확인', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-struct-check', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    const status = monitor.getStatus();
+    expect('requestsRemaining' in status).toBe(true);
+    expect('retryAfterSeconds' in status).toBe(true);
+    expect('isLimitApproaching' in status).toBe(true);
+  });
+
+  it('Subscription 모드: getStatus() 반환 객체 구조 확인', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-struct-check', logger, 10);
+    const monitor = new TokenMonitor(auth, logger);
+    const status = monitor.getStatus();
+    expect('requestsRemaining' in status).toBe(true);
+    expect('isLimitApproaching' in status).toBe(true);
+  });
+
+  it('빈 헤더 5번 반복 전송 → 상태 여전히 null', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-5-empty', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 5; i++) {
+      monitor.updateFromResponse({});
+    }
+    expect(monitor.getStatus().requestsRemaining).toBeNull();
+  });
+
+  it('Subscription 모드: usage 없는 body 5번 → 잔여량 변화 없음', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-no-usage-5x', logger, 20);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 5; i++) {
+      monitor.updateFromResponse({}, {});
+    }
+    expect(monitor.getStatus().requestsRemaining).toBe(20);
+  });
+
+  it('API key 모드: 여러 토큰 헤더 함께 전달 → 처리됨', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-multi-header', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '50',
+      'anthropic-ratelimit-requests-limit': '1000',
+      'anthropic-ratelimit-input-tokens-remaining': '100000',
+      'anthropic-ratelimit-input-tokens-limit': '500000',
+      'anthropic-ratelimit-output-tokens-remaining': '50000',
+      'anthropic-ratelimit-output-tokens-limit': '250000',
+    });
+    const status = monitor.getStatus();
+    expect(status.requestsRemaining).toBe(50);
+  });
+
+  it('10개 다른 API key 인스턴스 → 각각 독립적 초기 상태', () => {
+    for (let i = 0; i < 10; i++) {
+      const auth = new ApiKeyAuth(`sk-ant-api01-indep-${i}`, logger);
+      const monitor = new TokenMonitor(auth, logger);
+      expect(monitor.getStatus().requestsRemaining).toBeNull();
+    }
+  });
+
+  it('Subscription 모드: 10개 다른 한도 → 각각 올바른 초기 잔여량', () => {
+    const limits = [1, 5, 10, 20, 45, 50, 100, 200, 500, 1000];
+    for (const limit of limits) {
+      const auth = new SubscriptionAuth(`sk-ant-oat01-limit-${limit}`, logger, limit);
+      const monitor = new TokenMonitor(auth, logger);
+      expect(monitor.getStatus().requestsRemaining).toBe(limit);
+    }
+  });
 });

@@ -14,49 +14,8 @@ import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { FailureRecord, Phase, Result, VectorRepository } from 'core/types.js';
-
-// ── flat 레코드 (LanceDB 저장용) ────────────────────────────
-
-/** LanceDB에 저장되는 flat 레코드 형식 */
-interface FlatFailureRecord {
-  id: string;
-  projectId: string;
-  featureId: string;
-  phase: string;
-  failureType: string;
-  rootCause: string;
-  resolution: string;
-  vector: number[];
-  timestamp: string;
-}
-
-function toFlat(record: FailureRecord): FlatFailureRecord {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    featureId: record.featureId,
-    phase: record.phase,
-    failureType: record.failureType,
-    rootCause: record.rootCause,
-    resolution: record.resolution,
-    vector: Array.from(record.embedding),
-    timestamp: record.timestamp.toISOString(),
-  };
-}
-
-function fromFlat(flat: FlatFailureRecord): FailureRecord {
-  return {
-    id: flat.id,
-    projectId: flat.projectId,
-    featureId: flat.featureId,
-    phase: flat.phase as Phase,
-    failureType: flat.failureType,
-    rootCause: flat.rootCause,
-    resolution: flat.resolution,
-    embedding: new Float32Array(flat.vector),
-    timestamp: new Date(flat.timestamp),
-  };
-}
+import { type FlatFailureRecord, fromFlat, toFlat } from 'rag/failure-store-types.js';
+import { buildWhereClause, escapeString } from 'rag/sql-utils.js';
 
 // ── FailureRepository ────────────────────────────────────────────
 
@@ -302,31 +261,4 @@ export class FailureRepository implements VectorRepository<FailureRecord> {
       return err(new RagError('rag_db_error', `${operation} 실패: ${String(error)}`, error));
     }
   }
-}
-
-// ── 유틸리티 / Utilities ────────────────────────────────────────
-
-/**
- * SQL injection 방지를 위한 문자열 이스케이프 / Escape string for SQL injection prevention
- */
-function escapeString(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
-/**
- * filter 객체를 SQL where 절로 변환 / Convert filter object to SQL where clause
- */
-function buildWhereClause(filter: Record<string, unknown>): string {
-  const conditions: string[] = [];
-
-  for (const [key, value] of Object.entries(filter)) {
-    const quotedKey = `"${key}"`;
-    if (typeof value === 'string') {
-      conditions.push(`${quotedKey} = '${escapeString(value)}'`);
-    } else if (typeof value === 'number') {
-      conditions.push(`${quotedKey} = ${value}`);
-    }
-  }
-
-  return conditions.join(' AND ');
 }

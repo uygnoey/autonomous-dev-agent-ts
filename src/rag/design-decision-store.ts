@@ -14,49 +14,8 @@ import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { DesignDecision, Phase, Result, VectorRepository } from 'core/types.js';
-
-// ── flat 레코드 (LanceDB 저장용) ────────────────────────────
-
-/** LanceDB에 저장되는 flat 레코드 형식 */
-interface FlatDesignDecision {
-  id: string;
-  projectId: string;
-  featureId: string;
-  decision: string;
-  rationale: string;
-  alternatives: string; // JSON serialized string[]
-  decidedBy: string; // JSON serialized string[]
-  vector: number[];
-  timestamp: string;
-}
-
-function toFlat(record: DesignDecision): FlatDesignDecision {
-  return {
-    id: record.id,
-    projectId: record.projectId,
-    featureId: record.featureId,
-    decision: record.decision,
-    rationale: record.rationale,
-    alternatives: JSON.stringify(record.alternatives),
-    decidedBy: JSON.stringify(record.decidedBy),
-    vector: Array.from(record.embedding),
-    timestamp: record.timestamp.toISOString(),
-  };
-}
-
-function fromFlat(flat: FlatDesignDecision): DesignDecision {
-  return {
-    id: flat.id,
-    projectId: flat.projectId,
-    featureId: flat.featureId,
-    decision: flat.decision,
-    rationale: flat.rationale,
-    alternatives: JSON.parse(flat.alternatives) as string[],
-    decidedBy: JSON.parse(flat.decidedBy) as string[],
-    embedding: new Float32Array(flat.vector),
-    timestamp: new Date(flat.timestamp),
-  };
-}
+import { type FlatDesignDecision, fromFlat, toFlat } from 'rag/design-decision-store-types.js';
+import { buildWhereClause, escapeString } from 'rag/sql-utils.js';
 
 // ── DesignDecisionRepository ─────────────────────────────────────
 
@@ -300,33 +259,6 @@ export class DesignDecisionRepository implements VectorRepository<DesignDecision
       return err(new RagError('rag_db_error', `${operation} 실패: ${String(error)}`, error));
     }
   }
-}
-
-// ── 유틸리티 / Utilities ────────────────────────────────────────
-
-/**
- * SQL injection 방지를 위한 문자열 이스케이프 / Escape string for SQL injection prevention
- */
-function escapeString(value: string): string {
-  return value.replace(/'/g, "''");
-}
-
-/**
- * filter 객체를 SQL where 절로 변환 / Convert filter object to SQL where clause
- */
-function buildWhereClause(filter: Record<string, unknown>): string {
-  const conditions: string[] = [];
-
-  for (const [key, value] of Object.entries(filter)) {
-    const quotedKey = `"${key}"`;
-    if (typeof value === 'string') {
-      conditions.push(`${quotedKey} = '${escapeString(value)}'`);
-    } else if (typeof value === 'number') {
-      conditions.push(`${quotedKey} = ${value}`);
-    }
-  }
-
-  return conditions.join(' AND ');
 }
 
 // WHY: Phase 타입 참조용 (unused import 방지)
