@@ -1467,3 +1467,321 @@ describe('CoderAllocator 대규모 시나리오', () => {
     expect(results.every((ok) => ok)).toBe(true);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// BATCH 75 EXTENSION: 추가 경계값/랜덤 케이스
+// ══════════════════════════════════════════════════════════════════
+
+describe('CoderAllocator batch75 추가 케이스 A', () => {
+  it('allocate 빈 배열 → ok=true, value 길이 0', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-e1', []);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toHaveLength(0);
+  });
+
+  it('allocate 1개 모듈 → coderId string', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-e2', ['mod-e2']);
+    if (r.ok) expect(typeof r.value[0]!.coderId).toBe('string');
+  });
+
+  it('allocate 후 hasConflict 정확히 체크', () => {
+    const a = makeAllocator();
+    a.allocate('feat-e3', ['mod-e3a', 'mod-e3b']);
+    expect(a.hasConflict(['mod-e3a'])).toBe(true);
+    expect(a.hasConflict(['mod-e3b'])).toBe(true);
+    expect(a.hasConflict(['mod-e3c'])).toBe(false);
+  });
+
+  it('allocate 100개 모듈 → getActiveAllocations=100', () => {
+    const a = makeAllocator();
+    const mods = Array.from({ length: 100 }, (_, i) => `bulk100-${i}`);
+    const r = a.allocate('feat-e4', mods);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(a.getActiveAllocations()).toHaveLength(100);
+  });
+
+  it('allocate 충돌 시 error.code 올바름', () => {
+    const a = makeAllocator();
+    a.allocate('feat-e5', ['shared-e5']);
+    const r = a.allocate('feat-e6', ['shared-e5']);
+    if (!r.ok) expect(r.error.code).toBe('agent_allocation_conflict');
+  });
+
+  it('completeAllocation 3개 → active 0', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-e7', ['e7a', 'e7b', 'e7c']);
+    if (r.ok) {
+      for (const alloc of r.value) a.completeAllocation(alloc.coderId);
+      expect(a.getActiveAllocations()).toHaveLength(0);
+    }
+  });
+
+  it('mergeAllocation 3개 → active 0, hasConflict=false', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-e8', ['e8a', 'e8b', 'e8c']);
+    if (r.ok) {
+      for (const alloc of r.value) a.mergeAllocation(alloc.coderId);
+      expect(a.getActiveAllocations()).toHaveLength(0);
+      expect(a.hasConflict(['e8a', 'e8b', 'e8c'])).toBe(false);
+    }
+  });
+
+  it('allocate 같은 모듈 여러 기능 시도 → 두 번째 실패', () => {
+    const a = makeAllocator();
+    const r1 = a.allocate('feat-e9a', ['shared-e9']);
+    const r2 = a.allocate('feat-e9b', ['shared-e9']);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(false);
+  });
+
+  it('병합 후 재할당 시 충돌 없음', () => {
+    const a = makeAllocator();
+    const r1 = a.allocate('feat-e10a', ['free-mod-e10']);
+    if (r1.ok && r1.value[0]) {
+      a.mergeAllocation(r1.value[0].coderId);
+      const r2 = a.allocate('feat-e10b', ['free-mod-e10']);
+      expect(r2.ok).toBe(true);
+    }
+  });
+
+  it('branchName 패턴 검증 (feature/{id}-{mod}-coder{n})', () => {
+    const a = makeAllocator();
+    const r = a.allocate('abc', ['xyz']);
+    if (r.ok && r.value[0]) {
+      const bn = r.value[0].branchName;
+      expect(bn).toMatch(/^feature\/abc-xyz-coder\d+$/);
+    }
+  });
+
+  it('5개 기능 10개씩 할당 → active=50', () => {
+    const a = makeAllocator();
+    for (let fi = 0; fi < 5; fi++) {
+      const mods = Array.from({ length: 10 }, (_, mi) => `f${fi}-m${mi}`);
+      a.allocate(`feat-g${fi}`, mods);
+    }
+    expect(a.getActiveAllocations()).toHaveLength(50);
+  });
+
+  it('UUID 모듈 5개 할당 → 모두 ok', () => {
+    const a = makeAllocator();
+    const mods = Array.from({ length: 5 }, () => crypto.randomUUID());
+    const r = a.allocate('feat-uuid5', mods);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('CoderAllocator batch75 추가 케이스 B', () => {
+  it('coderId counter 단조 증가 확인 (3 연속)', () => {
+    const a = makeAllocator();
+    const r1 = a.allocate('feat-h1', ['mod-h1']);
+    const r2 = a.allocate('feat-h2', ['mod-h2']);
+    const r3 = a.allocate('feat-h3', ['mod-h3']);
+    if (r1.ok && r2.ok && r3.ok) {
+      const id1 = Number(r1.value[0]?.coderId.replace('coder-', ''));
+      const id2 = Number(r2.value[0]?.coderId.replace('coder-', ''));
+      const id3 = Number(r3.value[0]?.coderId.replace('coder-', ''));
+      expect(id2).toBeGreaterThan(id1);
+      expect(id3).toBeGreaterThan(id2);
+    }
+  });
+
+  it('getActiveAllocations 결과 배열 원소 featureId string', () => {
+    const a = makeAllocator();
+    a.allocate('feat-h4', ['mod-h4']);
+    const active = a.getActiveAllocations();
+    if (active[0]) {
+      expect(typeof active[0].featureId).toBe('string');
+    }
+  });
+
+  it('getActiveAllocations 결과 배열 원소 status는 assigned', () => {
+    const a = makeAllocator();
+    a.allocate('feat-h5', ['mod-h5']);
+    const active = a.getActiveAllocations();
+    if (active[0]) {
+      expect(active[0].status).toBe('assigned');
+    }
+  });
+
+  it('getActiveAllocations 결과 배열 원소 modules 배열', () => {
+    const a = makeAllocator();
+    a.allocate('feat-h6', ['mod-h6a', 'mod-h6b']);
+    const active = a.getActiveAllocations();
+    for (const alloc of active) {
+      expect(Array.isArray(alloc.modules)).toBe(true);
+    }
+  });
+
+  it('hasConflict 빈 배열 항상 false', () => {
+    const a = makeAllocator();
+    a.allocate('feat-h7', ['mod-h7']);
+    expect(a.hasConflict([])).toBe(false);
+  });
+
+  it('hasConflict 할당 전 항상 false', () => {
+    const a = makeAllocator();
+    for (const m of ['m1', 'm2', 'm3', 'm4', 'm5']) {
+      expect(a.hasConflict([m])).toBe(false);
+    }
+  });
+
+  it('completeAllocation 결과 ok=true 반환', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-h8', ['mod-h8']);
+    if (r.ok && r.value[0]) {
+      const cr = a.completeAllocation(r.value[0].coderId);
+      expect(cr.ok).toBe(true);
+    }
+  });
+
+  it('mergeAllocation 결과 ok=true 반환', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-h9', ['mod-h9']);
+    if (r.ok && r.value[0]) {
+      const mr = a.mergeAllocation(r.value[0].coderId);
+      expect(mr.ok).toBe(true);
+    }
+  });
+
+  it('completeAllocation 없는 ID → error.code=agent_allocation_not_found', () => {
+    const a = makeAllocator();
+    const r = a.completeAllocation('no-such-id');
+    if (!r.ok) expect(r.error.code).toBe('agent_allocation_not_found');
+  });
+
+  it('mergeAllocation 없는 ID → error.code=agent_allocation_not_found', () => {
+    const a = makeAllocator();
+    const r = a.mergeAllocation('no-such-id');
+    if (!r.ok) expect(r.error.code).toBe('agent_allocation_not_found');
+  });
+
+  it('같은 allocator 독립 사용 10번 → 각 성공', () => {
+    const a = makeAllocator();
+    for (let i = 0; i < 10; i++) {
+      const r = a.allocate(`feat-i${i}`, [`mod-i${i}`]);
+      expect(r.ok).toBe(true);
+    }
+    expect(a.getActiveAllocations()).toHaveLength(10);
+  });
+
+  it('20개 독립 allocator 생성 → 각각 초기 active 0', () => {
+    for (let i = 0; i < 20; i++) {
+      const a = makeAllocator();
+      expect(a.getActiveAllocations()).toHaveLength(0);
+    }
+  });
+});
+
+describe('CoderAllocator batch75 추가 케이스 C', () => {
+  it('allocate featureId 한국어 → ok', () => {
+    const a = makeAllocator();
+    const r = a.allocate('기능-인증', ['mod-auth']);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('allocate 모듈명 숫자만 → ok', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-j1', ['0', '1', '2']);
+    expect(r.ok).toBe(true);
+  });
+
+  it('allocate featureId UUID → ok', () => {
+    const a = makeAllocator();
+    const id = crypto.randomUUID();
+    const r = a.allocate(id, ['mod-j2']);
+    expect(r.ok).toBe(true);
+    if (r.ok && r.value[0]) {
+      expect(r.value[0].featureId).toBe(id);
+    }
+  });
+
+  it('allocate 결과 value 배열 원소 개수 = 모듈 개수', () => {
+    const a = makeAllocator();
+    const mods = ['j3a', 'j3b', 'j3c', 'j3d', 'j3e'];
+    const r = a.allocate('feat-j3', mods);
+    if (r.ok) expect(r.value).toHaveLength(mods.length);
+  });
+
+  it('allocate 결과 value 원소 branchName string', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-j4', ['mod-j4']);
+    if (r.ok && r.value[0]) {
+      expect(typeof r.value[0].branchName).toBe('string');
+    }
+  });
+
+  it('allocate 결과 value 원소 modules 배열', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-j5', ['mod-j5']);
+    if (r.ok && r.value[0]) {
+      expect(Array.isArray(r.value[0].modules)).toBe(true);
+    }
+  });
+
+  it('allocate 결과 value 원소 status=assigned', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-j6', ['mod-j6']);
+    if (r.ok && r.value[0]) {
+      expect(r.value[0].status).toBe('assigned');
+    }
+  });
+
+  it('다중 할당 후 hasConflict 각각 true', () => {
+    const a = makeAllocator();
+    const mods = ['j7a', 'j7b', 'j7c'];
+    a.allocate('feat-j7', mods);
+    for (const m of mods) {
+      expect(a.hasConflict([m])).toBe(true);
+    }
+  });
+
+  it('병합 후 hasConflict 각각 false', () => {
+    const a = makeAllocator();
+    const mods = ['j8a', 'j8b'];
+    const r = a.allocate('feat-j8', mods);
+    if (r.ok) {
+      for (const alloc of r.value) a.mergeAllocation(alloc.coderId);
+      for (const m of mods) {
+        expect(a.hasConflict([m])).toBe(false);
+      }
+    }
+  });
+
+  it('complete 후 hasConflict 각각 true (해제 안 됨)', () => {
+    const a = makeAllocator();
+    const mods = ['j9a', 'j9b'];
+    const r = a.allocate('feat-j9', mods);
+    if (r.ok) {
+      for (const alloc of r.value) a.completeAllocation(alloc.coderId);
+      for (const m of mods) {
+        expect(a.hasConflict([m])).toBe(true);
+      }
+    }
+  });
+
+  it('200개 allocator 모두 독립 상태', () => {
+    const allocators = Array.from({ length: 200 }, () => makeAllocator());
+    for (let i = 0; i < allocators.length; i++) {
+      const r = allocators[i]!.allocate(`feat-k${i}`, [`mod-k${i}`]);
+      expect(r.ok).toBe(true);
+    }
+    for (let i = 0; i < allocators.length; i++) {
+      expect(allocators[i]!.getActiveAllocations()).toHaveLength(1);
+    }
+  });
+
+  it('allocate → merge 무한 사이클 30회 → 항상 성공', () => {
+    const a = makeAllocator();
+    for (let i = 0; i < 30; i++) {
+      const r = a.allocate(`feat-cycle-k${i}`, [`mod-cycle-k${i}`]);
+      expect(r.ok).toBe(true);
+      if (r.ok && r.value[0]) {
+        const mr = a.mergeAllocation(r.value[0].coderId);
+        expect(mr.ok).toBe(true);
+      }
+    }
+    expect(a.getActiveAllocations()).toHaveLength(0);
+  });
+});

@@ -1472,3 +1472,302 @@ describe('DefaultPluginLoader 최종 추가 경계값', () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// BATCH 75 EXTENSION: 추가 경계값/랜덤 케이스
+// ══════════════════════════════════════════════════════════════════
+
+describe('DefaultPluginLoader batch75 추가 케이스 A', () => {
+  it('5개 플러그인 getPlugin 각각 정확히 반환', async () => {
+    for (let i = 0; i < 5; i++) await createPlugin(globalDir, `batchA-${i}`);
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    for (let i = 0; i < 5; i++) {
+      expect(loader.getPlugin(`batchA-${i}`)?.manifest.name).toBe(`batchA-${i}`);
+    }
+  });
+
+  it('loadPlugins 빈 디렉 → getPlugin 항상 undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('no-such')).toBeUndefined();
+    expect(loader.getPlugin('')).toBeUndefined();
+    expect(loader.getPlugin('   ')).toBeUndefined();
+  });
+
+  it('플러그인 module 값 typeof object', async () => {
+    await createPlugin(globalDir, 'obj-check');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const p = loader.getPlugin('obj-check');
+    if (p) expect(typeof p.module).toBe('object');
+  });
+
+  it('플러그인 manifest.entryPoint는 index.ts', async () => {
+    await createPlugin(globalDir, 'ep-check');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const p = loader.getPlugin('ep-check');
+    if (p) expect(p.manifest.entryPoint).toBe('index.ts');
+  });
+
+  it('플러그인 manifest.version은 1.0.0', async () => {
+    await createPlugin(globalDir, 'ver-check');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const p = loader.getPlugin('ver-check');
+    if (p) expect(p.manifest.version).toBe('1.0.0');
+  });
+
+  it('유효 + 무효 혼합 5+5 → 유효 5개만', async () => {
+    for (let i = 0; i < 5; i++) await createPlugin(globalDir, `valid-bA-${i}`);
+    for (let i = 0; i < 5; i++) {
+      const d = join(globalDir, `invalid-bA-${i}`);
+      await mkdir(d, { recursive: true });
+      await writeFile(join(d, 'manifest.json'), '{bad}');
+    }
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) expect(result.value).toHaveLength(5);
+  });
+
+  it('loadPlugins 결과 ok는 항상 boolean', async () => {
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('loadPlugins 결과 ok=true이면 value 배열', async () => {
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('플러그인 디렉토리 재생성 후 로드 → 새 플러그인만', async () => {
+    await createPlugin(globalDir, 'old-bA');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('old-bA')).toBeDefined();
+
+    const newDir = join(tempDir, 'fresh-bA');
+    await mkdir(newDir, { recursive: true });
+    await createPlugin(newDir, 'new-bA');
+    await loader.loadPlugins(newDir);
+    expect(loader.getPlugin('old-bA')).toBeUndefined();
+    expect(loader.getPlugin('new-bA')).toBeDefined();
+  });
+
+  it('글로벌+프로젝트 모두 비어 있을 때 → 빈 배열', async () => {
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir, projectDir);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('글로벌 1 + 프로젝트 1 고유 → 2개', async () => {
+    await createPlugin(globalDir, 'g-bA');
+    await createPlugin(projectDir, 'p-bA');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir, projectDir);
+    if (result.ok) expect(result.value).toHaveLength(2);
+  });
+
+  it('글로벌 3 + 프로젝트 3 고유 → 6개', async () => {
+    for (let i = 0; i < 3; i++) await createPlugin(globalDir, `g-bA2-${i}`);
+    for (let i = 0; i < 3; i++) await createPlugin(projectDir, `p-bA2-${i}`);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir, projectDir);
+    if (result.ok) expect(result.value).toHaveLength(6);
+  });
+});
+
+describe('DefaultPluginLoader batch75 추가 케이스 B', () => {
+  it('loadPlugins 결과 value 각 원소 manifest 존재', async () => {
+    await createPlugin(globalDir, 'mf-bB');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].manifest).toBeDefined();
+    }
+  });
+
+  it('loadPlugins 결과 value 각 원소 module 존재', async () => {
+    await createPlugin(globalDir, 'mod-bB');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].module).toBeDefined();
+    }
+  });
+
+  it('loadPlugins 비존재 경로 여러 번 → 모두 ok', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    for (let i = 0; i < 5; i++) {
+      const r = await loader.loadPlugins(join(tempDir, `non-${i}`));
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('getPlugin 호출 순서 무관 → 동일 결과', async () => {
+    await createPlugin(globalDir, 'order-bB-1');
+    await createPlugin(globalDir, 'order-bB-2');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const a = loader.getPlugin('order-bB-1');
+    const b = loader.getPlugin('order-bB-2');
+    expect(a?.manifest.name).toBe('order-bB-1');
+    expect(b?.manifest.name).toBe('order-bB-2');
+    // 재조회 순서 바꿔도 동일
+    expect(loader.getPlugin('order-bB-2')?.manifest.name).toBe('order-bB-2');
+    expect(loader.getPlugin('order-bB-1')?.manifest.name).toBe('order-bB-1');
+  });
+
+  it('10개 독립 인스턴스 동시 로드 → 각각 ok=true', async () => {
+    await createPlugin(globalDir, 'parallel-bB');
+    const loaders = Array.from({ length: 10 }, () => new DefaultPluginLoader(logger));
+    const results = await Promise.all(loaders.map((l) => l.loadPlugins(globalDir)));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('같은 이름 플러그인 글로벌+프로젝트 → 프로젝트 우선', async () => {
+    await createPlugin(globalDir, 'override-bB', 'export const src = "global";');
+    await createPlugin(projectDir, 'override-bB', 'export const src = "project";');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir, projectDir);
+    const p = loader.getPlugin('override-bB');
+    if (p) {
+      const m = p.module as { src: string };
+      expect(m.src).toBe('project');
+    }
+  });
+
+  it('loadPlugins 후 getPlugin undefined 이름 목록', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const names = ['undefined', 'null', 'NaN', 'true', 'false', '0', '-1'];
+    for (const name of names) {
+      expect(loader.getPlugin(name)).toBeUndefined();
+    }
+  });
+
+  it('createPlugin 후 loadPlugins 결과 manifest.name string', async () => {
+    await createPlugin(globalDir, 'str-name-bB');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value[0]) {
+      expect(typeof result.value[0].manifest.name).toBe('string');
+    }
+  });
+
+  it('createPlugin 후 loadPlugins 결과 manifest.version string', async () => {
+    await createPlugin(globalDir, 'str-ver-bB');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value[0]) {
+      expect(typeof result.value[0].manifest.version).toBe('string');
+    }
+  });
+
+  it('createPlugin 후 loadPlugins 결과 manifest.entryPoint string', async () => {
+    await createPlugin(globalDir, 'str-ep-bB');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value[0]) {
+      expect(typeof result.value[0].manifest.entryPoint).toBe('string');
+    }
+  });
+
+  it('같은 loader 두 번 loadPlugins → 두 번째 결과 독립', async () => {
+    await createPlugin(globalDir, 'reload-bB');
+    const loader = new DefaultPluginLoader(logger);
+    const r1 = await loader.loadPlugins(globalDir);
+    const r2 = await loader.loadPlugins(globalDir);
+    if (r1.ok && r2.ok) {
+      expect(r1.value.length).toBe(r2.value.length);
+    }
+  });
+});
+
+describe('DefaultPluginLoader batch75 추가 케이스 C', () => {
+  it('loadPlugins → getPlugin → reload 다른 dir → getPlugin undefined 파이프라인', async () => {
+    await createPlugin(globalDir, 'pipe-bC');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('pipe-bC')).toBeDefined();
+    const emptyDir = join(tempDir, 'empty-bC');
+    await mkdir(emptyDir, { recursive: true });
+    await loader.loadPlugins(emptyDir);
+    expect(loader.getPlugin('pipe-bC')).toBeUndefined();
+  });
+
+  it('5번 반복 createPlugin+load → getPlugin 동일 결과', async () => {
+    await createPlugin(globalDir, 'repeat-bC');
+    const loader = new DefaultPluginLoader(logger);
+    for (let i = 0; i < 5; i++) {
+      await loader.loadPlugins(globalDir);
+      expect(loader.getPlugin('repeat-bC')).toBeDefined();
+    }
+  });
+
+  it('loadPlugins undefined → ok (비존재 경로)', async () => {
+    const result = await new DefaultPluginLoader(logger).loadPlugins(join(tempDir, 'undefined-dir'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('getPlugin 빈 문자열 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('')).toBeUndefined();
+  });
+
+  it('getPlugin 공백 문자열 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('  ')).toBeUndefined();
+  });
+
+  it('getPlugin 탭 문자열 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('\t\t')).toBeUndefined();
+  });
+
+  it('getPlugin 개행 문자열 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('\n\n')).toBeUndefined();
+  });
+
+  it('getPlugin UUID → undefined (없는 경우)', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin(crypto.randomUUID())).toBeUndefined();
+  });
+
+  it('7개 플러그인 loadPlugins → 각 name 고유', async () => {
+    for (let i = 0; i < 7; i++) await createPlugin(globalDir, `unique-bC-${i}`);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      const names = result.value.map((p) => p.manifest.name);
+      expect(new Set(names).size).toBe(names.length);
+    }
+  });
+
+  it('getPlugin manifest.name과 조회 이름 일치', async () => {
+    await createPlugin(globalDir, 'match-bC');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const p = loader.getPlugin('match-bC');
+    if (p) expect(p.manifest.name).toBe('match-bC');
+  });
+
+  it('loadPlugins 결과 배열 내 manifest 모두 defined', async () => {
+    for (let i = 0; i < 3; i++) await createPlugin(globalDir, `mf-def-bC-${i}`);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      for (const p of result.value) {
+        expect(p.manifest).toBeDefined();
+      }
+    }
+  });
+
+  it('loadPlugins 결과 배열 내 module 모두 defined', async () => {
+    for (let i = 0; i < 3; i++) await createPlugin(globalDir, `mod-def-bC-${i}`);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      for (const p of result.value) {
+        expect(p.module).toBeDefined();
+      }
+    }
+  });
+});
