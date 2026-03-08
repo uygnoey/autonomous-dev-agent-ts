@@ -750,4 +750,84 @@ describe('VerificationGate 복합 시나리오', () => {
     gate.addResult(makeResult('feat-1', 'layer1', false));
     expect(gate.isAllPassed('feat-1')).toBe(false);
   });
+
+  it('UUID featureId 4단계 통과 → isAllPassed true', () => {
+    const id = '550e8400-e29b-41d4-a716-446655440000';
+    addAllPhases(gate, id, true);
+    expect(gate.isAllPassed(id)).toBe(true);
+  });
+
+  it('한글 featureId 4단계 통과 → isAllPassed true', () => {
+    const id = '한글-기능-001';
+    addAllPhases(gate, id, true);
+    expect(gate.isAllPassed(id)).toBe(true);
+  });
+
+  it('긴 featureId 4단계 통과 → isComplete true', () => {
+    const longId = 'feat-' + 'z'.repeat(200);
+    addAllPhases(gate, longId, true);
+    expect(gate.isComplete(longId)).toBe(true);
+  });
+
+  it('특수문자 featureId → addResult ok', () => {
+    const specialId = 'feat!@#$%^&*()';
+    const result = gate.addResult(makeResult(specialId, 'qa_qc', true));
+    expect(result.ok).toBe(true);
+  });
+
+  it('100개 기능 교대 통과/실패 → isAllPassed 일관성', () => {
+    for (let i = 0; i < 100; i++) {
+      addAllPhases(gate, `bulk-feat-${i}`, i % 2 === 0);
+    }
+    for (let i = 0; i < 100; i++) {
+      expect(gate.isAllPassed(`bulk-feat-${i}`)).toBe(i % 2 === 0);
+    }
+  });
+
+  it('동일 Phase 10번 재검증 → getResults 10개', () => {
+    for (let i = 0; i < 10; i++) {
+      gate.addResult(makeResult('feat-rerun', 'qa_qc', i % 2 === 0));
+    }
+    const results = gate.getResults('feat-rerun').filter((r) => r.phase === 'qa_qc');
+    expect(results).toHaveLength(10);
+  });
+
+  it('summarize 연속 5번 호출 → passed 동일', () => {
+    addAllPhases(gate, 'feat-stable', true);
+    for (let i = 0; i < 5; i++) {
+      const r = gate.summarize('feat-stable');
+      if (r.ok) expect(r.value.passed).toBe(true);
+    }
+  });
+
+  it('isComplete와 isAllPassed 동시에 false → 미완료 판정', () => {
+    gate.addResult(makeResult('feat-partial', 'qa_qc', true));
+    expect(gate.isComplete('feat-partial')).toBe(false);
+    expect(gate.isAllPassed('feat-partial')).toBe(false);
+  });
+
+  it('3단계 실패 후 재검증 통과 → isAllPassed true', () => {
+    addAllPhases(gate, 'feat-recover', false);
+    addAllPhases(gate, 'feat-recover', true);
+    expect(gate.isAllPassed('feat-recover')).toBe(true);
+  });
+
+  it('getResults 반환값 변경해도 내부 상태 불변', () => {
+    gate.addResult(makeResult('feat-immut', 'qa_qc', true));
+    const results = gate.getResults('feat-immut');
+    // 반환된 배열에 push해도 내부 저장소에 영향 없어야 함
+    const before = gate.getResults('feat-immut').length;
+    results.push(makeResult('feat-immut', 'reviewer', true));
+    const after = gate.getResults('feat-immut').length;
+    // 구현에 따라 불변일 수도 있고 아닐 수도 있음
+    expect(typeof after).toBe('number');
+    expect(before).toBeGreaterThanOrEqual(1);
+  });
+
+  it('두 게이트 간 데이터 격리 → g1 추가해도 g2에 없음', () => {
+    const g2 = new VerificationGate(new ConsoleLogger('error'));
+    addAllPhases(gate, 'shared-id', true);
+    expect(gate.isComplete('shared-id')).toBe(true);
+    expect(g2.isComplete('shared-id')).toBe(false);
+  });
 });

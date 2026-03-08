@@ -756,4 +756,122 @@ describe('LanceDB 레코드 인터페이스 구조 검증', () => {
       expect(record.metadata.phase).toBe(phase);
     }
   });
+
+  it('MemoryRecord id가 UUID 형식이어도 허용', () => {
+    const record: MemoryRecord = {
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: 'uuid id test',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'CODE', featureId: 'feat-uuid', agentName: 'coder', timestamp: new Date() },
+    };
+    expect(record.id).toBe('550e8400-e29b-41d4-a716-446655440000');
+  });
+
+  it('MemoryRecord content 한국어 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-kr',
+      projectId: 'proj-001',
+      type: 'conversation',
+      content: '한국어 콘텐츠 테스트입니다',
+      embedding: new Float32Array(384),
+      metadata: { phase: 'CODE', featureId: 'feat-1', agentName: 'coder', timestamp: new Date() },
+    };
+    expect(record.content).toContain('한국어');
+  });
+
+  it('MemoryRecord content 빈 문자열 허용', () => {
+    const record: MemoryRecord = {
+      id: 'mem-empty-content',
+      projectId: 'proj-001',
+      type: 'error',
+      content: '',
+      embedding: new Float32Array(0),
+      metadata: { phase: 'VERIFY', featureId: '', agentName: 'qc', timestamp: new Date() },
+    };
+    expect(record.content).toBe('');
+  });
+
+  it('FailureRecord rootCause 한국어 허용', () => {
+    const failure: FailureRecord = {
+      id: 'fail-kr-root',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      phase: 'TEST',
+      failureType: 'null_pointer',
+      rootCause: '널 포인터 예외 발생',
+      resolution: 'null 체크 추가',
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(failure.rootCause).toContain('널 포인터');
+  });
+
+  it('DesignDecision decision 특수문자 포함 허용', () => {
+    const decision: DesignDecision = {
+      id: 'dd-special',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: 'REST API v2 + GraphQL (hybrid)',
+      rationale: '두 방식의 장점 결합',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date(),
+    };
+    expect(decision.decision).toContain('+');
+  });
+
+  it('ok(빈 string 배열) → value는 빈 배열', () => {
+    const result = ok<string[]>([]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('err(AdevError) → error.message는 string', () => {
+    const error = new AdevError('test_code', 'test message');
+    const result = err(error);
+    if (!result.ok) {
+      expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  it('ok 결과와 err 결과의 ok 필드는 서로 다름', () => {
+    const okResult = ok(1);
+    const errResult = err(new AdevError('code', 'msg'));
+    expect(okResult.ok).not.toBe(errResult.ok);
+  });
+
+  it('MemoryRecord 10개 생성 → 모두 독립적인 embedding', () => {
+    const records: MemoryRecord[] = [];
+    for (let i = 0; i < 10; i++) {
+      records.push({
+        id: `mem-${i}`,
+        projectId: 'proj-001',
+        type: 'conversation',
+        content: `content ${i}`,
+        embedding: new Float32Array(384),
+        metadata: { phase: 'CODE', featureId: `feat-${i}`, agentName: 'coder', timestamp: new Date() },
+      });
+    }
+    for (let i = 0; i < records.length; i++) {
+      expect(records[i]?.embedding).toBeInstanceOf(Float32Array);
+    }
+  });
+
+  it('DesignDecision timestamp는 Date 인스턴스', () => {
+    const decision: DesignDecision = {
+      id: 'dd-ts',
+      projectId: 'proj-001',
+      featureId: 'feat-001',
+      decision: '타임스탬프 테스트',
+      rationale: '이유',
+      alternatives: [],
+      decidedBy: ['architect'],
+      embedding: new Float32Array(384),
+      timestamp: new Date('2026-01-01'),
+    };
+    expect(decision.timestamp).toBeInstanceOf(Date);
+  });
 });
