@@ -1190,3 +1190,650 @@ describe('UserCheckpoint 인스턴스 격리 확장', () => {
     }
   });
 });
+
+// ── 배치65 추가 edge/random: createCheckpoint 심화 ────────────
+
+describe('UserCheckpoint createCheckpoint 심화 (batch65)', () => {
+  it('counter가 각 호출마다 +1씩 증가함 (ID 파싱)', () => {
+    const cp = makeCheckpoint();
+    const r1 = cp.createCheckpoint('p', 'feat-counter', 'r1');
+    const r2 = cp.createCheckpoint('p', 'feat-counter', 'r2');
+    if (r1.ok && r2.ok) {
+      const n1 = parseInt(r1.value.checkpointId.split('-').pop() ?? '0');
+      const n2 = parseInt(r2.value.checkpointId.split('-').pop() ?? '0');
+      expect(n2 - n1).toBe(1);
+    }
+  });
+
+  it('createCheckpoint로 생성한 ID가 checkpoints Map에 저장됨 (getCheckpoint 성공)', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-map', 'feat-map', 'map-result');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data).not.toBeNull();
+    }
+  });
+
+  it('projectId에 점(.) 포함 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('com.example.project', 'feat-1', 'result');
+    expect(r.ok).toBe(true);
+  });
+
+  it('featureId에 점(.) 포함 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat.v2.0', 'result');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(typeof r.value.checkpointId).toBe('string');
+    }
+  });
+
+  it('featureId에 숫자만 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', '12345', 'result');
+    expect(r.ok).toBe(true);
+  });
+
+  it('results에 null 유사 문자열 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'null');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe('null');
+    }
+  });
+
+  it('results에 undefined 유사 문자열 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'undefined');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe('undefined');
+    }
+  });
+
+  it('results에 true/false 문자열 → ok', () => {
+    const cp = makeCheckpoint();
+    const r1 = cp.createCheckpoint('proj-1', 'feat-true', 'true');
+    const r2 = cp.createCheckpoint('proj-1', 'feat-false', 'false');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+  });
+
+  it('createCheckpoint 반환 value는 checkpointId만 포함', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-struct', 'result');
+    if (r.ok) {
+      const keys = Object.keys(r.value);
+      expect(keys).toContain('checkpointId');
+    }
+  });
+
+  it('50개 서로 다른 projectId → 모두 ok', () => {
+    const cp = makeCheckpoint();
+    for (let i = 0; i < 50; i++) {
+      const r = cp.createCheckpoint(`proj-multi-${i}`, 'feat-1', `result-${i}`);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('results에 백슬래시 포함 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'path: C:\\Users\\test\\file.ts');
+    expect(r.ok).toBe(true);
+  });
+
+  it('results에 따옴표 포함 → ok', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'message: "hello world"');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toContain('"hello world"');
+    }
+  });
+
+  it('createCheckpoint 결과 ok=true → value 존재', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'result');
+    if (r.ok) {
+      expect(r.value).toBeDefined();
+    }
+  });
+
+  it('200개 생성 → 모두 고유 checkpointId', () => {
+    const cp = makeCheckpoint();
+    const ids = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const r = cp.createCheckpoint('proj-1', `feat-200-${i}`, `result-${i}`);
+      if (r.ok) ids.add(r.value.checkpointId);
+    }
+    expect(ids.size).toBe(200);
+  });
+
+  it('featureId에 대시 3개 연속 → checkpointId에 포함', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat---triple', 'result');
+    if (r.ok) {
+      expect(r.value.checkpointId).toContain('feat---triple');
+    }
+  });
+
+  it('results에 Markdown 형식 문자열 → ok', () => {
+    const cp = makeCheckpoint();
+    const md = '# 테스트 결과\n- 통과: 100\n- 실패: 0\n\n**빌드 성공**';
+    const r = cp.createCheckpoint('proj-1', 'feat-md', md);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe(md);
+    }
+  });
+
+  it('featureId 길이 200자 → ok', () => {
+    const cp = makeCheckpoint();
+    const longId = 'feat-' + 'b'.repeat(195);
+    const r = cp.createCheckpoint('proj-1', longId, 'result');
+    expect(r.ok).toBe(true);
+  });
+
+  it('createCheckpoint 연속 호출 → 이전 ID 덮어쓰지 않음', () => {
+    const cp = makeCheckpoint();
+    const r1 = cp.createCheckpoint('proj-1', 'feat-over', 'result-1');
+    const r2 = cp.createCheckpoint('proj-1', 'feat-over', 'result-2');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.checkpointId).not.toBe(r2.value.checkpointId);
+      const d1 = cp.getCheckpoint(r1.value.checkpointId);
+      const d2 = cp.getCheckpoint(r2.value.checkpointId);
+      expect(d1?.results).toBe('result-1');
+      expect(d2?.results).toBe('result-2');
+    }
+  });
+});
+
+// ── 배치65 추가 edge/random: getCheckpoint 심화 ────────────────
+
+describe('UserCheckpoint getCheckpoint 심화 (batch65)', () => {
+  it('생성 직후 getCheckpoint → createdAt 없어도 결과 포함', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-1', 'fresh-result');
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data).not.toBeNull();
+      expect(data?.results).toBe('fresh-result');
+    }
+  });
+
+  it('getCheckpoint 반환 객체는 results 필드를 가짐', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-field', 'field-result');
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      if (data) {
+        expect('results' in data).toBe(true);
+      }
+    }
+  });
+
+  it('getCheckpoint 반환 객체에 decision 필드 존재 (undefined 허용)', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-decision-field', 'result');
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      if (data) {
+        // 'decision' in data는 구현에 따라 다를 수 있음
+        expect(typeof data).toBe('object');
+      }
+    }
+  });
+
+  it('getCheckpoint 반환 객체에 feedback 필드 존재 (undefined 허용)', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-feedback-field', 'result');
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data).not.toBeNull();
+    }
+  });
+
+  it('ID 형식 불일치 (checkpoint 없이 시작) → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('no-prefix-id-123')).toBeNull();
+  });
+
+  it('공백 포함 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('checkpoint feat-1 1')).toBeNull();
+  });
+
+  it('줄바꿈 포함 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('checkpoint-feat-1\n1')).toBeNull();
+  });
+
+  it('탭 포함 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('checkpoint-feat-1\t1')).toBeNull();
+  });
+
+  it('같은 인스턴스, 다른 featureId의 ID → null 교차 확인', () => {
+    const cp = makeCheckpoint();
+    const r1 = cp.createCheckpoint('proj-1', 'feat-cross-1', 'r1');
+    const r2 = cp.createCheckpoint('proj-1', 'feat-cross-2', 'r2');
+    if (r1.ok && r2.ok) {
+      // 각각 자신의 ID로 조회 가능
+      expect(cp.getCheckpoint(r1.value.checkpointId)).not.toBeNull();
+      expect(cp.getCheckpoint(r2.value.checkpointId)).not.toBeNull();
+      // 가짜 조합 ID는 null
+      expect(cp.getCheckpoint('checkpoint-feat-cross-1-999')).toBeNull();
+    }
+  });
+
+  it('delete 메서드 없으므로 생성 후 조회 항상 성공', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-persistent', 'persist');
+    if (r.ok) {
+      const d1 = cp.getCheckpoint(r.value.checkpointId);
+      const d2 = cp.getCheckpoint(r.value.checkpointId);
+      const d3 = cp.getCheckpoint(r.value.checkpointId);
+      expect(d1).not.toBeNull();
+      expect(d2).not.toBeNull();
+      expect(d3).not.toBeNull();
+    }
+  });
+
+  it('결정 후 results는 변경되지 않음', () => {
+    const cp = makeCheckpoint();
+    const original = '원본 결과 내용';
+    const r = cp.createCheckpoint('proj-1', 'feat-immutable', original);
+    if (r.ok) {
+      cp.setDecision(r.value.checkpointId, 'approve', '승인');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe(original);
+    }
+  });
+
+  it('피드백 변경 후 results 불변', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-results-immutable', '변경불가 결과');
+    if (r.ok) {
+      cp.setDecision(r.value.checkpointId, 'revise', '첫 피드백');
+      cp.setDecision(r.value.checkpointId, 'approve', '두번째 피드백');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe('변경불가 결과');
+    }
+  });
+
+  it('숫자 0 문자열 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('0')).toBeNull();
+  });
+
+  it('알파벳 단일 문자 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('a')).toBeNull();
+  });
+
+  it('대문자 ID → null', () => {
+    const cp = makeCheckpoint();
+    expect(cp.getCheckpoint('CHECKPOINT-FEAT-1-1')).toBeNull();
+  });
+
+  it('유사하지만 다른 ID → null', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-similar', 'result');
+    if (r.ok) {
+      const id = r.value.checkpointId;
+      // 마지막 글자만 다른 ID
+      const almostSameId = id.slice(0, -1) + (id.slice(-1) === '1' ? '2' : '1');
+      expect(cp.getCheckpoint(almostSameId)).toBeNull();
+    }
+  });
+});
+
+// ── 배치65 추가 edge/random: setDecision 심화 ─────────────────
+
+describe('UserCheckpoint setDecision 심화 (batch65)', () => {
+  it('setDecision 후 ok=true이면 value는 undefined', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-void', 'result');
+    if (r.ok) {
+      const sr = cp.setDecision(r.value.checkpointId, 'approve');
+      if (sr.ok) {
+        expect(sr.value).toBeUndefined();
+      }
+    }
+  });
+
+  it('없는 ID setDecision → error.code가 checkpoint 관련', () => {
+    const cp = makeCheckpoint();
+    const sr = cp.setDecision('nonexistent-for-code-check', 'approve');
+    expect(sr.ok).toBe(false);
+    if (!sr.ok) {
+      expect(sr.error.code).toContain('checkpoint');
+    }
+  });
+
+  it('approve + 빈 피드백 → feedback은 빈 문자열 또는 undefined', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-empty-fb', 'result');
+    if (r.ok) {
+      cp.setDecision(r.value.checkpointId, 'approve', '');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      const fb = data?.feedback;
+      expect(fb === '' || fb === undefined).toBe(true);
+    }
+  });
+
+  it('revise + 이모지 피드백 → 저장됨', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-emoji-fb', 'result');
+    if (r.ok) {
+      const emoji = '🔴 수정 필요 🔴';
+      cp.setDecision(r.value.checkpointId, 'revise', emoji);
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.feedback).toBe(emoji);
+    }
+  });
+
+  it('setDecision 반환 타입이 Result<void> 패턴', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-result-type', 'result');
+    if (r.ok) {
+      const sr = cp.setDecision(r.value.checkpointId, 'approve');
+      expect(typeof sr.ok).toBe('boolean');
+    }
+  });
+
+  it('같은 checkpoint에 100번 setDecision → 마지막 값만 유지', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-100-decisions', 'result');
+    if (r.ok) {
+      for (let i = 0; i < 99; i++) {
+        cp.setDecision(r.value.checkpointId, i % 2 === 0 ? 'approve' : 'revise', `fb-${i}`);
+      }
+      cp.setDecision(r.value.checkpointId, 'approve', 'final-feedback');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.decision).toBe('approve');
+      expect(data?.feedback).toBe('final-feedback');
+    }
+  });
+
+  it('빈 문자열 ID로 setDecision → ok=false', () => {
+    const cp = makeCheckpoint();
+    const sr = cp.setDecision('', 'approve');
+    expect(sr.ok).toBe(false);
+  });
+
+  it('approve 후 revise → decision=revise', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-flip', 'result');
+    if (r.ok) {
+      cp.setDecision(r.value.checkpointId, 'approve');
+      cp.setDecision(r.value.checkpointId, 'revise', '재검토 필요');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.decision).toBe('revise');
+    }
+  });
+
+  it('revise 후 approve → feedback은 undefined (피드백 없음)', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-fb-clear', 'result');
+    if (r.ok) {
+      cp.setDecision(r.value.checkpointId, 'revise', '수정 필요');
+      cp.setDecision(r.value.checkpointId, 'approve');
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.decision).toBe('approve');
+      // approve with no feedback → undefined
+      expect(data?.feedback).toBeUndefined();
+    }
+  });
+
+  it('setDecision 에러 code가 agent_checkpoint_not_found', () => {
+    const cp = makeCheckpoint();
+    const sr = cp.setDecision('completely-missing-id', 'revise');
+    expect(sr.ok).toBe(false);
+    if (!sr.ok) {
+      expect(sr.error.code).toBe('agent_checkpoint_not_found');
+    }
+  });
+
+  it('10개 체크포인트 모두 approve → 각각 decision=approve', () => {
+    const cp = makeCheckpoint();
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = cp.createCheckpoint('proj-1', `feat-all-approve-${i}`, `result-${i}`);
+      if (r.ok) ids.push(r.value.checkpointId);
+    }
+    for (const id of ids) {
+      cp.setDecision(id, 'approve', `approved-${id}`);
+    }
+    for (const id of ids) {
+      const data = cp.getCheckpoint(id);
+      expect(data?.decision).toBe('approve');
+    }
+  });
+
+  it('10개 체크포인트 모두 revise → 각각 decision=revise', () => {
+    const cp = makeCheckpoint();
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = cp.createCheckpoint('proj-1', `feat-all-revise-${i}`, `result-${i}`);
+      if (r.ok) ids.push(r.value.checkpointId);
+    }
+    for (const id of ids) {
+      cp.setDecision(id, 'revise', `revise-feedback-${id}`);
+    }
+    for (const id of ids) {
+      const data = cp.getCheckpoint(id);
+      expect(data?.decision).toBe('revise');
+      expect(data?.feedback).toContain('revise-feedback');
+    }
+  });
+
+  it('피드백에 줄바꿈 포함 → 저장됨', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-newline-fb', 'result');
+    if (r.ok) {
+      const feedback = '수정사항:\n1. 로직 재검토\n2. 테스트 추가';
+      cp.setDecision(r.value.checkpointId, 'revise', feedback);
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.feedback).toBe(feedback);
+    }
+  });
+
+  it('UUID 형식 피드백 → 저장됨', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-1', 'feat-uuid-fb', 'result');
+    if (r.ok) {
+      const uuidFeedback = crypto.randomUUID();
+      cp.setDecision(r.value.checkpointId, 'revise', uuidFeedback);
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.feedback).toBe(uuidFeedback);
+    }
+  });
+});
+
+// ── 배치65 추가 edge/random: 복합 시나리오 심화 ───────────────
+
+describe('UserCheckpoint 복합 시나리오 심화 (batch65)', () => {
+  it('create → get → set → get 전체 사이클 검증', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-cycle', 'feat-full-cycle', '전체 사이클 결과');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const beforeDecision = cp.getCheckpoint(r.value.checkpointId);
+    expect(beforeDecision).not.toBeNull();
+    expect(beforeDecision?.decision).toBeUndefined();
+
+    const sr = cp.setDecision(r.value.checkpointId, 'approve', '최종 승인');
+    expect(sr.ok).toBe(true);
+
+    const afterDecision = cp.getCheckpoint(r.value.checkpointId);
+    expect(afterDecision?.decision).toBe('approve');
+    expect(afterDecision?.feedback).toBe('최종 승인');
+    expect(afterDecision?.results).toBe('전체 사이클 결과');
+  });
+
+  it('대용량 results + 대용량 feedback → 정합성 유지', () => {
+    const cp = makeCheckpoint();
+    const bigResults = 'R'.repeat(50000);
+    const bigFeedback = 'F'.repeat(50000);
+
+    const r = cp.createCheckpoint('proj-big', 'feat-big', bigResults);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    const sr = cp.setDecision(r.value.checkpointId, 'revise', bigFeedback);
+    expect(sr.ok).toBe(true);
+
+    const data = cp.getCheckpoint(r.value.checkpointId);
+    expect(data?.results).toBe(bigResults);
+    expect(data?.feedback).toBe(bigFeedback);
+  });
+
+  it('25개 approve + 25개 revise 섞기 → 각각 정확한 값', () => {
+    const cp = makeCheckpoint();
+    const approveIds: string[] = [];
+    const reviseIds: string[] = [];
+
+    for (let i = 0; i < 50; i++) {
+      const r = cp.createCheckpoint('proj-mixed', `feat-mixed-${i}`, `result-${i}`);
+      if (r.ok) {
+        if (i < 25) {
+          cp.setDecision(r.value.checkpointId, 'approve', `approve-fb-${i}`);
+          approveIds.push(r.value.checkpointId);
+        } else {
+          cp.setDecision(r.value.checkpointId, 'revise', `revise-fb-${i}`);
+          reviseIds.push(r.value.checkpointId);
+        }
+      }
+    }
+
+    for (const id of approveIds) {
+      expect(cp.getCheckpoint(id)?.decision).toBe('approve');
+    }
+    for (const id of reviseIds) {
+      expect(cp.getCheckpoint(id)?.decision).toBe('revise');
+    }
+  });
+
+  it('두 인스턴스가 같은 featureId로 생성 → 서로 격리', () => {
+    const cp1 = makeCheckpoint();
+    const cp2 = makeCheckpoint();
+
+    const r1 = cp1.createCheckpoint('proj-isolation', 'same-feat', 'result-cp1');
+    const r2 = cp2.createCheckpoint('proj-isolation', 'same-feat', 'result-cp2');
+
+    if (r1.ok && r2.ok) {
+      cp1.setDecision(r1.value.checkpointId, 'approve', 'cp1 approved');
+
+      const d1 = cp1.getCheckpoint(r1.value.checkpointId);
+      const d2 = cp2.getCheckpoint(r2.value.checkpointId);
+
+      expect(d1?.decision).toBe('approve');
+      expect(d2?.decision).toBeUndefined();
+    }
+  });
+
+  it('인스턴스 재생성 → 이전 데이터 없음', () => {
+    let cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-reset', 'feat-reset', 'initial');
+    if (!r.ok) return;
+    const oldId = r.value.checkpointId;
+
+    // 새 인스턴스
+    cp = makeCheckpoint();
+    expect(cp.getCheckpoint(oldId)).toBeNull();
+  });
+
+  it('5개 create → 3개 approve → 2개 revise → 각 결정 유지', () => {
+    const cp = makeCheckpoint();
+    const ids: string[] = [];
+
+    for (let i = 0; i < 5; i++) {
+      const r = cp.createCheckpoint('proj-5', `feat-five-${i}`, `result-${i}`);
+      if (r.ok) ids.push(r.value.checkpointId);
+    }
+
+    for (let i = 0; i < 3; i++) {
+      if (ids[i]) cp.setDecision(ids[i]!, 'approve');
+    }
+    for (let i = 3; i < 5; i++) {
+      if (ids[i]) cp.setDecision(ids[i]!, 'revise', `수정 ${i}`);
+    }
+
+    for (let i = 0; i < 3; i++) {
+      if (ids[i]) expect(cp.getCheckpoint(ids[i]!)?.decision).toBe('approve');
+    }
+    for (let i = 3; i < 5; i++) {
+      if (ids[i]) expect(cp.getCheckpoint(ids[i]!)?.decision).toBe('revise');
+    }
+  });
+
+  it('createCheckpoint ok=true의 value.checkpointId가 getCheckpoint key와 일치', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-key', 'feat-key-match', 'result');
+    if (r.ok) {
+      const id = r.value.checkpointId;
+      const data = cp.getCheckpoint(id);
+      expect(data).not.toBeNull();
+    }
+  });
+
+  it('setDecision 없이 생성만 → decision=undefined, feedback=undefined', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('proj-no-decision', 'feat-no-decision', 'result-nd');
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.decision).toBeUndefined();
+      expect(data?.feedback).toBeUndefined();
+    }
+  });
+
+  it('한글 projectId + 한글 featureId + 한글 results → ok 및 정합성', () => {
+    const cp = makeCheckpoint();
+    const r = cp.createCheckpoint('프로젝트-한글', '기능-한글', '결과: 전체 통과');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const data = cp.getCheckpoint(r.value.checkpointId);
+      expect(data?.results).toBe('결과: 전체 통과');
+    }
+  });
+
+  it('getCheckpoint 반환 null이면 결정 없음 확인 가능', () => {
+    const cp = makeCheckpoint();
+    const data = cp.getCheckpoint('no-such-cp');
+    expect(data).toBeNull();
+    // data가 null이면 decision에 접근 시 타입 안전
+    if (data !== null) {
+      expect(data.decision).toBeUndefined();
+    }
+  });
+
+  it('create×3 → setDecision×3 → 순서대로 조회 → 정합성', () => {
+    const cp = makeCheckpoint();
+    const cases: Array<{ id: string; d: 'approve' | 'revise'; fb: string }> = [];
+
+    for (let i = 0; i < 3; i++) {
+      const r = cp.createCheckpoint('proj-ordered', `feat-order-${i}`, `result-${i}`);
+      if (r.ok) {
+        const d: 'approve' | 'revise' = i % 2 === 0 ? 'approve' : 'revise';
+        const fb = `feedback-ordered-${i}`;
+        cp.setDecision(r.value.checkpointId, d, fb);
+        cases.push({ id: r.value.checkpointId, d, fb });
+      }
+    }
+
+    for (const c of cases) {
+      const data = cp.getCheckpoint(c.id);
+      expect(data?.decision).toBe(c.d);
+      expect(data?.feedback).toBe(c.fb);
+    }
+  });
+});

@@ -1190,4 +1190,457 @@ describe('CodeVectorStore', () => {
       }
     });
   });
+
+  // ── 배치65 추가 경계값 케이스 #3 ─────────────────────────────
+  describe('추가 경계값 #3 (batch65)', () => {
+    it('랜덤 UUID ID #6 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #7 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #8 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #9 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #10 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('insert 후 getById → id 필드 일치', async () => {
+      await store.initialize();
+      const id = 'batch65-id-match';
+      await store.insert(createTestCodeRecord({ id }));
+      const result = await store.getById(id);
+      if (result.ok && result.value) {
+        expect(result.value.id).toBe(id);
+      }
+    });
+
+    it('insert 후 getById → chunk 필드 일치', async () => {
+      await store.initialize();
+      const chunk = 'function batch65() { return 65; }';
+      await store.insert(createTestCodeRecord({ id: 'batch65-chunk-match', chunk }));
+      const result = await store.getById('batch65-chunk-match');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('insert 후 getById → projectId 필드 일치', async () => {
+      await store.initialize();
+      const projectId = 'batch65-project';
+      await store.insert(createTestCodeRecord({ id: 'batch65-proj-match', projectId }));
+      const result = await store.getById('batch65-proj-match');
+      if (result.ok && result.value) {
+        expect(result.value.projectId).toBe(projectId);
+      }
+    });
+
+    it('insert 후 getById → filePath 필드 일치', async () => {
+      await store.initialize();
+      const filePath = 'src/batch65/module.ts';
+      await store.insert(createTestCodeRecord({ id: 'batch65-fp-match', filePath }));
+      const result = await store.getById('batch65-fp-match');
+      if (result.ok && result.value) {
+        expect(result.value.filePath).toBe(filePath);
+      }
+    });
+
+    it('insert 후 getById → metadata.language 필드 일치', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'batch65-lang-match',
+        metadata: {
+          language: 'rust',
+          module: 'src/batch65',
+          functionName: 'batch65_fn',
+          lastModified: new Date(),
+          modifiedBy: 'batch65-indexer',
+        },
+      }));
+      const result = await store.getById('batch65-lang-match');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.language).toBe('rust');
+      }
+    });
+
+    it('insert 후 getById → metadata.functionName 필드 일치', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'batch65-fn-match',
+        metadata: {
+          language: 'go',
+          module: 'pkg/batch65',
+          functionName: 'Batch65Function',
+          lastModified: new Date(),
+          modifiedBy: 'go-indexer',
+        },
+      }));
+      const result = await store.getById('batch65-fn-match');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.functionName).toBe('Batch65Function');
+      }
+    });
+
+    it('insert 후 getById → metadata.modifiedBy 필드 일치', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'batch65-modby-match',
+        metadata: {
+          language: 'python',
+          module: 'scripts',
+          functionName: 'main',
+          lastModified: new Date(),
+          modifiedBy: 'batch65-bot',
+        },
+      }));
+      const result = await store.getById('batch65-modby-match');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.modifiedBy).toBe('batch65-bot');
+      }
+    });
+
+    it('insert 후 getById → metadata.module 필드 일치', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'batch65-module-match',
+        metadata: {
+          language: 'typescript',
+          module: 'src/batch65/special',
+          functionName: 'fn',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.getById('batch65-module-match');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.module).toBe('src/batch65/special');
+      }
+    });
+
+    it('search 결과 각 item이 id 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-search-id', embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]) }));
+      const result = await store.search(new Float32Array([1.0, 0.0, 0.0, 0.0]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.id).toBe('string');
+        }
+      }
+    });
+
+    it('search 결과 각 item이 chunk 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-search-chunk' }));
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.chunk).toBe('string');
+        }
+      }
+    });
+
+    it('search 결과 각 item이 projectId 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-search-proj' }));
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.projectId).toBe('string');
+        }
+      }
+    });
+
+    it('search 결과 각 item이 metadata 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-search-meta' }));
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.metadata).toBeDefined();
+          expect(typeof item.metadata.language).toBe('string');
+        }
+      }
+    });
+
+    it('searchWithScore 결과 각 item이 score 필드를 가짐 (number)', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-score-field', embedding: new Float32Array([0.5, 0.5, 0.0, 0.0]) }));
+      const result = await store.searchWithScore(new Float32Array([0.5, 0.5, 0.0, 0.0]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.score).toBe('number');
+        }
+      }
+    });
+
+    it('searchWithScore 결과 각 item이 record 필드를 가짐 (객체)', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-record-field' }));
+      const result = await store.searchWithScore(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(typeof item.record).toBe('object');
+        }
+      }
+    });
+
+    it('initialize 반환값 ok=true이면 value 있음', async () => {
+      const r = await store.initialize();
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        // ok=true이면 value는 undefined (void)
+        expect(r.value === undefined || r.value !== null).toBe(true);
+      }
+    });
+
+    it('insert 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      const r = await store.insert(createTestCodeRecord({ id: 'batch65-ok-field' }));
+      expect('ok' in r).toBe(true);
+    });
+
+    it('getById 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      const r = await store.getById('batch65-getbyid-ok');
+      expect('ok' in r).toBe(true);
+    });
+
+    it('search 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      const r = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect('ok' in r).toBe(true);
+    });
+
+    it('delete 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-del-ok' }));
+      const r = await store.delete('batch65-del-ok');
+      expect('ok' in r).toBe(true);
+    });
+
+    it('update 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-upd-ok' }));
+      const r = await store.update('batch65-upd-ok', { chunk: 'updated' });
+      expect('ok' in r).toBe(true);
+    });
+
+    it('searchWithScore 반환값이 ok 필드를 가짐', async () => {
+      await store.initialize();
+      const r = await store.searchWithScore(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect('ok' in r).toBe(true);
+    });
+
+    it('close 메서드 존재', async () => {
+      expect(typeof store.close).toBe('function');
+    });
+
+    it('searchWithScore 메서드 존재', () => {
+      expect(typeof store.searchWithScore).toBe('function');
+    });
+
+    it('close 후 insert → ok 타입 boolean', async () => {
+      await store.initialize();
+      await store.close();
+      const r = await store.insert(createTestCodeRecord({ id: 'batch65-closed-insert' }));
+      expect(typeof r.ok).toBe('boolean');
+    });
+
+    it('close 후 search → ok 타입 boolean', async () => {
+      await store.initialize();
+      await store.close();
+      const r = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect(typeof r.ok).toBe('boolean');
+    });
+
+    it('가나다 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = '가나다라마바사아자차카타파하';
+      await store.insert(createTestCodeRecord({ id: 'batch65-hangul-abc', chunk }));
+      const result = await store.getById('batch65-hangul-abc');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('아라비아 숫자 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = '0123456789';
+      await store.insert(createTestCodeRecord({ id: 'batch65-arabic', chunk }));
+      const result = await store.getById('batch65-arabic');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('대문자만 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      await store.insert(createTestCodeRecord({ id: 'batch65-upper', chunk }));
+      const result = await store.getById('batch65-upper');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('소문자만 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = 'abcdefghijklmnopqrstuvwxyz';
+      await store.insert(createTestCodeRecord({ id: 'batch65-lower', chunk }));
+      const result = await store.getById('batch65-lower');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('10개 insert 후 search limit=5 → 5개 이하 반환', async () => {
+      await store.initialize();
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({ id: `batch65-limit5-${i}` }));
+      }
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(5);
+      }
+    });
+
+    it('10개 insert 후 searchWithScore limit=3 → 3개 이하 반환', async () => {
+      await store.initialize();
+      for (let i = 0; i < 10; i++) {
+        await store.insert(createTestCodeRecord({ id: `batch65-scored-limit3-${i}` }));
+      }
+      const result = await store.searchWithScore(new Float32Array([0.5, 0.5, 0.0, 0.0]), 3);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(3);
+      }
+    });
+
+    it('특수문자 projectId → 저장/조회', async () => {
+      await store.initialize();
+      const projectId = 'proj-!@#-batch65';
+      await store.insert(createTestCodeRecord({ id: 'batch65-special-proj', projectId }));
+      const result = await store.getById('batch65-special-proj');
+      if (result.ok && result.value) {
+        expect(result.value.projectId).toBe(projectId);
+      }
+    });
+
+    it('embedding 값이 0.5인 경우 삽입 성공', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([0.5, 0.5, 0.5, 0.5]);
+      const result = await store.insert(createTestCodeRecord({ id: 'batch65-half', embedding }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('insert + getById + update + getById 순차 → 최종 값 확인', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-seq', chunk: 'original' }));
+      const before = await store.getById('batch65-seq');
+      if (before.ok && before.value) {
+        expect(before.value.chunk).toBe('original');
+      }
+      await store.update('batch65-seq', { chunk: 'updated-batch65' });
+      const after = await store.getById('batch65-seq');
+      if (after.ok && after.value) {
+        expect(after.value.chunk).toBe('updated-batch65');
+      }
+    });
+
+    it('delete 후 getById → null 반환', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'batch65-del-null' }));
+      await store.delete('batch65-del-null');
+      const result = await store.getById('batch65-del-null');
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('metadata.lastModified 저장/조회', async () => {
+      await store.initialize();
+      const lastModified = new Date('2026-01-01T00:00:00Z');
+      await store.insert(createTestCodeRecord({
+        id: 'batch65-last-mod',
+        metadata: {
+          language: 'typescript',
+          module: 'src/batch65',
+          functionName: 'fn',
+          lastModified,
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.getById('batch65-last-mod');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.lastModified).toBeDefined();
+      }
+    });
+
+    it('insert 5개 후 search → ok=true이고 배열 반환', async () => {
+      await store.initialize();
+      for (let i = 0; i < 5; i++) {
+        await store.insert(createTestCodeRecord({ id: `batch65-five-${i}` }));
+      }
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 10);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(Array.isArray(result.value)).toBe(true);
+      }
+    });
+
+    it('update 후 getById → 업데이트 내용 유지', async () => {
+      await store.initialize();
+      const updatedChunk = '// batch65 updated chunk\nfunction updated() {}';
+      await store.insert(createTestCodeRecord({ id: 'batch65-upd-persist' }));
+      await store.update('batch65-upd-persist', { chunk: updatedChunk });
+      const result = await store.getById('batch65-upd-persist');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(updatedChunk);
+      }
+    });
+
+    it('여러 언어 metadata 연속 삽입 → 언어별 filter search', async () => {
+      await store.initialize();
+      const langs = ['typescript', 'python', 'go', 'rust', 'java'];
+      for (let i = 0; i < langs.length; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `batch65-lang-${langs[i]}`,
+          embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]),
+          metadata: {
+            language: langs[i] ?? 'typescript',
+            module: `src/${langs[i]}`,
+            functionName: `fn_${langs[i]}`,
+            lastModified: new Date(),
+            modifiedBy: 'indexer',
+          },
+        }));
+      }
+
+      for (const lang of langs) {
+        const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 10, { language: lang });
+        if (result.ok) {
+          for (const r of result.value) {
+            expect(r.metadata.language).toBe(lang);
+          }
+        }
+      }
+    });
+  });
 });

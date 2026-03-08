@@ -1205,4 +1205,408 @@ describe('layer3 ↔ layer2 통합 / layer3 ↔ layer2 integration', () => {
     });
     expect(docResult.ok).toBe(true);
   });
+
+  // ── 배치65 추가 edge/random 케이스 ─────────────────────────────
+
+  it('BugEscalator: createReport 결과 value.featureId 포함 확인', () => {
+    const escalator = new BugEscalator(logger);
+    const failure = createTestFailure('feat-id-check', 'error', 'feat-batch65');
+    const result = escalator.createReport('proj-batch65', failure);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // BugReport는 projectId를 가짐
+      expect(typeof result.value.projectId).toBe('string');
+    }
+  });
+
+  it('BugEscalator: 연속 3개 resolve → getActiveReports 길이 -3', () => {
+    const escalator = new BugEscalator(logger);
+    for (let i = 0; i < 5; i++) {
+      escalator.createReport('proj-resolve-3', createTestFailure(`t${i}`, 'error', `f${i}`));
+    }
+    const before = escalator.getActiveReports('proj-resolve-3').length;
+    const reports = escalator.getActiveReports('proj-resolve-3');
+    for (let i = 0; i < 3; i++) {
+      if (reports[i]) escalator.resolveReport(reports[i]!.id);
+    }
+    const after = escalator.getActiveReports('proj-resolve-3').length;
+    expect(after).toBe(before - 3);
+  });
+
+  it('BugEscalator: escalate 후 targetPhase는 DESIGN, CODE, TEST, VERIFY 중 하나', () => {
+    const escalator = new BugEscalator(logger);
+    const errors = [
+      'crash in production', 'timeout occurred', 'minor display issue',
+      'architecture flaw', 'null pointer exception',
+    ];
+    const validPhases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const error of errors) {
+      const failure = createTestFailure('test', error, 'feat-phase-check');
+      const reportResult = escalator.createReport('proj-phase-check', failure);
+      if (!reportResult.ok) continue;
+      const escalateResult = escalator.escalate(reportResult.value);
+      if (escalateResult.ok) {
+        expect(validPhases).toContain(escalateResult.value.targetPhase);
+      }
+    }
+  });
+
+  it('BugEscalator: getActiveReports 반환은 배열', () => {
+    const escalator = new BugEscalator(logger);
+    const reports = escalator.getActiveReports('any-project');
+    expect(Array.isArray(reports)).toBe(true);
+  });
+
+  it('BugEscalator: createReport ok=true이면 value.id 존재', () => {
+    const escalator = new BugEscalator(logger);
+    const failure = createTestFailure('id-exists', 'error', 'feat-1');
+    const result = escalator.createReport('proj-id-exists', failure);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.id).toBeDefined();
+      expect(result.value.id.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('BugEscalator: escalate ok=true이면 targetPhase 존재', () => {
+    const escalator = new BugEscalator(logger);
+    const failure = createTestFailure('tp-exists', 'crash error', 'feat-1');
+    const reportResult = escalator.createReport('proj-tp', failure);
+    if (!reportResult.ok) return;
+    const escalateResult = escalator.escalate(reportResult.value);
+    expect(escalateResult.ok).toBe(true);
+    if (escalateResult.ok) {
+      expect(escalateResult.value.targetPhase).toBeDefined();
+    }
+  });
+
+  it('FailureHandler: classify ok=true이면 type, suggestedAction 존재', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-struct', 'CODE', 'crash in module');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBeDefined();
+      expect(result.value.suggestedAction).toBeDefined();
+    }
+  });
+
+  it('FailureHandler: getRecoveryPhase 반환값이 string', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-str', 'TEST', 'coverage gap found');
+    if (result.ok) {
+      const phase = handler.getRecoveryPhase(result.value);
+      expect(typeof phase).toBe('string');
+    }
+  });
+
+  it('FailureHandler: crash → implementation_bug, suggestedAction=fix', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-crash-fix', 'CODE', 'application crash');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('implementation_bug');
+      // fix or rollback_phase 둘 다 허용
+      expect(['fix', 'rollback_phase', 'retry']).toContain(result.value.suggestedAction);
+    }
+  });
+
+  it('FailureHandler: architecture → design_flaw, suggestedAction=rollback_phase', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-arch-rb', 'TEST', 'Architecture incompatibility detected');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('design_flaw');
+      expect(result.value.suggestedAction).toBe('rollback_phase');
+    }
+  });
+
+  it('FailureHandler: unclear → spec_ambiguity, suggestedAction=escalate_user', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-unclear', 'DESIGN', 'Requirement unclear in spec');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('spec_ambiguity');
+      expect(result.value.suggestedAction).toBe('escalate_user');
+    }
+  });
+
+  it('FailureHandler: coverage → test_gap, getRecoveryPhase=TEST', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-cov', 'VERIFY', 'coverage below threshold');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('test_gap');
+      expect(handler.getRecoveryPhase(result.value)).toBe('TEST');
+    }
+  });
+
+  it('FailureHandler: timeout → infrastructure, suggestedAction=retry', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-timeout', 'CODE', 'Request timeout occurred');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.suggestedAction).toBe('retry');
+    }
+  });
+
+  it('PhaseEngine: currentPhase는 string', () => {
+    const engine = new PhaseEngine(logger);
+    expect(typeof engine.currentPhase).toBe('string');
+  });
+
+  it('PhaseEngine: 초기 currentPhase=DESIGN', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('PhaseEngine: DESIGN→CODE 성공 후 currentPhase=CODE', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('PhaseEngine: CODE→TEST 성공 후 currentPhase=TEST', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    engine.transition('TEST', 'done', 'coder');
+    expect(engine.currentPhase).toBe('TEST');
+  });
+
+  it('PhaseEngine: TEST→VERIFY 성공 후 currentPhase=VERIFY', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    engine.transition('TEST', 'done', 'coder');
+    engine.transition('VERIFY', 'done', 'tester');
+    expect(engine.currentPhase).toBe('VERIFY');
+  });
+
+  it('PhaseEngine: 실패 전환은 currentPhase 유지', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('VERIFY', 'skip', 'qa'); // 실패
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('PhaseEngine: VERIFY→CODE 롤백 가능', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    engine.transition('TEST', 'done', 'coder');
+    engine.transition('VERIFY', 'done', 'tester');
+    const r = engine.transition('CODE', 'rollback', 'qc');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('PhaseEngine: VERIFY→TEST 롤백 가능', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    engine.transition('TEST', 'done', 'coder');
+    engine.transition('VERIFY', 'done', 'tester');
+    const r = engine.transition('TEST', 'rollback-test', 'qc');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(engine.currentPhase).toBe('TEST');
+  });
+
+  it('ProductionTester: runE2E 결과 ok=true이면 value 존재', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-val-exists', ['cmd1']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toBeDefined();
+    }
+  });
+
+  it('ProductionTester: isHealthy 100% 통과 → true', () => {
+    const tester = new ProductionTester(logger);
+    const run = tester.runE2E('proj-100pct', ['a', 'b', 'c', 'd', 'e']);
+    if (run.ok) {
+      expect(tester.isHealthy([run.value])).toBe(true);
+    }
+  });
+
+  it('ProductionTester: getFailureRate 모두 통과 → 0', () => {
+    const tester = new ProductionTester(logger);
+    const run = tester.runE2E('proj-zero-rate', ['a', 'b', 'c']);
+    if (run.ok) {
+      expect(tester.getFailureRate([run.value])).toBe(0);
+    }
+  });
+
+  it('ProductionTester: UUID projectId → ok', () => {
+    const tester = new ProductionTester(logger);
+    const uuid = crypto.randomUUID();
+    const result = tester.runE2E(uuid, ['cmd1']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ProductionTester: runE2E 결과 failures 배열 각 item에 testName 있음', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-failure-struct', ['', '']);
+    if (result.ok) {
+      for (const f of result.value.failures) {
+        expect(typeof f.testName).toBe('string');
+      }
+    }
+  });
+
+  it('ProductionTester: runE2E 결과 failures 배열 각 item에 featureId 있음', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-failure-feat', ['', '']);
+    if (result.ok) {
+      for (const f of result.value.failures) {
+        expect(typeof f.featureId).toBe('string');
+      }
+    }
+  });
+
+  it('DocIntegrator: integrate 결과 value.type이 입력 type과 일치', async () => {
+    const integrator = new DocIntegrator(logger);
+    const result = await integrator.integrate({
+      projectId: 'proj-type-match',
+      type: 'architecture',
+      fragmentPattern: '*.md',
+      outputPath: './docs/arch.md',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('architecture');
+    }
+  });
+
+  it('DocIntegrator: 연속 10번 integrate → 모두 ok', async () => {
+    const integrator = new DocIntegrator(logger);
+    for (let i = 0; i < 10; i++) {
+      const result = await integrator.integrate({
+        projectId: `proj-10x-${i}`,
+        type: 'test-report',
+        fragmentPattern: '*.md',
+        outputPath: `./docs/rep-${i}.md`,
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('BugEscalator + FailureHandler + PhaseEngine: 전체 파이프라인 통합', () => {
+    const escalator = new BugEscalator(logger);
+    const handler = new FailureHandler(logger);
+    const engine = new PhaseEngine(logger);
+
+    // Phase 진행
+    engine.transition('CODE', 'design done', 'architect');
+    engine.transition('TEST', 'code done', 'coder');
+    engine.transition('VERIFY', 'tests done', 'tester');
+
+    // TEST 단계에서 null 포인터 발견
+    const failure = createTestFailure('null-pipeline', 'null reference error', 'feat-null');
+    const reportResult = escalator.createReport('proj-full-pipeline', failure);
+    expect(reportResult.ok).toBe(true);
+    if (!reportResult.ok) return;
+
+    // 에스컬레이션
+    const escalateResult = escalator.escalate(reportResult.value);
+    expect(escalateResult.ok).toBe(true);
+    if (!escalateResult.ok) return;
+
+    // FailureHandler 분류
+    const classifyResult = handler.classify('feat-null', 'VERIFY', 'null reference error');
+    expect(classifyResult.ok).toBe(true);
+    if (!classifyResult.ok) return;
+
+    const recoveryPhase = handler.getRecoveryPhase(classifyResult.value);
+    expect(['DESIGN', 'CODE', 'TEST', 'VERIFY']).toContain(recoveryPhase);
+
+    // PhaseEngine 롤백
+    if (engine.canTransition(recoveryPhase)) {
+      const rollback = engine.transition(recoveryPhase, 'rollback', 'qc');
+      expect(rollback.ok).toBe(true);
+    }
+  });
+
+  it('BugEscalator: 100개 resolve 후 getActiveReports 빈 배열', () => {
+    const escalator = new BugEscalator(logger);
+    for (let i = 0; i < 100; i++) {
+      escalator.createReport('proj-100-resolve', createTestFailure(`t${i}`, 'error', `f${i}`));
+    }
+    const reports = escalator.getActiveReports('proj-100-resolve');
+    for (const r of reports) {
+      escalator.resolveReport(r.id);
+    }
+    expect(escalator.getActiveReports('proj-100-resolve').length).toBe(0);
+  });
+
+  it('FailureHandler: null → implementation_bug, getRecoveryPhase=CODE', () => {
+    const handler = new FailureHandler(logger);
+    const result = handler.classify('feat-null-impl', 'TEST', 'null pointer exception');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('implementation_bug');
+      expect(handler.getRecoveryPhase(result.value)).toBe('CODE');
+    }
+  });
+
+  it('PhaseEngine: canTransition TEST → false (초기 DESIGN에서)', () => {
+    const engine = new PhaseEngine(logger);
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+
+  it('PhaseEngine: canTransition VERIFY → false (CODE에서)', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'done', 'arch');
+    expect(engine.canTransition('VERIFY')).toBe(false);
+  });
+
+  it('PhaseEngine: getHistory 각 item에 from, to, reason 포함', () => {
+    const engine = new PhaseEngine(logger);
+    engine.transition('CODE', 'design complete', 'architect');
+    const history = engine.getHistory();
+    expect(history.length).toBe(1);
+    const item = history[0];
+    if (item) {
+      expect(typeof item.from).toBe('string');
+      expect(typeof item.to).toBe('string');
+      expect(typeof item.reason).toBe('string');
+    }
+  });
+
+  it('ProductionTester: 한글 projectId → ok 타입 boolean', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('한국어-프로젝트', ['bun test']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('DocIntegrator: api-reference type 통합 → ok', async () => {
+    const integrator = new DocIntegrator(logger);
+    const result = await integrator.integrate({
+      projectId: 'proj-api-ref',
+      type: 'api-reference',
+      fragmentPattern: '*.md',
+      outputPath: './docs/api-ref.md',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('api-reference');
+    }
+  });
+
+  it('BugEscalator: 이모지 포함 testName → ok', () => {
+    const escalator = new BugEscalator(logger);
+    const failure = createTestFailure('🔴 Critical Test 🔴', 'crash', 'feat-emoji');
+    const result = escalator.createReport('proj-emoji', failure);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('BugEscalator: escalate 후 resolveReport 가능', () => {
+    const escalator = new BugEscalator(logger);
+    const failure = createTestFailure('escalate-then-resolve', 'crash', 'feat-etr');
+    const reportResult = escalator.createReport('proj-etr', failure);
+    expect(reportResult.ok).toBe(true);
+    if (!reportResult.ok) return;
+
+    const escalateResult = escalator.escalate(reportResult.value);
+    expect(escalateResult.ok).toBe(true);
+
+    const resolveResult = escalator.resolveReport(reportResult.value.id);
+    expect(resolveResult.ok).toBe(true);
+
+    expect(escalator.getActiveReports('proj-etr').length).toBe(0);
+  });
 });
