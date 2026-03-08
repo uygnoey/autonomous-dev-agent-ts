@@ -464,39 +464,102 @@ describe('AgentSpawner.resumeSession', () => {
 // ── 이벤트 타입별 전달 검증 ────────────────────────────────────
 
 describe('AgentSpawner 이벤트 타입 전달', () => {
-  it.each(['message', 'tool_use', 'tool_result', 'error', 'done'] as const)(
-    '이벤트 타입 %s → 그대로 전달',
-    async (eventType) => {
-      const mockEvent = makeAgentEvent({ type: eventType });
-      const executor = makeSuccessExecutor([mockEvent]);
-      const spawner = new AgentSpawner(executor, logger);
-      const events: AgentEvent[] = [];
-      for await (const event of spawner.spawn(makeAgentConfig())) {
-        events.push(event);
-      }
-      expect(events[0]?.type).toBe(eventType);
-    },
-  );
+  it('이벤트 타입 message → 그대로 전달', async () => {
+    const mockEvent = makeAgentEvent({ type: 'message' });
+    const executor = makeSuccessExecutor([mockEvent]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('message');
+  });
+
+  it('이벤트 타입 tool_use → 그대로 전달', async () => {
+    const mockEvent = makeAgentEvent({ type: 'tool_use' });
+    const executor = makeSuccessExecutor([mockEvent]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('tool_use');
+  });
+
+  it('이벤트 타입 tool_result → 그대로 전달', async () => {
+    const mockEvent = makeAgentEvent({ type: 'tool_result' });
+    const executor = makeSuccessExecutor([mockEvent]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('tool_result');
+  });
+
+  it('이벤트 타입 error → 그대로 전달', async () => {
+    const mockEvent = makeAgentEvent({ type: 'error' });
+    const executor = makeSuccessExecutor([mockEvent]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('error');
+  });
+
+  it('이벤트 타입 done → 그대로 전달', async () => {
+    const mockEvent = makeAgentEvent({ type: 'done' });
+    const executor = makeSuccessExecutor([mockEvent]);
+    const spawner = new AgentSpawner(executor, logger);
+    const events: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('done');
+  });
 });
 
 // ── 랜덤/경계값 ───────────────────────────────────────────────
 
 describe('AgentSpawner 랜덤/경계값', () => {
-  it.each(Array.from({ length: 20 }, (_, i) => i))(
-    '랜덤 이벤트 수 #%i',
-    async (count) => {
-      const mockEvents = Array.from({ length: count }, (_, j) =>
-        makeAgentEvent({ content: `event-${j}` }),
-      );
-      const executor = makeSuccessExecutor(mockEvents);
-      const spawner = new AgentSpawner(executor, logger);
-      const received: AgentEvent[] = [];
-      for await (const event of spawner.spawn(makeAgentConfig())) {
-        received.push(event);
-      }
-      expect(received.length).toBe(count);
-    },
-  );
+  it('랜덤 이벤트 수 0개', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) received.push(event);
+    expect(received.length).toBe(0);
+  });
+
+  it('랜덤 이벤트 수 1개', async () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([makeAgentEvent()]), logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) received.push(event);
+    expect(received.length).toBe(1);
+  });
+
+  it('랜덤 이벤트 수 5개', async () => {
+    const mockEvents = Array.from({ length: 5 }, (_, j) => makeAgentEvent({ content: `event-${j}` }));
+    const spawner = new AgentSpawner(makeSuccessExecutor(mockEvents), logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) received.push(event);
+    expect(received.length).toBe(5);
+  });
+
+  it('랜덤 이벤트 수 10개', async () => {
+    const mockEvents = Array.from({ length: 10 }, (_, j) => makeAgentEvent({ content: `event-${j}` }));
+    const spawner = new AgentSpawner(makeSuccessExecutor(mockEvents), logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) received.push(event);
+    expect(received.length).toBe(10);
+  });
+
+  it('랜덤 이벤트 수 50개', async () => {
+    const mockEvents = Array.from({ length: 50 }, (_, j) => makeAgentEvent({ content: `event-${j}` }));
+    const spawner = new AgentSpawner(makeSuccessExecutor(mockEvents), logger);
+    const received: AgentEvent[] = [];
+    for await (const event of spawner.spawn(makeAgentConfig())) received.push(event);
+    expect(received.length).toBe(50);
+  });
 
   it('1000개 이벤트 → 모두 수신', async () => {
     const mockEvents = Array.from({ length: 1000 }, (_, i) =>

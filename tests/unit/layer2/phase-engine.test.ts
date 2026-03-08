@@ -127,8 +127,43 @@ describe('PhaseEngine 순방향 전환', () => {
     if (result.ok) expect(result.value.timestamp).toBeInstanceOf(Date);
   });
 
-  it.each(ALL_TRIGGERS)('triggeredBy %s → ok (DESIGN→CODE)', (trigger) => {
-    const result = engine.transition('CODE', '이유', trigger);
+  it('triggeredBy architect → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'architect');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy qa → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'qa');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy coder → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'coder');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy tester → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'tester');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy qc → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'qc');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy reviewer → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'reviewer');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy documenter → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'documenter');
+    expect(result.ok).toBe(true);
+  });
+
+  it('triggeredBy adev → ok (DESIGN→CODE)', () => {
+    const result = makeEngine().transition('CODE', '이유', 'adev');
     expect(result.ok).toBe(true);
   });
 });
@@ -254,10 +289,28 @@ describe('PhaseEngine VERIFY 역방향 전환', () => {
     expect(engine.getHistory().length).toBe(historyBefore + 1);
   });
 
-  it.each(['DESIGN', 'CODE', 'TEST'] as Phase[])('VERIFY → %s 롤백 ok', (phase) => {
-    const result = engine.transition(phase, '롤백', 'adev');
+  it('VERIFY → DESIGN 롤백 ok (it.each 대체)', () => {
+    const e = makeEngine();
+    advanceToVerify(e);
+    const result = e.transition('DESIGN', '롤백', 'adev');
     expect(result.ok).toBe(true);
-    expect(engine.currentPhase).toBe(phase);
+    expect(e.currentPhase).toBe('DESIGN');
+  });
+
+  it('VERIFY → CODE 롤백 ok (it.each 대체)', () => {
+    const e = makeEngine();
+    advanceToVerify(e);
+    const result = e.transition('CODE', '롤백', 'adev');
+    expect(result.ok).toBe(true);
+    expect(e.currentPhase).toBe('CODE');
+  });
+
+  it('VERIFY → TEST 롤백 ok (it.each 대체)', () => {
+    const e = makeEngine();
+    advanceToVerify(e);
+    const result = e.transition('TEST', '롤백', 'adev');
+    expect(result.ok).toBe(true);
+    expect(e.currentPhase).toBe('TEST');
   });
 });
 
@@ -409,8 +462,29 @@ describe('PhaseEngine getParticipants', () => {
     expect(p.inactive).toContain('tester');
   });
 
-  it.each(ALL_PHASES)('getParticipants(%s) → 반환값 정의됨', (phase) => {
-    const p = engine.getParticipants(phase);
+  it('getParticipants(DESIGN) → 반환값 정의됨', () => {
+    const p = engine.getParticipants('DESIGN');
+    expect(p.lead).toBeDefined();
+    expect(p.active).toBeDefined();
+    expect(p.inactive).toBeDefined();
+  });
+
+  it('getParticipants(CODE) → 반환값 정의됨', () => {
+    const p = engine.getParticipants('CODE');
+    expect(p.lead).toBeDefined();
+    expect(p.active).toBeDefined();
+    expect(p.inactive).toBeDefined();
+  });
+
+  it('getParticipants(TEST) → 반환값 정의됨', () => {
+    const p = engine.getParticipants('TEST');
+    expect(p.lead).toBeDefined();
+    expect(p.active).toBeDefined();
+    expect(p.inactive).toBeDefined();
+  });
+
+  it('getParticipants(VERIFY) → 반환값 정의됨', () => {
+    const p = engine.getParticipants('VERIFY');
     expect(p.lead).toBeDefined();
     expect(p.active).toBeDefined();
     expect(p.inactive).toBeDefined();
