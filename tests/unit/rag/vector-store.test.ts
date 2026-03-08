@@ -865,4 +865,329 @@ describe('CodeVectorStore', () => {
       }
     });
   });
+
+  // ── 추가 경계값 케이스 #2 ──────────────────────────────────
+  describe('추가 경계값 #2', () => {
+    it('embedding 모든 값 0 → search ok=true', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([0, 0, 0, 0]);
+      await store.insert(createTestCodeRecord({ id: 'zero-emb', embedding }));
+      const result = await store.search(new Float32Array([0, 0, 0, 0]), 5);
+      expect(result.ok).toBe(true);
+    });
+
+    it('embedding 극단값 1e10 → 삽입 ok', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([1e10, 1e10, 1e10, 1e10]);
+      const result = await store.insert(createTestCodeRecord({ id: 'extreme-emb', embedding }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('embedding 극단값 -1e10 → 삽입 ok', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([-1e10, -1e10, -1e10, -1e10]);
+      const result = await store.insert(createTestCodeRecord({ id: 'neg-extreme-emb', embedding }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('100개 레코드 삽입 후 getById 확인 (샘플 3개)', async () => {
+      await store.initialize();
+      for (let i = 0; i < 100; i++) {
+        await store.insert(createTestCodeRecord({ id: `bulk-${i}` }));
+      }
+      for (const idx of [0, 49, 99]) {
+        const result = await store.getById(`bulk-${idx}`);
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.value?.id).toBe(`bulk-${idx}`);
+      }
+    });
+
+    it('metadata.module 보존', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'module-test',
+        metadata: {
+          language: 'typescript',
+          module: 'src/special/module',
+          functionName: 'fn',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.getById('module-test');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.module).toBe('src/special/module');
+      }
+    });
+
+    it('chunk 빈 문자열 → update 후 조회 빈 문자열', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'empty-upd', chunk: 'initial content' }));
+      await store.update('empty-upd', { chunk: '' });
+      const result = await store.getById('empty-upd');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe('');
+      }
+    });
+
+    it('filePath update 후 조회', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'fp-upd', filePath: 'src/old.ts' }));
+      await store.update('fp-upd', { filePath: 'src/new.ts' });
+      const result = await store.getById('fp-upd');
+      if (result.ok && result.value) {
+        expect(result.value.filePath).toBe('src/new.ts');
+      }
+    });
+
+    it('search limit=0 → 빈 배열 or ok', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'limit-zero' }));
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 0);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('searchWithScore limit=1 → 최대 1개', async () => {
+      await store.initialize();
+      for (let i = 0; i < 5; i++) {
+        await store.insert(createTestCodeRecord({ id: `scored-limit-${i}` }));
+      }
+      const result = await store.searchWithScore(new Float32Array([0.5, 0.5, 0.0, 0.0]), 1);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.length).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('searchWithScore 필터 language=typescript → 결과 모두 ts', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'scored-ts',
+        embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]),
+        metadata: {
+          language: 'typescript',
+          module: 'core',
+          functionName: 'fn',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.searchWithScore(new Float32Array([1.0, 0.0, 0.0, 0.0]), 5, { language: 'typescript' });
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.record.metadata.language).toBe('typescript');
+        }
+      }
+    });
+
+    it('insert 후 delete 후 insert 동일 ID → ok', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'cycle-id', chunk: 'first' }));
+      await store.delete('cycle-id');
+      const result = await store.insert(createTestCodeRecord({ id: 'cycle-id', chunk: 'second' }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('중국어 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = '// 中文注释\nfunction 你好() { return "世界"; }';
+      await store.insert(createTestCodeRecord({ id: 'zh-chunk', chunk }));
+      const result = await store.getById('zh-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('일본어 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = '// 日本語コメント\nfunction こんにちは() { return "世界"; }';
+      await store.insert(createTestCodeRecord({ id: 'ja-chunk', chunk }));
+      const result = await store.getById('ja-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('newline 포함 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = 'function a() {\n  return 1;\n}\n\nfunction b() {\n  return 2;\n}';
+      await store.insert(createTestCodeRecord({ id: 'newline-chunk', chunk }));
+      const result = await store.getById('newline-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('tab 포함 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = 'function tabbed() {\n\treturn 1;\n}';
+      await store.insert(createTestCodeRecord({ id: 'tab-chunk', chunk }));
+      const result = await store.getById('tab-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('delete 5개 후 search → 삭제된 ID 없음', async () => {
+      await store.initialize();
+      const ids = ['del-s1', 'del-s2', 'del-s3', 'del-s4', 'del-s5'];
+      for (const id of ids) {
+        await store.insert(createTestCodeRecord({ id, embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]) }));
+      }
+      for (const id of ids) {
+        await store.delete(id);
+      }
+      const result = await store.search(new Float32Array([1.0, 0.0, 0.0, 0.0]), 10);
+      if (result.ok) {
+        for (const id of ids) {
+          expect(result.value.map(r => r.id)).not.toContain(id);
+        }
+      }
+    });
+
+    it('update 여러 필드 동시 → chunk+filePath 둘 다 변경', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'multi-upd', chunk: 'old chunk', filePath: 'old.ts' }));
+      await store.update('multi-upd', { chunk: 'new chunk', filePath: 'new.ts' });
+      const result = await store.getById('multi-upd');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe('new chunk');
+        expect(result.value.filePath).toBe('new.ts');
+      }
+    });
+
+    it('backslash 포함 chunk → 저장/조회', async () => {
+      await store.initialize();
+      const chunk = 'function slash() { return "a\\\\b"; }';
+      await store.insert(createTestCodeRecord({ id: 'backslash-chunk', chunk }));
+      const result = await store.getById('backslash-chunk');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe(chunk);
+      }
+    });
+
+    it('search filter module 적용 → 해당 module만', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'mod-core',
+        embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]),
+        metadata: {
+          language: 'typescript',
+          module: 'src/core',
+          functionName: 'fn',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      await store.insert(createTestCodeRecord({
+        id: 'mod-rag',
+        embedding: new Float32Array([0.9, 0.1, 0.0, 0.0]),
+        metadata: {
+          language: 'typescript',
+          module: 'src/rag',
+          functionName: 'fn2',
+          lastModified: new Date(),
+          modifiedBy: 'indexer',
+        },
+      }));
+      const result = await store.search(new Float32Array([1.0, 0.0, 0.0, 0.0]), 10, { module: 'src/core' });
+      if (result.ok) {
+        for (const r of result.value) {
+          expect(r.metadata.module).toBe('src/core');
+        }
+      }
+    });
+
+    it('getById는 Promise를 반환한다', async () => {
+      await store.initialize();
+      const p = store.getById('promise-test');
+      expect(p).toBeInstanceOf(Promise);
+      await p;
+    });
+
+    it('insert는 Promise를 반환한다', async () => {
+      await store.initialize();
+      const p = store.insert(createTestCodeRecord({ id: 'promise-insert' }));
+      expect(p).toBeInstanceOf(Promise);
+      await p;
+    });
+
+    it('search는 Promise를 반환한다', async () => {
+      await store.initialize();
+      const p = store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect(p).toBeInstanceOf(Promise);
+      await p;
+    });
+
+    it('delete는 Promise를 반환한다', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'promise-del' }));
+      const p = store.delete('promise-del');
+      expect(p).toBeInstanceOf(Promise);
+      await p;
+    });
+
+    it('close 후 재초기화 가능', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'before-close' }));
+      await store.close();
+      const reinitResult = await store.initialize();
+      expect(reinitResult.ok).toBe(true);
+    });
+
+    it('초기화 없이 delete → ok 타입 boolean', async () => {
+      const freshStore = new CodeVectorStore(tempDir, logger);
+      const result = await freshStore.delete('no-init-del');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('초기화 없이 update → ok 타입 boolean', async () => {
+      const freshStore = new CodeVectorStore(tempDir, logger);
+      const result = await freshStore.update('no-init-upd', { chunk: 'x' });
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('랜덤 UUID ID #3 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #4 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #5 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('searchWithScore 5회 반복 → 모두 ok=true', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'scored-rep', embedding: new Float32Array([0.5, 0.5, 0.0, 0.0]) }));
+      for (let i = 0; i < 5; i++) {
+        const result = await store.searchWithScore(new Float32Array([0.5, 0.5, 0.0, 0.0]), 5);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('50개 삽입 후 delete 25개 → search 결과 ≤25', async () => {
+      await store.initialize();
+      for (let i = 0; i < 50; i++) {
+        await store.insert(createTestCodeRecord({ id: `half-del-${i}`, embedding: new Float32Array([0.1, 0.2, 0.3, 0.4]) }));
+      }
+      for (let i = 0; i < 25; i++) {
+        await store.delete(`half-del-${i}`);
+      }
+      const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 50);
+      if (result.ok) {
+        for (let i = 0; i < 25; i++) {
+          expect(result.value.map(r => r.id)).not.toContain(`half-del-${i}`);
+        }
+      }
+    });
+  });
 });

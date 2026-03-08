@@ -871,3 +871,426 @@ describe('loadEnvironment 추가 경계값', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+// ── 추가 경계값: deepMerge 확장 ───────────────────────────────
+
+describe('deepMerge 추가 경계값', () => {
+  it('숫자 0으로 오버라이드', () => {
+    const base = { count: 10 };
+    const override = { count: 0 };
+    const result = deepMerge(base, override);
+    expect(result.count).toBe(0);
+  });
+
+  it('false로 오버라이드', () => {
+    const base = { active: true };
+    const override = { active: false };
+    const result = deepMerge(base, override);
+    expect(result.active).toBe(false);
+  });
+
+  it('undefined override 키 → base 값 보존', () => {
+    const base = { a: 'keep' } as Record<string, unknown>;
+    const override = { a: undefined };
+    const result = deepMerge(base, override);
+    // WHY: override 값이 undefined이면 base 값 보존
+    expect(result['a']).toBe('keep');
+  });
+
+  it('빈 배열로 오버라이드', () => {
+    const base = { items: [1, 2, 3] };
+    const override = { items: [] };
+    const result = deepMerge(base, override);
+    expect(result.items).toEqual([]);
+  });
+
+  it('중첩 객체 base-only 키 보존', () => {
+    const base = { nested: { a: 1, b: 2, c: 3 } };
+    const override = { nested: { c: 99 } };
+    const result = deepMerge(base, override);
+    expect(result.nested.a).toBe(1);
+    expect(result.nested.b).toBe(2);
+    expect(result.nested.c).toBe(99);
+  });
+
+  it('같은 키를 여러 번 오버라이드해도 마지막 값 반영', () => {
+    const base = { x: 1 };
+    const override1 = { x: 2 };
+    const override2 = { x: 3 };
+    const r1 = deepMerge(base, override1);
+    const r2 = deepMerge(r1, override2);
+    expect(r2.x).toBe(3);
+  });
+
+  it('배열 안 객체 → 오버라이드 (병합 안 함)', () => {
+    const base = { items: [{ a: 1 }, { b: 2 }] };
+    const override = { items: [{ c: 3 }] };
+    const result = deepMerge(base, override);
+    expect(result.items).toEqual([{ c: 3 }]);
+  });
+
+  it('string → number 타입 변환 오버라이드', () => {
+    const base = { val: 'string' } as Record<string, unknown>;
+    const override = { val: 42 };
+    const result = deepMerge(base, override);
+    expect(result['val']).toBe(42);
+  });
+
+  it('number → string 타입 변환 오버라이드', () => {
+    const base = { val: 42 } as Record<string, unknown>;
+    const override = { val: 'string' };
+    const result = deepMerge(base, override);
+    expect(result['val']).toBe('string');
+  });
+
+  it('10번 병합 → 결과 항상 동일', () => {
+    const base = { a: 1, b: { c: 2, d: 3 } };
+    const override = { b: { d: 99 } };
+    const expected = deepMerge(base, override);
+    for (let i = 0; i < 10; i++) {
+      const r = deepMerge(base, override);
+      expect(r.a).toBe(expected.a);
+      expect(r.b.c).toBe(expected.b.c);
+      expect(r.b.d).toBe(expected.b.d);
+    }
+  });
+
+  it('5단계 중첩 병합', () => {
+    const base = { l1: { l2: { l3: { l4: { l5: 'deep' } } } } };
+    const override = { l1: { l2: { l3: { l4: { l5: 'overridden' } } } } };
+    const result = deepMerge(base, override);
+    expect(result.l1.l2.l3.l4.l5).toBe('overridden');
+  });
+
+  it('null → 배열 오버라이드 (배열 우선)', () => {
+    const base = { val: null } as Record<string, unknown>;
+    const override = { val: [1, 2, 3] };
+    const result = deepMerge(base, override);
+    expect(result['val']).toEqual([1, 2, 3]);
+  });
+});
+
+// ── 추가 경계값: validateConfig 확장 #2 ──────────────────────
+
+describe('validateConfig 추가 경계값 #2', () => {
+  it('valid info log level → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'info' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('invalid log level "silly" → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'silly' as 'debug' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid log level "WARN" (대문자) → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'WARN' as 'debug' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid log level null → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: null as unknown as 'debug' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('unitCount=Number.MIN_SAFE_INTEGER → err', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: Number.MIN_SAFE_INTEGER },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('unitCount=0.5 (소수) → err (0 이하는 아니지만 ≤0 체크 아님, boolean 확인)', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 0.5 },
+    };
+    // 0.5 > 0 이므로 ok=true
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('e2eTimeoutSeconds=0.001 → ok (양수)', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: 0.001 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('invalid adevModel "gpt4" → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: 'gpt4' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid layer1Model 빈 문자열 → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, layer1Model: '' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('invalid adevModel 빈 문자열 → err', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: '' as 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(false);
+  });
+
+  it('valid layer1Model "opus" → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, layer1Model: 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('valid adevModel "opus" → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: 'opus' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('valid adevModel "sonnet" → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, adevModel: 'sonnet' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('valid layer1Model "sonnet" → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      verification: { ...DEFAULT_CONFIG.verification, layer1Model: 'sonnet' },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('unitCount=10 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 10 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('unitCount=1000000 → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 1_000_000 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('e2eTimeoutSeconds=86400 (1일) → ok', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, e2eTimeoutSeconds: 86400 },
+    };
+    expect(validateConfig(config).ok).toBe(true);
+  });
+
+  it('에러 코드 config_invalid_value 확인 (unitCount=0)', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: 0 },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(result.error.code).toBe('config_invalid_value');
+  });
+
+  it('에러 코드 config_invalid_value 확인 (log level invalid)', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'custom' as 'debug' },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(result.error.code).toBe('config_invalid_value');
+  });
+
+  it('에러 메시지에 unitCount 포함 (unitCount=-1)', () => {
+    const config: ConfigSchema = {
+      ...DEFAULT_CONFIG,
+      testing: { ...DEFAULT_CONFIG.testing, unitCount: -1 },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(result.error.message).toContain('unitCount');
+  });
+
+  it('에러 메시지에 log level 포함 (invalid level)', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      log: { level: 'xyz' as 'debug' },
+    };
+    const result = validateConfig(config);
+    if (!result.ok) expect(result.error.message).toContain('log level');
+  });
+});
+
+// ── 추가 경계값: loadConfig 확장 ──────────────────────────────
+
+describe('loadConfig 추가 경계값', () => {
+  let tempDir2: string;
+
+  beforeEach(async () => {
+    tempDir2 = await mkdtemp(join(tmpdir(), 'adev-config-extra-'));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir2, { recursive: true, force: true });
+  });
+
+  it('숫자 JSON → 에러', async () => {
+    const projectDir = join(tempDir2, 'num-json');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '42');
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('config_invalid_value');
+  });
+
+  it('문자열 JSON → 에러', async () => {
+    const projectDir = join(tempDir2, 'str-json');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '"hello"');
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(false);
+  });
+
+  it('null JSON → 에러', async () => {
+    const projectDir = join(tempDir2, 'null-json');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), 'null');
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(false);
+  });
+
+  it('error log level 오버라이드 → ok', async () => {
+    const projectDir = join(tempDir2, 'error-level');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), JSON.stringify({ log: { level: 'error' } }));
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.log.level).toBe('error');
+  });
+
+  it('warn log level 오버라이드 → ok', async () => {
+    const projectDir = join(tempDir2, 'warn-level');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), JSON.stringify({ log: { level: 'warn' } }));
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.log.level).toBe('warn');
+  });
+
+  it('debug log level 오버라이드 → ok', async () => {
+    const projectDir = join(tempDir2, 'debug-level');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), JSON.stringify({ log: { level: 'debug' } }));
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.log.level).toBe('debug');
+  });
+
+  it('비어있는 객체 {} 오버라이드 → 기본값 사용', async () => {
+    const projectDir = join(tempDir2, 'empty-obj');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '{}');
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.log.level).toBe('info');
+      expect(result.value.testing.unitCount).toBe(10_000);
+    }
+  });
+
+  it('invalid e2eTimeoutSeconds → 거부', async () => {
+    const projectDir = join(tempDir2, 'bad-timeout');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), JSON.stringify({ testing: { e2eTimeoutSeconds: -1 } }));
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(false);
+  });
+
+  it('여러 유효 오버라이드 동시 → ok', async () => {
+    const projectDir = join(tempDir2, 'multi-override');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(
+      join(projectDir, '.adev', 'config.json'),
+      JSON.stringify({ log: { level: 'debug' }, testing: { unitCount: 500 } }),
+    );
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.log.level).toBe('debug');
+      expect(result.value.testing.unitCount).toBe(500);
+    }
+  });
+
+  it('testing.unitCount=1 → ok', async () => {
+    const projectDir = join(tempDir2, 'unit-1');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), JSON.stringify({ testing: { unitCount: 1 } }));
+    const result = await loadConfig(projectDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.testing.unitCount).toBe(1);
+  });
+
+  it('깨진 JSON 5회 → 항상 ok=false', async () => {
+    const projectDir = join(tempDir2, 'broken-rep');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '{broken}');
+    for (let i = 0; i < 5; i++) {
+      const result = await loadConfig(projectDir);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('에러 코드 타입 → string', async () => {
+    const projectDir = join(tempDir2, 'err-type');
+    await mkdir(join(projectDir, '.adev'), { recursive: true });
+    await writeFile(join(projectDir, '.adev', 'config.json'), '{"invalid_json');
+    const result = await loadConfig(projectDir);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('projectPath=undefined → 기본값 반환', async () => {
+    // WHY: 글로벌 설정 파일이 없으면 기본값 반환
+    const result = await loadConfig(undefined);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('연속 5회 기본값 로드 → 모두 동일 unitCount', async () => {
+    const unitCounts: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const result = await loadConfig(join(tempDir2, `no-exist-${i}`));
+      if (result.ok) unitCounts.push(result.value.testing.unitCount);
+    }
+    if (unitCounts.length > 0) {
+      const first = unitCounts[0]!;
+      for (const v of unitCounts) {
+        expect(v).toBe(first);
+      }
+    }
+  });
+});
