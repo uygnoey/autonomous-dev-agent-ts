@@ -19,6 +19,8 @@ import type { McpServerConfig } from 'mcp/types.js';
 
 const logger = new ConsoleLogger('error');
 
+const MOCK_MCP_FIXTURE = join(import.meta.dir, '../fixtures/mock-mcp-server.ts');
+
 let tmpDir: string;
 
 beforeEach(async () => {
@@ -220,10 +222,10 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'manager-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: ['-y', '@anthropic/mcp-git'], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(mcpDir, 'fs-server', [
-      { name: 'filesystem', command: 'npx', args: ['-y', '@anthropic/mcp-fs'], enabled: true },
+      { name: 'filesystem', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     // Step 1: 초기화
@@ -231,7 +233,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     expect(initResult.ok).toBe(true);
 
     // Step 2: 서버 시작
-    const startResult = manager.startServer('git');
+    const startResult = await manager.startServer('git');
     expect(startResult.ok).toBe(true);
     if (startResult.ok) {
       expect(startResult.value.status).toBe('running');
@@ -258,7 +260,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     await manager.initialize(mcpDir);
 
-    const result = manager.startServer('nonexistent');
+    const result = await manager.startServer('nonexistent');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('mcp_server_not_found');
@@ -277,7 +279,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     await manager.initialize(mcpDir);
 
-    const result = manager.startServer('disabled');
+    const result = await manager.startServer('disabled');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('mcp_server_disabled');
@@ -291,13 +293,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'dup-start-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: [], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('git');
+    await manager.startServer('git');
 
-    const dupResult = manager.startServer('git');
+    const dupResult = await manager.startServer('git');
     expect(dupResult.ok).toBe(false);
     if (!dupResult.ok) {
       expect(dupResult.error.code).toBe('mcp_server_already_running');
@@ -311,14 +313,14 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'health-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: [], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(mcpDir, 'fs-server', [
-      { name: 'filesystem', command: 'npx', args: [], enabled: true },
+      { name: 'filesystem', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('git');
+    await manager.startServer('git');
 
     const healthResult = manager.healthCheck();
     expect(healthResult.ok).toBe(true);
@@ -335,15 +337,15 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'stopall-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: [], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(mcpDir, 'fs-server', [
-      { name: 'filesystem', command: 'npx', args: [], enabled: true },
+      { name: 'filesystem', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('git');
-    manager.startServer('filesystem');
+    await manager.startServer('git');
+    await manager.startServer('filesystem');
 
     expect(manager.getStatus('git')).toBe('running');
     expect(manager.getStatus('filesystem')).toBe('running');
@@ -362,11 +364,11 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'tools-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: [], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('git');
+    await manager.startServer('git');
 
     // WHY: 현재 구현에서 tools는 빈 배열로 시작 (실제 프로세스 생성 없음)
     const tools = manager.listTools();
@@ -383,13 +385,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const projectDir = join(tmpDir, 'pipeline-project');
 
     await writeMcpConfig(globalDir, 'git-server', [
-      { name: 'git', command: 'npx', args: ['--global'], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(globalDir, 'fs-server', [
-      { name: 'filesystem', command: 'npx', args: ['--global'], enabled: true },
+      { name: 'filesystem', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(projectDir, 'db-server', [
-      { name: 'database', command: 'npx', args: ['--project'], enabled: true },
+      { name: 'database', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     // Step 2: 초기화 (글로벌 + 프로젝트 병합)
@@ -397,13 +399,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     expect(initResult.ok).toBe(true);
 
     // Step 3: 모든 서버 시작
-    const gitStart = manager.startServer('git');
+    const gitStart = await manager.startServer('git');
     expect(gitStart.ok).toBe(true);
 
-    const fsStart = manager.startServer('filesystem');
+    const fsStart = await manager.startServer('filesystem');
     expect(fsStart.ok).toBe(true);
 
-    const dbStart = manager.startServer('database');
+    const dbStart = await manager.startServer('database');
     expect(dbStart.ok).toBe(true);
 
     // Step 4: 헬스체크
@@ -619,13 +621,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     }
   });
 
-  it('McpManager: 초기화 없이 startServer 에러', () => {
+  it('McpManager: 초기화 없이 startServer 에러', async () => {
     const registry = new McpRegistry(logger);
     const loader = new McpLoader(logger);
     const manager = new McpManager(registry, loader, logger);
 
     // WHY: initialize() 없이 startServer() 호출
-    const result = manager.startServer('git');
+    const result = await manager.startServer('git');
     expect(result.ok).toBe(false);
   });
 
@@ -682,14 +684,14 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const mcpDir = join(tmpDir, 'ten-servers-mcp');
     for (let i = 0; i < 10; i++) {
       await writeMcpConfig(mcpDir, `srv-${i}`, [
-        { name: `server-${i}`, command: 'npx', args: [`--port=${9000 + i}`], enabled: true },
+        { name: `server-${i}`, command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
       ]);
     }
 
     await manager.initialize(mcpDir);
 
     for (let i = 0; i < 10; i++) {
-      const startResult = manager.startServer(`server-${i}`);
+      const startResult = await manager.startServer(`server-${i}`);
       expect(startResult.ok).toBe(true);
     }
 
@@ -709,19 +711,19 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'restart-mcp');
     await writeMcpConfig(mcpDir, 'git-server', [
-      { name: 'git', command: 'npx', args: [], enabled: true },
+      { name: 'git', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
 
-    manager.startServer('git');
+    await manager.startServer('git');
     expect(manager.getStatus('git')).toBe('running');
 
     manager.stopServer('git');
     expect(manager.getStatus('git')).toBe('stopped');
 
     // WHY: 재시작 가능해야 함
-    const restartResult = manager.startServer('git');
+    const restartResult = await manager.startServer('git');
     expect(restartResult.ok).toBe(true);
     expect(manager.getStatus('git')).toBe('running');
   });
@@ -924,10 +926,10 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'list-tools-after-start-mcp');
     await writeMcpConfig(mcpDir, 'tool-srv', [
-      { name: 'tool-srv', command: 'npx', args: [], enabled: true },
+      { name: 'tool-srv', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await manager.initialize(mcpDir);
-    manager.startServer('tool-srv');
+    await manager.startServer('tool-srv');
     expect(Array.isArray(manager.listTools())).toBe(true);
   });
 
@@ -938,14 +940,14 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'stopall-health-mcp');
     await writeMcpConfig(mcpDir, 'srv-a', [
-      { name: 'srv-a', command: 'npx', args: [], enabled: true },
+      { name: 'srv-a', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(mcpDir, 'srv-b', [
-      { name: 'srv-b', command: 'npx', args: [], enabled: true },
+      { name: 'srv-b', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await manager.initialize(mcpDir);
-    manager.startServer('srv-a');
-    manager.startServer('srv-b');
+    await manager.startServer('srv-a');
+    await manager.startServer('srv-b');
     manager.stopAll();
     const health = manager.healthCheck();
     if (health.ok) {
@@ -1125,7 +1127,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const mcpDir = join(tmpDir, 'selective-start-mcp');
     for (let i = 0; i < 5; i++) {
       await writeMcpConfig(mcpDir, `srv-${i}`, [
-        { name: `srv-${i}`, command: 'npx', args: [], enabled: true },
+        { name: `srv-${i}`, command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
       ]);
     }
 
@@ -1133,7 +1135,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     // WHY: 짝수 인덱스만 시작
     for (let i = 0; i < 5; i += 2) {
-      manager.startServer(`srv-${i}`);
+      await manager.startServer(`srv-${i}`);
     }
 
     const health = manager.healthCheck();
@@ -1152,16 +1154,16 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const manager = new McpManager(registry, loader, logger);
 
     const mcpDir = join(tmpDir, 'restart-after-stopall-mcp');
-    await writeMcpConfig(mcpDir, 'srvA', [{ name: 'srvA', command: 'npx', args: [], enabled: true }]);
-    await writeMcpConfig(mcpDir, 'srvB', [{ name: 'srvB', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'srvA', [{ name: 'srvA', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'srvB', [{ name: 'srvB', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true }]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('srvA');
-    manager.startServer('srvB');
+    await manager.startServer('srvA');
+    await manager.startServer('srvB');
     manager.stopAll();
 
     // WHY: 전체 정지 후 개별 재시작
-    const restartA = manager.startServer('srvA');
+    const restartA = await manager.startServer('srvA');
     expect(restartA.ok).toBe(true);
     expect(manager.getStatus('srvA')).toBe('running');
     expect(manager.getStatus('srvB')).toBe('stopped');
@@ -1269,13 +1271,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const mcpDir = join(tmpDir, 'multi-tools-mcp');
     for (let i = 0; i < 5; i++) {
       await writeMcpConfig(mcpDir, `tool-srv-${i}`, [
-        { name: `tool-srv-${i}`, command: 'npx', args: [], enabled: true },
+        { name: `tool-srv-${i}`, command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
       ]);
     }
 
     await manager.initialize(mcpDir);
     for (let i = 0; i < 5; i++) {
-      manager.startServer(`tool-srv-${i}`);
+      await manager.startServer(`tool-srv-${i}`);
     }
 
     const tools = manager.listTools();
@@ -1301,7 +1303,7 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'mixed-enabled-mgr-mcp');
     await writeMcpConfig(mcpDir, 'active-srv', [
-      { name: 'active-srv', command: 'npx', args: [], enabled: true },
+      { name: 'active-srv', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
     await writeMcpConfig(mcpDir, 'inactive-srv', [
       { name: 'inactive-srv', command: 'npx', args: [], enabled: false },
@@ -1309,10 +1311,10 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     await manager.initialize(mcpDir);
 
-    const activeResult = manager.startServer('active-srv');
+    const activeResult = await manager.startServer('active-srv');
     expect(activeResult.ok).toBe(true);
 
-    const inactiveResult = manager.startServer('inactive-srv');
+    const inactiveResult = await manager.startServer('inactive-srv');
     expect(inactiveResult.ok).toBe(false);
   });
 
@@ -1341,14 +1343,14 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'stop-restart-mcp');
     await writeMcpConfig(mcpDir, 'resilient-srv', [
-      { name: 'resilient-srv', command: 'npx', args: [], enabled: true },
+      { name: 'resilient-srv', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('resilient-srv');
+    await manager.startServer('resilient-srv');
     manager.stopServer('resilient-srv');
 
-    const restartResult = manager.startServer('resilient-srv');
+    const restartResult = await manager.startServer('resilient-srv');
     expect(restartResult.ok).toBe(true);
     expect(manager.getStatus('resilient-srv')).toBe('running');
   });
@@ -1398,11 +1400,11 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const manager = new McpManager(registry, loader, logger);
 
     const mcpDir = join(tmpDir, 'health-values-mcp');
-    await writeMcpConfig(mcpDir, 'val-a', [{ name: 'val-a', command: 'npx', args: [], enabled: true }]);
-    await writeMcpConfig(mcpDir, 'val-b', [{ name: 'val-b', command: 'npx', args: [], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'val-a', [{ name: 'val-a', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true }]);
+    await writeMcpConfig(mcpDir, 'val-b', [{ name: 'val-b', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true }]);
 
     await manager.initialize(mcpDir);
-    manager.startServer('val-a');
+    await manager.startServer('val-a');
 
     const health = manager.healthCheck();
     if (health.ok) {
@@ -1468,13 +1470,13 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     await Bun.write(join(emptyGlobal, '.keep'), '');
     await writeMcpConfig(projectOnlyDir, 'proj-only-srv', [
-      { name: 'proj-only', command: 'node', args: ['app.js'], enabled: true },
+      { name: 'proj-only', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     const initResult = await manager.initialize(emptyGlobal, projectOnlyDir);
     expect(initResult.ok).toBe(true);
 
-    const startResult = manager.startServer('proj-only');
+    const startResult = await manager.startServer('proj-only');
     expect(startResult.ok).toBe(true);
 
     expect(manager.getStatus('proj-only')).toBe('running');
@@ -1524,18 +1526,18 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
 
     const mcpDir = join(tmpDir, 'triple-start-mcp');
     await writeMcpConfig(mcpDir, 'triple-srv', [
-      { name: 'triple-srv', command: 'npx', args: [], enabled: true },
+      { name: 'triple-srv', command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
     ]);
 
     await manager.initialize(mcpDir);
 
-    const first = manager.startServer('triple-srv');
+    const first = await manager.startServer('triple-srv');
     expect(first.ok).toBe(true);
 
-    const second = manager.startServer('triple-srv');
+    const second = await manager.startServer('triple-srv');
     expect(second.ok).toBe(false);
 
-    const third = manager.startServer('triple-srv');
+    const third = await manager.startServer('triple-srv');
     expect(third.ok).toBe(false);
   });
 
@@ -1631,14 +1633,14 @@ describe('MCP 서버 라이프사이클 E2E / MCP Server Lifecycle E2E', () => {
     const mcpDir = join(tmpDir, 'twenty-servers-e2e-mcp');
     for (let i = 0; i < 20; i++) {
       await writeMcpConfig(mcpDir, `e2e-srv-${i}`, [
-        { name: `e2e-srv-${i}`, command: 'npx', args: [`--port=${7000 + i}`], enabled: true },
+        { name: `e2e-srv-${i}`, command: 'bun', args: [MOCK_MCP_FIXTURE], enabled: true },
       ]);
     }
 
     await manager.initialize(mcpDir);
 
     for (let i = 0; i < 20; i++) {
-      const result = manager.startServer(`e2e-srv-${i}`);
+      const result = await manager.startServer(`e2e-srv-${i}`);
       expect(result.ok).toBe(true);
     }
 
