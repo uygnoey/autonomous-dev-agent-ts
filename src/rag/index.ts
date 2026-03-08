@@ -29,6 +29,8 @@ export {
 // ── 벡터 저장소 ────────────────────────────────────────────────
 
 export { CodeVectorStore } from 'rag/vector-store.js';
+export { DesignDecisionRepository } from 'rag/design-decision-store.js';
+export { FailureRepository } from 'rag/failure-store.js';
 
 // ── 청크 분할 ───────────────────────────────────────────────────
 
