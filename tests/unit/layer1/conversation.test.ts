@@ -815,3 +815,141 @@ describe('ConversationManager UUID/랜덤 edge case', () => {
     }
   });
 });
+
+// ── 추가 edge: 메시지 저장 + 복합 시나리오 ────────────────────
+
+describe('ConversationManager 복합 시나리오', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-complex-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('addMessage user → addMessage assistant → getHistory 순서 확인', async () => {
+    await manager.addMessage(createTestMessage({ role: 'user', content: '질문입니다' }));
+    await manager.addMessage(createTestMessage({ role: 'assistant', content: '답변입니다' }));
+    const result = await manager.getHistory('proj-test');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('50개 메시지 addMessage → getHistory ok', async () => {
+    for (let i = 0; i < 50; i++) {
+      const role: 'user' | 'assistant' = i % 2 === 0 ? 'user' : 'assistant';
+      await manager.addMessage(createTestMessage({ role, content: `메시지 ${i}` }));
+    }
+    const result = await manager.getHistory('proj-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('3개 프로젝트 독립 파티션', async () => {
+    for (const proj of ['proj-1', 'proj-2', 'proj-3']) {
+      await manager.addMessage(createTestMessage({ projectId: proj, content: `${proj} 내용` }));
+    }
+    for (const proj of ['proj-1', 'proj-2', 'proj-3']) {
+      const hist = await manager.getHistory(proj);
+      expect(hist.ok).toBe(true);
+      if (hist.ok) {
+        expect(hist.value.every((m) => m.projectId === proj)).toBe(true);
+      }
+    }
+  });
+
+  it('addMessage → searchContext → 동일 프로젝트 메시지만 반환', async () => {
+    const uuid = crypto.randomUUID();
+    await manager.addMessage(createTestMessage({ projectId: 'proj-test', content: `${uuid} keyword` }));
+    await manager.addMessage(createTestMessage({ projectId: 'proj-other', content: `${uuid} keyword` }));
+    const result = await manager.searchContext('proj-test', uuid);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (const m of result.value) {
+        expect(m.projectId).toBe('proj-test');
+      }
+    }
+  });
+
+  it('빈 content → getHistory에서 복원 가능', async () => {
+    await manager.addMessage(createTestMessage({ content: '' }));
+    const result = await manager.getHistory('proj-test');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((m) => m.content === '')).toBe(true);
+    }
+  });
+
+  it('이모지 content → searchContext 정상 처리', async () => {
+    await manager.addMessage(createTestMessage({ content: '🚀 로켓 발사! 🎉' }));
+    const result = await manager.searchContext('proj-test', '로켓');
+    expect(result.ok).toBe(true);
+  });
+
+  it('개행 포함 content → getHistory에서 복원', async () => {
+    const multiLine = 'line1\nline2\nline3';
+    await manager.addMessage(createTestMessage({ content: multiLine }));
+    const hist = await manager.getHistory('proj-test');
+    expect(hist.ok).toBe(true);
+    if (hist.ok) {
+      expect(hist.value.some((m) => m.content === multiLine)).toBe(true);
+    }
+  });
+
+  it('JSON 문자열 content → searchContext 정상', async () => {
+    const jsonContent = JSON.stringify({ action: 'login', status: 'success' });
+    await manager.addMessage(createTestMessage({ content: jsonContent }));
+    const result = await manager.searchContext('proj-test', 'login');
+    expect(result.ok).toBe(true);
+  });
+
+  it('동일 content 중복 저장 → getHistory 모두 반환', async () => {
+    const content = 'duplicate-keyword-xyz';
+    await manager.addMessage(createTestMessage({ content }));
+    await manager.addMessage(createTestMessage({ content }));
+    const hist = await manager.getHistory('proj-test');
+    expect(hist.ok).toBe(true);
+    if (hist.ok) {
+      const matches = hist.value.filter((m) => m.content === content);
+      expect(matches.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('미래 timestamp 메시지 → getHistory ok', async () => {
+    const msg = createTestMessage({ timestamp: new Date('2099-01-01T00:00:00Z') });
+    await manager.addMessage(msg);
+    const result = await manager.getHistory('proj-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('과거 timestamp 메시지 → getHistory ok', async () => {
+    const msg = createTestMessage({ timestamp: new Date('1970-01-01T00:00:00Z') });
+    await manager.addMessage(msg);
+    const result = await manager.getHistory('proj-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글+영어 혼합 content → searchContext 정상', async () => {
+    await manager.addMessage(createTestMessage({ content: 'TypeScript 코드 구현 완료' }));
+    const result = await manager.searchContext('proj-test', 'TypeScript');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((m) => m.content.includes('TypeScript'))).toBe(true);
+    }
+  });
+
+  it('getHistory + searchContext 결과의 ok 타입 모두 boolean', async () => {
+    const h = await manager.getHistory('proj-test');
+    const s = await manager.searchContext('proj-test', 'test');
+    expect(typeof h.ok).toBe('boolean');
+    expect(typeof s.ok).toBe('boolean');
+  });
+});

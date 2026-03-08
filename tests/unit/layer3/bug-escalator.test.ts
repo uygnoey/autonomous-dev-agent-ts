@@ -811,3 +811,117 @@ describe('BugEscalator resolveReport 추가 edge', () => {
     expect(Array.isArray(escalator.getActiveReports('proj'))).toBe(true);
   });
 });
+
+// ── 추가 edge: escalate 극단값 ───────────────────────────────
+
+describe('BugEscalator escalate 추가 edge', () => {
+  it('security 키워드 → targetPhase=CODE', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'security breach found' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('CODE');
+  });
+
+  it('UUID featureId → escalate ok', () => {
+    const e = makeEscalator();
+    const uuid = crypto.randomUUID();
+    const rr = e.createReport('proj', createFailure({ featureId: uuid, error: 'fatal crash' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 error → escalate ok', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: '인증 오류 발생' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    expect(result.ok).toBe(true);
+  });
+
+  it('이모지 error → escalate ok', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: '🚨 critical!!' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    expect(result.ok).toBe(true);
+  });
+
+  it('연속 escalate 5회 → 항상 ok', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 5; i++) {
+      const rr = e.createReport(`proj-${i}`, createFailure({ error: `fatal crash ${i}` }));
+      if (!rr.ok) continue;
+      const result = e.escalate(rr.value);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('targetPhase는 빈 문자열이 아니다', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase.length).toBeGreaterThan(0);
+  });
+
+  it('reportId가 escalate 결과에 존재할 수 있다', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── 추가 edge: getActiveReports 극단값 ────────────────────────
+
+describe('BugEscalator getActiveReports 추가 edge', () => {
+  it('UUID projectId → 빈 배열', () => {
+    const e = makeEscalator();
+    const uuid = crypto.randomUUID();
+    expect(e.getActiveReports(uuid)).toHaveLength(0);
+  });
+
+  it('한글 projectId → 빈 배열 (없으면)', () => {
+    const e = makeEscalator();
+    expect(e.getActiveReports('한글-프로젝트')).toHaveLength(0);
+  });
+
+  it('20개 생성 → 모두 동일 projectId로 조회 → 20개', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 20; i++) {
+      e.createReport('proj-bulk', createFailure({ error: `err-${i}` }));
+    }
+    expect(e.getActiveReports('proj-bulk')).toHaveLength(20);
+  });
+
+  it('두 프로젝트 각 10개 → 각각 10개씩 독립', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 10; i++) {
+      e.createReport('proj-A', createFailure({ error: `A-err-${i}` }));
+      e.createReport('proj-B', createFailure({ error: `B-err-${i}` }));
+    }
+    expect(e.getActiveReports('proj-A')).toHaveLength(10);
+    expect(e.getActiveReports('proj-B')).toHaveLength(10);
+  });
+
+  it('getActiveReports 결과는 각각 id 필드를 가진다', () => {
+    const e = makeEscalator();
+    e.createReport('proj', createFailure({ error: 'some error' }));
+    const reports = e.getActiveReports('proj');
+    for (const r of reports) {
+      expect(typeof r.id).toBe('string');
+    }
+  });
+
+  it('getActiveReports 결과는 projectId 필드를 가진다', () => {
+    const e = makeEscalator();
+    e.createReport('proj-field', createFailure({ error: 'field check' }));
+    const reports = e.getActiveReports('proj-field');
+    for (const r of reports) {
+      expect(r.projectId).toBe('proj-field');
+    }
+  });
+});

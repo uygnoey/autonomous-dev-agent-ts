@@ -810,3 +810,120 @@ describe('TransformersEmbeddingProvider 생성자 추가 경계값', () => {
     result.catch(() => {});
   });
 });
+
+// ── 생성자 추가 경계값 2 ───────────────────────────────────────
+
+describe('TransformersEmbeddingProvider 생성자 경계값 2', () => {
+  it('숫자만 있는 name → 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('12345', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name).toBe('12345');
+  });
+
+  it('하이픈 포함 name → 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('embed-provider-v2', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name).toBe('embed-provider-v2');
+  });
+
+  it('underscore 포함 name → 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('embed_provider', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name).toBe('embed_provider');
+  });
+
+  it('dimensions=2048로 생성', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 2048, logger);
+    expect(p.dimensions).toBe(2048);
+  });
+
+  it('dimensions=3072로 생성', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 3072, logger);
+    expect(p.dimensions).toBe(3072);
+  });
+
+  it('20개 인스턴스 연속 생성 → 모두 tier=free', () => {
+    for (let i = 0; i < 20; i++) {
+      const p = new TransformersEmbeddingProvider(`p-${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
+      expect(p.tier).toBe('free');
+    }
+  });
+
+  it('embedQuery는 비동기 함수', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const result = p.embedQuery('test');
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {});
+  });
+
+  it('각 인스턴스의 dimensions 독립성', () => {
+    const dims = [128, 256, 384, 512, 768, 1024];
+    const providers = dims.map((d) => new TransformersEmbeddingProvider('t', 'Xenova/all-MiniLM-L6-v2', d, logger));
+    dims.forEach((d, i) => {
+      expect(providers[i]?.dimensions).toBe(d);
+    });
+  });
+});
+
+// ── normalizeVector 추가 랜덤 케이스 ─────────────────────────
+
+describe('normalizeVector 랜덤 케이스', () => {
+  it('[1, 2] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, 2]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[4, 4, 4, 4] → 각 원소 ≈ 0.5', () => {
+    const result = normalizeVector(new Float32Array([4, 4, 4, 4]));
+    for (let i = 0; i < result.length; i++) {
+      expect(result[i]).toBeCloseTo(0.5, 5);
+    }
+  });
+
+  it('[-0.5, -0.5, -0.5, -0.5] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([-0.5, -0.5, -0.5, -0.5]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[0, 0, 0, 1] → [0, 0, 0, 1]', () => {
+    const result = normalizeVector(new Float32Array([0, 0, 0, 1]));
+    expect(result[3]).toBeCloseTo(1.0, 5);
+    expect(result[0]).toBeCloseTo(0.0, 5);
+  });
+
+  it('256차원 랜덤 벡터 → norm≈1', () => {
+    const arr = Float32Array.from({ length: 256 }, () => Math.random() * 2 - 1);
+    const allZero = Array.from(arr).every((v) => v === 0);
+    if (allZero) return;
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 3);
+  });
+
+  it('단위 벡터는 정규화 후 동일', () => {
+    const result = normalizeVector(new Float32Array([1, 0, 0, 0]));
+    expect(result[0]).toBeCloseTo(1.0, 5);
+    expect(result[1]).toBeCloseTo(0.0, 5);
+  });
+
+  it('[99, 0, 0, 0, 0] → [1, 0, 0, 0, 0]', () => {
+    const result = normalizeVector(new Float32Array([99, 0, 0, 0, 0]));
+    expect(result[0]).toBeCloseTo(1.0, 5);
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i]).toBeCloseTo(0.0, 5);
+    }
+  });
+
+  it('반환값의 모든 원소가 -1 이상 1 이하이다', () => {
+    const arr = Float32Array.from({ length: 10 }, () => Math.random() * 100 - 50);
+    const allZero = Array.from(arr).every((v) => v === 0);
+    if (allZero) return;
+    const result = normalizeVector(arr);
+    for (let i = 0; i < result.length; i++) {
+      expect(result[i] ?? 0).toBeGreaterThanOrEqual(-1.0 - 1e-5);
+      expect(result[i] ?? 0).toBeLessThanOrEqual(1.0 + 1e-5);
+    }
+  });
+});
