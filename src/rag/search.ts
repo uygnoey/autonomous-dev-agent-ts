@@ -102,12 +102,15 @@ export class RagSearcher {
     try {
       this.logger.debug('파일 경로 검색 시작', { filePath });
 
-      // WHY: 파일 경로 검색은 벡터 불필요 — 더미 벡터로 검색 후 필터 적용
-      //      LanceDB의 vectorSearch가 필수이므로 zero 벡터 사용
-      const dims = this.embeddingProvider.dimensions;
-      const dummyVector = new Float32Array(dims);
+      // WHY: filePath를 임베딩하여 의미 있는 쿼리 벡터를 생성한다.
+      //      zero 벡터는 cosine similarity가 undefined이므로 filePath 임베딩을 사용.
+      //      filter { filePath }로 실제 결과를 제한하므로 벡터 순위보다 필터가 우선한다.
+      const embedResult = await this.embeddingProvider.embedQuery(filePath);
+      const queryVector = embedResult.ok
+        ? embedResult.value
+        : new Float32Array(this.embeddingProvider.dimensions); // WHY: 임베딩 실패 시만 zero 벡터 fallback
 
-      const searchResult = await this.vectorStore.search(dummyVector, limit, { filePath });
+      const searchResult = await this.vectorStore.search(queryVector, limit, { filePath });
 
       if (!searchResult.ok) {
         return err(

@@ -120,4 +120,13 @@ export interface IDocCollaborator {
    * 협업 문서 상태를 조회한다 / Get collaborative document state
    */
   getState(docId: string): Promise<Result<CollabDocState>>;
+
+  /**
+   * 전체 협업 워크플로우를 실행한다 / Run the full collaboration workflow end-to-end
+   *
+   * @description
+   * KR: start → Layer1 구조 → Layer2 상세 → Layer1 검토 → complete 순서로 자동 진행.
+   * EN: Automatically advances through start → L1 structure → L2 details → L1 review → complete.
+   */
+  runCollaboration(options: CollaborativeDocOptions): Promise<Result<CollaborativeDocResult>>;
 }

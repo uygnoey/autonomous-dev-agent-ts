@@ -291,6 +291,102 @@ export class DocCollaborator implements IDocCollaborator {
   }
 
   /**
+   * 전체 협업 워크플로우를 실행한다 / Run the full collaboration workflow
+   *
+   * @description
+   * KR: start → requestLayer1(create-structure) → requestLayer2 → requestLayer1(review-and-refine) → complete
+   *     순서대로 상태를 진행시키며 최종 문서를 반환한다.
+   *     claudeApi 또는 spawner가 없으면 제공된 구조/조각으로 fallback한다.
+   * EN: Advances state through the full pipeline and returns the final document.
+   *     Falls back to provided structure/fragments if claudeApi or spawner is absent.
+   *
+   * @param options - 협업 문서 생성 옵션 / Collaborative document options
+   * @returns 협업 문서 결과 / Collaborative document result
+   */
+  async runCollaboration(
+    options: CollaborativeDocOptions,
+  ): Promise<Result<CollaborativeDocResult>> {
+    // 1. 상태 초기화 / Initialize state
+    const startResult = await this.start(options);
+    if (!startResult.ok) return err(startResult.error);
+    const { id: docId } = startResult.value;
+
+    let structure: string;
+    let finalContent: string;
+
+    // 2. Layer1 구조 생성 또는 제공된 구조 사용 / Generate or use provided structure
+    if (this.claudeApi) {
+      const l1StructResult = await this.requestLayer1({
+        type: 'create-structure',
+        docType: options.type,
+        context: options.layer1Structure,
+      });
+      structure = l1StructResult.ok ? l1StructResult.value.content : options.layer1Structure;
+    } else {
+      structure = options.layer1Structure;
+    }
+
+    // WHY: 구조 완료 후 detail 단계로 전환
+    const afterStructure = this.stateStore.get(docId);
+    if (afterStructure) {
+      this.stateStore.set(docId, {
+        ...afterStructure,
+        structure,
+        phase: 'detail',
+        updatedAt: new Date(),
+      });
+    }
+
+    // 3. Layer2 상세 작성 또는 조각 병합 fallback / Fill in details via Layer2 or merge fragments
+    if (this.documenterSpawner) {
+      const l2Result = await this.requestLayer2({
+        docType: options.type,
+        structure,
+        fragments: options.layer2Fragments,
+      });
+
+      if (l2Result.ok) {
+        // 4. Layer1 최종 검토 / Layer1 review and refine
+        if (this.claudeApi) {
+          const l1RefineResult = await this.requestLayer1({
+            type: 'review-and-refine',
+            docType: options.type,
+            context: structure,
+            layer2Details: l2Result.value.content,
+          });
+          finalContent = l1RefineResult.ok ? l1RefineResult.value.content : l2Result.value.content;
+        } else {
+          finalContent = l2Result.value.content;
+        }
+      } else {
+        finalContent = structure;
+      }
+    } else {
+      // WHY: spawner 없을 때 조각 내용을 직접 병합
+      const fragContent = options.layer2Fragments.map((f) => f.content).join('\n\n');
+      finalContent = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
+    }
+
+    // WHY: review 단계와 finalContent 설정 후 complete() 호출 가능
+    const afterDetail = this.stateStore.get(docId);
+    if (afterDetail) {
+      this.stateStore.set(docId, {
+        ...afterDetail,
+        phase: 'review',
+        finalContent,
+        updatedAt: new Date(),
+      });
+    }
+
+    // 5. 완료 / Complete
+    const completeResult = await this.complete(docId);
+    if (!completeResult.ok) return err(completeResult.error);
+
+    // WHY: outputPath를 options에서 주입 — complete()는 빈 문자열을 반환하므로 덮어쓴다
+    return ok({ ...completeResult.value, outputPath: options.outputPath });
+  }
+
+  /**
    * 협업 문서 생성을 완료한다 / Complete collaborative document generation
    */
   async complete(docId: string): Promise<Result<CollaborativeDocResult>> {

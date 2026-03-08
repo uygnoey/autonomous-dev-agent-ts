@@ -184,7 +184,10 @@ async function main(): Promise<void> {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
       const sub = parsed.sub as string | undefined;
-      const args = sub ? [sub] : [];
+      // WHY: parsed._ contains all positionals ['config', 'get', 'log.level', ...]
+      //      slice(1) drops the command name so args = ['get', 'log.level', ...]
+      const allPositionals = Array.isArray(parsed._) ? (parsed._ as string[]) : [];
+      const args = allPositionals.length > 1 ? allPositionals.slice(1) : sub ? [sub] : [];
       const result = await configCmd.execute(args, options);
       if (result.ok) {
         return { success: true, message: 'Config operation completed.', exitCode: 0 };
@@ -199,7 +202,9 @@ async function main(): Promise<void> {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
       const sub = parsed.sub as string | undefined;
-      const args = sub ? [sub] : [];
+      // WHY: parsed._ = ['project', 'add', '/path'] — slice(1) → ['add', '/path']
+      const allPositionals = Array.isArray(parsed._) ? (parsed._ as string[]) : [];
+      const args = allPositionals.length > 1 ? allPositionals.slice(1) : sub ? [sub] : [];
       const result = await projectCmd.execute(
         args,
         options as Parameters<typeof projectCmd.execute>[1],
