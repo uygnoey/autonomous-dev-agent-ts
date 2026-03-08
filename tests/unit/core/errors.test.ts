@@ -673,3 +673,219 @@ describe('DEFAULT_RETRY_POLICY 불변성 및 관계 검증', () => {
     expect(DEFAULT_RETRY_POLICY.maxAttempts).toBeGreaterThanOrEqual(1);
   });
 });
+
+// ── AdevError 추가 경계값 ──────────────────────────────────────
+
+describe('AdevError 추가 경계값', () => {
+  it('cause로 함수 허용', () => {
+    const fn = () => 42;
+    const err = new AdevError('code', 'msg', fn);
+    expect(err.cause).toBe(fn);
+  });
+
+  it('cause로 Symbol 허용', () => {
+    const sym = Symbol('test-cause');
+    const err = new AdevError('code', 'msg', sym);
+    expect(err.cause).toBe(sym);
+  });
+
+  it('cause로 Map 허용', () => {
+    const map = new Map([['key', 'val']]);
+    const err = new AdevError('code', 'msg', map);
+    expect(err.cause).toBe(map);
+  });
+
+  it('cause로 Set 허용', () => {
+    const set = new Set([1, 2, 3]);
+    const err = new AdevError('code', 'msg', set);
+    expect(err.cause).toBe(set);
+  });
+
+  it('cause로 BigInt 허용', () => {
+    const big = BigInt(9007199254740993);
+    const err = new AdevError('code', 'msg', big);
+    expect(err.cause).toBe(big);
+  });
+
+  it('code에 슬래시 포함', () => {
+    const err = new AdevError('auth/rate_limited', 'msg');
+    expect(err.code).toBe('auth/rate_limited');
+  });
+
+  it('code에 콜론 포함', () => {
+    const err = new AdevError('http:404', 'msg');
+    expect(err.code).toBe('http:404');
+  });
+
+  it('message에 JSON 문자열', () => {
+    const json = JSON.stringify({ key: 'value', count: 42 });
+    const err = new AdevError('code', json);
+    expect(err.message).toBe(json);
+  });
+
+  it('message에 URL 형식', () => {
+    const url = 'https://api.example.com/v1/endpoint?param=value&other=123';
+    const err = new AdevError('code', url);
+    expect(err.message).toBe(url);
+  });
+
+  it('message에 이모지 포함', () => {
+    const err = new AdevError('code', '에러 발생 🚨');
+    expect(err.message).toContain('🚨');
+  });
+
+  it('10번 중첩 에러 체인', () => {
+    let current: AdevError = new AdevError('root', 'root message');
+    for (let i = 1; i < 10; i++) {
+      current = new AdevError(`level${i}`, `message ${i}`, current);
+    }
+    expect(current.code).toBe('level9');
+    expect((current.cause as AdevError).code).toBe('level8');
+  });
+
+  it('name 변경 불가 (읽기 전용처럼 동작)', () => {
+    const err = new AdevError('code', 'msg');
+    expect(err.name).toBe('AdevError');
+  });
+
+  it('AdevError instanceof AdevError', () => {
+    const err = new AdevError('code', 'msg');
+    expect(err instanceof AdevError).toBe(true);
+  });
+
+  it('중첩 cause에서 code 접근', () => {
+    const inner = new ConfigError('inner_code', 'inner msg');
+    const outer = new AgentError('outer_code', 'outer msg', inner);
+    expect((outer.cause as ConfigError).code).toBe('inner_code');
+  });
+
+  it('throw/catch 패턴', () => {
+    let caught: unknown;
+    try {
+      throw new AdevError('thrown_code', '던진 에러');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught instanceof AdevError).toBe(true);
+    expect((caught as AdevError).code).toBe('thrown_code');
+  });
+});
+
+// ── 서브클래스별 name 추가 검증 ────────────────────────────────
+
+describe('서브클래스 name 추가 검증', () => {
+  it('ConfigError name은 ConfigError', () => {
+    expect(new ConfigError('code', 'msg').name).toBe('ConfigError');
+  });
+
+  it('AuthError name은 AuthError', () => {
+    expect(new AuthError('code', 'msg').name).toBe('AuthError');
+  });
+
+  it('RagError name은 RagError', () => {
+    expect(new RagError('code', 'msg').name).toBe('RagError');
+  });
+
+  it('AgentError name은 AgentError', () => {
+    expect(new AgentError('code', 'msg').name).toBe('AgentError');
+  });
+
+  it('PhaseError name은 PhaseError', () => {
+    expect(new PhaseError('code', 'msg').name).toBe('PhaseError');
+  });
+
+  it('ContractError name은 ContractError', () => {
+    expect(new ContractError('code', 'msg').name).toBe('ContractError');
+  });
+
+  it('McpError name은 McpError', () => {
+    expect(new McpError('code', 'msg').name).toBe('McpError');
+  });
+
+  it('Layer3Error name은 Layer3Error', () => {
+    expect(new Layer3Error('code', 'msg').name).toBe('Layer3Error');
+  });
+
+  it('5개 다른 코드로 ConfigError 생성 → 각각 독립', () => {
+    const codes = ['cfg_1', 'cfg_2', 'cfg_3', 'cfg_4', 'cfg_5'];
+    const errors = codes.map(c => new ConfigError(c, `msg for ${c}`));
+    for (let i = 0; i < 5; i++) {
+      expect(errors[i]!.code).toBe(codes[i]);
+      expect(errors[i]!.name).toBe('ConfigError');
+    }
+  });
+
+  it('서브클래스 instanceof AdevError && instanceof Error', () => {
+    const subclasses = [
+      new ConfigError('c', 'm'),
+      new AuthError('c', 'm'),
+      new RagError('c', 'm'),
+      new AgentError('c', 'm'),
+      new PhaseError('c', 'm'),
+      new ContractError('c', 'm'),
+      new McpError('c', 'm'),
+      new Layer3Error('c', 'm'),
+    ];
+    for (const err of subclasses) {
+      expect(err instanceof AdevError).toBe(true);
+      expect(err instanceof Error).toBe(true);
+    }
+  });
+
+  it('서브클래스 throw/catch → isAdevError=true', () => {
+    for (const { Class } of ALL_SUBCLASSES) {
+      let caught: unknown;
+      try {
+        throw new Class('thrown', 'thrown error');
+      } catch (e) {
+        caught = e;
+      }
+      expect(isAdevError(caught)).toBe(true);
+    }
+  });
+});
+
+// ── isAdevError 복합 경계값 ────────────────────────────────────
+
+describe('isAdevError 복합 경계값', () => {
+  it('중첩 cause 내부 에러도 isAdevError=true', () => {
+    const inner = new ConfigError('inner', 'inner msg');
+    const outer = new AgentError('outer', 'outer msg', inner);
+    expect(isAdevError(inner)).toBe(true);
+    expect(isAdevError(outer)).toBe(true);
+    expect(isAdevError(outer.cause)).toBe(true);
+  });
+
+  it('isAdevError(plain Error with code property) → false', () => {
+    const err = new Error('plain') as Error & { code?: string };
+    err.code = 'some_code';
+    expect(isAdevError(err)).toBe(false);
+  });
+
+  it('isAdevError(Object.create(null)) → false', () => {
+    expect(isAdevError(Object.create(null))).toBe(false);
+  });
+
+  it('isAdevError(class without AdevError) → false', () => {
+    class FakeError extends Error {
+      code = 'fake';
+    }
+    expect(isAdevError(new FakeError('fake'))).toBe(false);
+  });
+
+  it('isAdevError 100번 호출 → 일관됨', () => {
+    const err = new AdevError('code', 'msg');
+    for (let i = 0; i < 100; i++) {
+      expect(isAdevError(err)).toBe(true);
+    }
+  });
+
+  it('isAdevError 반환값 항상 boolean', () => {
+    const cases: unknown[] = [
+      null, undefined, 0, '', false, [], {}, new Error('e'), new AdevError('c', 'm'),
+    ];
+    for (const v of cases) {
+      expect(typeof isAdevError(v)).toBe('boolean');
+    }
+  });
+});

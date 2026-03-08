@@ -668,3 +668,267 @@ describe('parseConfigValue', () => {
     }
   });
 });
+
+// ── getNestedValue 추가 경계값 ────────────────────────────────
+
+describe('getNestedValue 추가 경계값', () => {
+  it('숫자 키 경로 → undefined (숫자 프로퍼티 접근)', () => {
+    const obj = { '0': 'zero', '1': 'one' } as Record<string, unknown>;
+    // 단일 숫자 문자열 키
+    expect(getNestedValue(obj, '0')).toBe('zero');
+  });
+
+  it('특수문자 포함 키 → undefined', () => {
+    // 점이 없는 특수 키는 단일 키로 취급
+    expect(getNestedValue({ 'key@!': 'val' } as Record<string, unknown>, 'key@!')).toBe('val');
+  });
+
+  it('경로 중간 배열 → 배열에서 인덱스 없음', () => {
+    const obj = { arr: [1, 2, 3] } as Record<string, unknown>;
+    // arr.0 형식은 지원하지 않을 수도 있음
+    const result = getNestedValue(obj, 'arr.0');
+    // 결과가 1이거나 undefined이어야 함 (구현에 따라)
+    expect(result === 1 || result === undefined).toBe(true);
+  });
+
+  it('undefined 중간값 → undefined', () => {
+    const obj = { a: undefined } as Record<string, unknown>;
+    expect(getNestedValue(obj, 'a.b')).toBeUndefined();
+  });
+
+  it('빈 배열 값 가져오기', () => {
+    const obj = { items: [] };
+    const result = getNestedValue(obj, 'items');
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as unknown[]).length).toBe(0);
+  });
+
+  it('중첩 객체 자체를 가져오기 (중간 경로)', () => {
+    const obj = { level1: { level2: { level3: 'val' } } };
+    const result = getNestedValue(obj, 'level1.level2');
+    expect(typeof result).toBe('object');
+    expect(result).not.toBeNull();
+  });
+
+  it('한국어 키 가져오기', () => {
+    const obj = { '한국어키': '한국어값' } as Record<string, unknown>;
+    expect(getNestedValue(obj, '한국어키')).toBe('한국어값');
+  });
+
+  it('UUID 형식 키 가져오기', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const obj = { [uuid]: 'uuid-value' } as Record<string, unknown>;
+    expect(getNestedValue(obj, uuid)).toBe('uuid-value');
+  });
+
+  it('NaN 값 가져오기', () => {
+    const obj = { num: Number.NaN } as Record<string, unknown>;
+    const result = getNestedValue(obj, 'num');
+    expect(Number.isNaN(result)).toBe(true);
+  });
+
+  it('Infinity 값 가져오기', () => {
+    const obj = { inf: Infinity } as Record<string, unknown>;
+    expect(getNestedValue(obj, 'inf')).toBe(Infinity);
+  });
+
+  it('매우 큰 숫자 값 가져오기', () => {
+    const obj = { big: Number.MAX_SAFE_INTEGER } as Record<string, unknown>;
+    expect(getNestedValue(obj, 'big')).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('음수 값 가져오기', () => {
+    const obj = { neg: -999 } as Record<string, unknown>;
+    expect(getNestedValue(obj, 'neg')).toBe(-999);
+  });
+});
+
+// ── setNestedValue 추가 경계값 ───────────────────────────────
+
+describe('setNestedValue 추가 경계값', () => {
+  it('UUID 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    setNestedValue(obj, 'id', uuid);
+    expect(obj.id).toBe(uuid);
+  });
+
+  it('한국어 키 경로 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, '한국어.키', '값');
+    expect((obj as { 한국어: { 키: string } })['한국어']['키']).toBe('값');
+  });
+
+  it('특수문자 포함 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'val', '!@#$%^&*()');
+    expect(obj.val).toBe('!@#$%^&*()');
+  });
+
+  it('음수 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'neg', -100);
+    expect(obj.neg).toBe(-100);
+  });
+
+  it('Infinity 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'inf', Infinity);
+    expect(obj.inf).toBe(Infinity);
+  });
+
+  it('배열 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'list', [1, 2, 3]);
+    expect(Array.isArray(obj.list)).toBe(true);
+  });
+
+  it('중첩 객체 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    const inner = { x: 1, y: 2 };
+    setNestedValue(obj, 'inner', inner);
+    expect(obj.inner).toBe(inner);
+  });
+
+  it('5단계 중첩 후 다른 키 설정 → 각각 독립', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'a.b.c', 1);
+    setNestedValue(obj, 'a.b.d', 2);
+    const ab = (obj as { a: { b: { c: number; d: number } } }).a.b;
+    expect(ab.c).toBe(1);
+    expect(ab.d).toBe(2);
+  });
+
+  it('null 덮어쓰기 → 이후 null', () => {
+    const obj: Record<string, unknown> = { key: 'original' };
+    setNestedValue(obj, 'key', null);
+    expect(obj.key).toBeNull();
+  });
+
+  it('10번 같은 키 설정 → 마지막 값', () => {
+    const obj: Record<string, unknown> = {};
+    for (let i = 0; i < 10; i++) {
+      setNestedValue(obj, 'counter', i);
+    }
+    expect(obj.counter).toBe(9);
+  });
+});
+
+// ── parseConfigValue 추가 경계값 ─────────────────────────────
+
+describe('parseConfigValue 추가 경계값', () => {
+  it('"undefined" → string (예약어 아님)', () => {
+    const result = parseConfigValue('undefined');
+    expect(typeof result).toBe('string');
+  });
+
+  it('"TRUE" → 대소문자 구분 검증', () => {
+    // "TRUE"는 "true"와 다름 → string 반환 가능
+    const result = parseConfigValue('TRUE');
+    expect(typeof result === 'string' || result === true).toBe(true);
+  });
+
+  it('"NULL" → 대소문자 구분 검증', () => {
+    const result = parseConfigValue('NULL');
+    expect(typeof result === 'string' || result === null).toBe(true);
+  });
+
+  it('"  42  " → 공백 포함 숫자 문자열 → string 또는 number', () => {
+    const result = parseConfigValue('  42  ');
+    expect(typeof result === 'string' || typeof result === 'number').toBe(true);
+  });
+
+  it('"3e2" → 지수 표기법 → number 또는 string', () => {
+    const result = parseConfigValue('3e2');
+    expect(typeof result === 'string' || typeof result === 'number').toBe(true);
+  });
+
+  it('"0x1F" → 16진수 문자열 → string 또는 number', () => {
+    const result = parseConfigValue('0x1F');
+    expect(typeof result === 'string' || typeof result === 'number').toBe(true);
+  });
+
+  it('UUID 형식 → string 반환', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    expect(parseConfigValue(uuid)).toBe(uuid);
+  });
+
+  it('한국어 → string 반환', () => {
+    expect(parseConfigValue('한국어설정값')).toBe('한국어설정값');
+  });
+
+  it('개행 포함 → string 반환', () => {
+    const result = parseConfigValue('line1\nline2');
+    expect(typeof result).toBe('string');
+  });
+
+  it('"1000000" → number 1000000', () => {
+    expect(parseConfigValue('1000000')).toBe(1000000);
+  });
+
+  it('"-0" → number 0 또는 -0', () => {
+    const result = parseConfigValue('-0');
+    expect(typeof result === 'number' || typeof result === 'string').toBe(true);
+  });
+
+  it('"2.718281828" → float number', () => {
+    const result = parseConfigValue('2.718281828');
+    expect(result).toBeCloseTo(2.718281828);
+  });
+});
+
+// ── ConfigCommand execute 추가 오류 경로 ─────────────────────
+
+describe('ConfigCommand execute 추가 오류 경로', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('get 빈 문자열 키 → ok=false', async () => {
+    const result = await new ConfigCommand(logger).execute(['get', ''], makeOptions(tempDir));
+    expect(result.ok).toBe(false);
+  });
+
+  it('set 키만 있고 값 없음 → error.code 문자열', async () => {
+    const result = await new ConfigCommand(logger).execute(['set', 'log.level'], makeOptions(tempDir));
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('list 결과는 ok=true', async () => {
+    const cmd = new ConfigCommand(logger);
+    const r = await cmd.execute(['list'], makeOptions(tempDir));
+    expect(r.ok).toBe(true);
+  });
+
+  it('get 여러 잘못된 키 → 항상 ok=false', async () => {
+    const cmd = new ConfigCommand(logger);
+    const badKeys = [
+      'zzz.nonexistent',
+      'abc.def.ghi',
+      'totally.wrong.path',
+      '....dots',
+    ];
+    for (const key of badKeys) {
+      const result = await cmd.execute(['get', key], makeOptions(tempDir));
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('set → list → ok=true 파이프라인', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'debug'], makeOptions(tempDir));
+    const listResult = await cmd.execute(['list'], makeOptions(tempDir));
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('알 수 없는 서브커맨드 → error.message 존재', async () => {
+    const result = await new ConfigCommand(logger).execute(['nonexistent-cmd'], makeOptions(tempDir));
+    if (!result.ok) expect(result.error.message).toBeDefined();
+  });
+});

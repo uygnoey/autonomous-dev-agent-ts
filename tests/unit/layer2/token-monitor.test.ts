@@ -670,3 +670,253 @@ describe('TokenMonitor 복합 시나리오', () => {
     expect(monitor.shouldPauseAll()).toBe(false);
   });
 });
+
+// ── 추가 경계값: shouldThrottleSpawn 상세 ──────────────────────
+
+describe('TokenMonitor shouldThrottleSpawn 추가 경계값', () => {
+  it('requestsRemaining=200 → false (한도 초과 높음)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 200 }));
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+  });
+
+  it('requestsRemaining=1000 → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 1000 }));
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+  });
+
+  it('requestsRemaining=Number.MAX_SAFE_INTEGER → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: Number.MAX_SAFE_INTEGER }));
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+  });
+
+  it('requestsRemaining=20 isLimitApproaching=true → true (양쪽 조건)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 20, isLimitApproaching: true }));
+    expect(monitor.shouldThrottleSpawn()).toBe(true);
+  });
+
+  it('requestsRemaining=20 isLimitApproaching=false → true (수치 조건)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 20, isLimitApproaching: false }));
+    expect(monitor.shouldThrottleSpawn()).toBe(true);
+  });
+
+  it('requestsRemaining=null isLimitApproaching=false → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: null, isLimitApproaching: false }));
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+  });
+
+  it('requestsRemaining=null isLimitApproaching=true → true', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: null, isLimitApproaching: true }));
+    expect(monitor.shouldThrottleSpawn()).toBe(true);
+  });
+
+  it('반환값이 true인 경우 boolean 확인', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 10 }));
+    const result = monitor.shouldThrottleSpawn();
+    expect(typeof result).toBe('boolean');
+    expect(result).toBe(true);
+  });
+
+  it('반환값이 false인 경우 boolean 확인', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 80 }));
+    const result = monitor.shouldThrottleSpawn();
+    expect(typeof result).toBe('boolean');
+    expect(result).toBe(false);
+  });
+
+  it('10개 다른 requestsRemaining → 각각 정확한 boolean 반환', () => {
+    const cases: Array<[number, boolean]> = [
+      [0, true],
+      [5, true],
+      [10, true],
+      [15, true],
+      [20, true],
+      [21, false],
+      [30, false],
+      [50, false],
+      [80, false],
+      [100, false],
+    ];
+    for (const [remaining, expected] of cases) {
+      const monitor = makeMonitor(makeStatus({ requestsRemaining: remaining }));
+      expect(monitor.shouldThrottleSpawn()).toBe(expected);
+    }
+  });
+});
+
+// ── 추가 경계값: shouldPauseAll 상세 ──────────────────────────
+
+describe('TokenMonitor shouldPauseAll 추가 경계값', () => {
+  it('requestsRemaining=null retryAfterSeconds=null → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: null, retryAfterSeconds: null }));
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('requestsRemaining=null retryAfterSeconds=5 → true', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: null, retryAfterSeconds: 5 }));
+    expect(monitor.shouldPauseAll()).toBe(true);
+  });
+
+  it('requestsRemaining=1000 retryAfterSeconds=1 → true', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 1000, retryAfterSeconds: 1 }));
+    expect(monitor.shouldPauseAll()).toBe(true);
+  });
+
+  it('requestsRemaining=5 retryAfterSeconds=30 → true (양쪽 조건)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 5, retryAfterSeconds: 30 }));
+    expect(monitor.shouldPauseAll()).toBe(true);
+  });
+
+  it('requestsRemaining=6 retryAfterSeconds=null → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 6, retryAfterSeconds: null }));
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('requestsRemaining=Number.MAX_SAFE_INTEGER retryAfterSeconds=null → false', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: Number.MAX_SAFE_INTEGER, retryAfterSeconds: null }));
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('10개 다른 requestsRemaining → 각각 정확한 boolean 반환', () => {
+    const cases: Array<[number, boolean]> = [
+      [0, true],
+      [1, true],
+      [2, true],
+      [3, true],
+      [4, true],
+      [5, true],
+      [6, false],
+      [7, false],
+      [10, false],
+      [100, false],
+    ];
+    for (const [remaining, expected] of cases) {
+      const monitor = makeMonitor(makeStatus({ requestsRemaining: remaining }));
+      expect(monitor.shouldPauseAll()).toBe(expected);
+    }
+  });
+
+  it('retryAfterSeconds=Number.MAX_SAFE_INTEGER → true', () => {
+    const monitor = makeMonitor(makeStatus({ retryAfterSeconds: Number.MAX_SAFE_INTEGER }));
+    expect(monitor.shouldPauseAll()).toBe(true);
+  });
+
+  it('shouldPauseAll 10회 반복 → 일관됨 (true)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 2 }));
+    for (let i = 0; i < 10; i++) {
+      expect(monitor.shouldPauseAll()).toBe(true);
+    }
+  });
+
+  it('shouldPauseAll 10회 반복 → 일관됨 (false)', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 50 }));
+    for (let i = 0; i < 10; i++) {
+      expect(monitor.shouldPauseAll()).toBe(false);
+    }
+  });
+});
+
+// ── 추가 경계값: getStatus 상세 ───────────────────────────────
+
+describe('TokenMonitor getStatus 추가 경계값', () => {
+  it('inputTokensRemaining=0 → 0 반환', () => {
+    const monitor = makeMonitor(makeStatus({ inputTokensRemaining: 0 }));
+    expect(monitor.getStatus().inputTokensRemaining).toBe(0);
+  });
+
+  it('outputTokensRemaining=0 → 0 반환', () => {
+    const monitor = makeMonitor(makeStatus({ outputTokensRemaining: 0 }));
+    expect(monitor.getStatus().outputTokensRemaining).toBe(0);
+  });
+
+  it('retryAfterSeconds=0 → 0 반환', () => {
+    const monitor = makeMonitor(makeStatus({ retryAfterSeconds: 0 }));
+    expect(monitor.getStatus().retryAfterSeconds).toBe(0);
+  });
+
+  it('inputTokensRemaining=Number.MAX_SAFE_INTEGER → 그대로 반환', () => {
+    const monitor = makeMonitor(makeStatus({ inputTokensRemaining: Number.MAX_SAFE_INTEGER }));
+    expect(monitor.getStatus().inputTokensRemaining).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('requestsRemaining=1 → 1 반환', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 1 }));
+    expect(monitor.getStatus().requestsRemaining).toBe(1);
+  });
+
+  it('getStatus 필드 목록 검증', () => {
+    const monitor = makeMonitor(makeStatus());
+    const status = monitor.getStatus();
+    expect('requestsRemaining' in status).toBe(true);
+    expect('inputTokensRemaining' in status).toBe(true);
+    expect('outputTokensRemaining' in status).toBe(true);
+    expect('retryAfterSeconds' in status).toBe(true);
+    expect('isLimitApproaching' in status).toBe(true);
+  });
+
+  it('isLimitApproaching=true → true 반환', () => {
+    const monitor = makeMonitor(makeStatus({ isLimitApproaching: true }));
+    expect(monitor.getStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('getStatus 결과는 null이 아님', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.getStatus()).not.toBeNull();
+  });
+
+  it('getStatus 10회 반복 → 일관됨', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 77 }));
+    for (let i = 0; i < 10; i++) {
+      expect(monitor.getStatus().requestsRemaining).toBe(77);
+    }
+  });
+});
+
+// ── 추가 경계값: updateFromResponse 다양한 헤더 ────────────────
+
+describe('TokenMonitor updateFromResponse 다양한 헤더', () => {
+  it('UUID 값 헤더 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    expect(monitor.updateFromResponse({ 'x-request-id': uuid }).ok).toBe(true);
+  });
+
+  it('한국어 헤더 키 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.updateFromResponse({ '한국어-헤더': '값' }).ok).toBe(true);
+  });
+
+  it('특수문자 헤더 값 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.updateFromResponse({ 'x-special': '!@#$%^&*()' }).ok).toBe(true);
+  });
+
+  it('매우 많은 헤더 키 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    const headers: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) {
+      headers[`x-header-${i}`] = `value-${i}`;
+    }
+    expect(monitor.updateFromResponse(headers).ok).toBe(true);
+  });
+
+  it('빈 문자열 값 헤더 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.updateFromResponse({ 'x-empty': '' }).ok).toBe(true);
+  });
+
+  it('숫자 문자열 rate limit 헤더 → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.updateFromResponse({ 'x-ratelimit-remaining': '0' }).ok).toBe(true);
+  });
+
+  it('negative 문자열 rate limit → ok=true', () => {
+    const monitor = makeMonitor(makeStatus());
+    expect(monitor.updateFromResponse({ 'x-ratelimit-remaining': '-1' }).ok).toBe(true);
+  });
+
+  it('updateFromResponse 후 getStatus 여전히 작동', () => {
+    const monitor = makeMonitor(makeStatus({ requestsRemaining: 50 }));
+    monitor.updateFromResponse({ 'x-ratelimit-remaining': '50' });
+    expect(typeof monitor.getStatus()).toBe('object');
+  });
+});
