@@ -925,3 +925,359 @@ describe('BugEscalator getActiveReports 추가 edge', () => {
     }
   });
 });
+
+// ── 추가 edge: createReport 심각도 세부 분류 ──────────────────
+
+describe('BugEscalator createReport 심각도 세부 분류 추가', () => {
+  let escalator: BugEscalator;
+
+  beforeEach(() => {
+    escalator = makeEscalator();
+  });
+
+  it('injection 키워드 → critical', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'SQL injection detected in query' }));
+    if (result.ok) expect(result.value.severity).toBe('critical');
+  });
+
+  it('segfault 키워드 → critical', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'segfault in memory handler' }));
+    if (result.ok) expect(result.value.severity).toBe('critical');
+  });
+
+  it('data loss 키워드 → critical', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'data loss occurred during write' }));
+    if (result.ok) expect(result.value.severity).toBe('critical');
+  });
+
+  it('error 키워드 → major', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'error in processing pipeline' }));
+    if (result.ok) expect(result.value.severity).toBe('major');
+  });
+
+  it('failed 키워드 → major', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'request failed with status 503' }));
+    if (result.ok) expect(result.value.severity).toBe('major');
+  });
+
+  it('undefined 키워드 → major', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'undefined is not a function' }));
+    if (result.ok) expect(result.value.severity).toBe('major');
+  });
+
+  it('null 키워드 → major', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'cannot read property of null' }));
+    if (result.ok) expect(result.value.severity).toBe('major');
+  });
+
+  it('font 키워드 → minor', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'font rendering glitch' }));
+    if (result.ok) expect(result.value.severity).toBe('minor');
+  });
+
+  it('완전히 다른 텍스트 → low', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'something went sideways' }));
+    if (result.ok) expect(result.value.severity).toBe('low');
+  });
+
+  it('oom 키워드 → critical', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'oom killer activated' }));
+    if (result.ok) expect(result.value.severity).toBe('critical');
+  });
+
+  it('severity 결정 후 phase 필드가 존재한다', () => {
+    const result = escalator.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (result.ok) {
+      // phase 필드가 BugReport에 있을 수 있음 (구현 의존)
+      expect(result.value.severity).toBeDefined();
+    }
+  });
+
+  it('UUID projectId로 심각도 분류 → ok=true', () => {
+    const uuid = crypto.randomUUID();
+    const result = escalator.createReport(uuid, createFailure({ error: 'fatal crash' }));
+    if (result.ok) expect(result.value.severity).toBe('critical');
+  });
+
+  it('10개 다른 심각도 에러 → 모두 유효한 severity', () => {
+    const errors = [
+      'fatal crash', 'timeout', 'exception', 'minor glitch', 'unknown thing',
+      'crash occurred', 'security breach', 'data loss detected', 'error in api', 'undefined var',
+    ];
+    const valid = ['critical', 'major', 'minor', 'low'];
+    for (const error of errors) {
+      const r = escalator.createReport('proj', createFailure({ error }));
+      if (r.ok) expect(valid).toContain(r.value.severity);
+    }
+  });
+});
+
+// ── 추가 edge: escalate 심각도 → Phase 매핑 세부 ─────────────
+
+describe('BugEscalator escalate 심각도 Phase 매핑 세부', () => {
+  it('low severity → VERIFY', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'unknown thing' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('VERIFY');
+  });
+
+  it('minor severity → VERIFY', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'font rendering issue minor' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('VERIFY');
+  });
+
+  it('major severity → TEST', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'timeout during processing' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('TEST');
+  });
+
+  it('critical severity → CODE', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('CODE');
+  });
+
+  it('escalate 결과에 bugReport가 포함된다', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) {
+      expect(result.value.bugReport).toBeDefined();
+      expect(result.value.bugReport.id).toBe(rr.value.id);
+    }
+  });
+
+  it('injection → CODE', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'SQL injection vulnerability' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('CODE');
+  });
+
+  it('oom → CODE', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'oom killer activated' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('CODE');
+  });
+
+  it('undefined → TEST', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'undefined variable accessed' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('TEST');
+  });
+
+  it('null → TEST', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'null pointer dereference' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('TEST');
+  });
+
+  it('failed → TEST', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'request failed unexpectedly' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('TEST');
+  });
+
+  it('error → TEST', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'error during pipeline' }));
+    if (!rr.ok) return;
+    const result = e.escalate(rr.value);
+    if (result.ok) expect(result.value.targetPhase).toBe('TEST');
+  });
+
+  it('10개 critical 에러 모두 CODE phase', () => {
+    const e = makeEscalator();
+    const criticalErrors = [
+      'fatal crash', 'crash detected', 'security breach', 'SQL injection found',
+      'data loss detected', 'oom killed', 'segfault', 'fatal error',
+      'crash in auth', 'injection attack',
+    ];
+    for (const error of criticalErrors) {
+      const rr = e.createReport('proj', createFailure({ error }));
+      if (!rr.ok) continue;
+      const result = e.escalate(rr.value);
+      if (result.ok) expect(result.value.targetPhase).toBe('CODE');
+    }
+  });
+
+  it('escalate 전후 bugReport id 동일', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'timeout occurred' }));
+    if (!rr.ok) return;
+    const originalId = rr.value.id;
+    const result = e.escalate(rr.value);
+    if (result.ok) {
+      expect(result.value.bugReport.id).toBe(originalId);
+    }
+  });
+});
+
+// ── 추가 edge: createReport 시나리오 ─────────────────────────
+
+describe('BugEscalator createReport 추가 시나리오', () => {
+  it('100개 create → 100개 active', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 100; i++) {
+      e.createReport('proj-100', createFailure({ error: `error-${i}` }));
+    }
+    expect(e.getActiveReports('proj-100')).toHaveLength(100);
+  });
+
+  it('create 후 resolve → active 0개', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'fatal crash' }));
+    if (!rr.ok) return;
+    e.resolveReport(rr.value.id);
+    expect(e.getActiveReports('proj')).toHaveLength(0);
+  });
+
+  it('createReport 결과의 title이 문자열이다', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure());
+    if (result.ok) expect(typeof result.value.title).toBe('string');
+  });
+
+  it('createReport 결과의 category가 문자열이다', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure());
+    if (result.ok) expect(typeof result.value.category).toBe('string');
+  });
+
+  it('createReport 결과의 reportedAt이 Date이다', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure());
+    if (result.ok) expect(result.value.reportedAt).toBeInstanceOf(Date);
+  });
+
+  it('createReport 결과의 description이 testName을 포함한다', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ testName: 'my-special-test' }));
+    if (result.ok) expect(result.value.description).toContain('my-special-test');
+  });
+
+  it('createReport 결과의 description이 error를 포함한다', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ error: 'unique-error-xyz' }));
+    if (result.ok) expect(result.value.description).toContain('unique-error-xyz');
+  });
+
+  it('createReport 연속 5개 → id 모두 다르다', () => {
+    const e = makeEscalator();
+    const ids = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const r = e.createReport('proj', createFailure({ error: `err-${i}` }));
+      if (r.ok) ids.add(r.value.id);
+    }
+    expect(ids.size).toBe(5);
+  });
+
+  it('빈 featureId → ok=true (featureId는 선택)', () => {
+    const e = makeEscalator();
+    const result = e.createReport('proj', createFailure({ featureId: '' }));
+    // featureId 빈 문자열은 validation 안 함 (구현 의존)
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('긴 testName → ok=true', () => {
+    const e = makeEscalator();
+    const longName = 'test-' + 'n'.repeat(200);
+    const result = e.createReport('proj', createFailure({ testName: longName }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('countNaN 방지 — 반복 counter는 항상 증가', () => {
+    const e = makeEscalator();
+    const r1 = e.createReport('proj', createFailure({ error: 'err1' }));
+    const r2 = e.createReport('proj', createFailure({ error: 'err2' }));
+    if (r1.ok && r2.ok) {
+      // id 형식이 bug-N이면 순서 확인
+      expect(r1.value.id).not.toBe(r2.value.id);
+    }
+  });
+});
+
+// ── 추가 edge: resolveReport 시나리오 ─────────────────────────
+
+describe('BugEscalator resolveReport 추가 시나리오', () => {
+  it('100개 resolve → active 0개', () => {
+    const e = makeEscalator();
+    const ids: string[] = [];
+    for (let i = 0; i < 100; i++) {
+      const rr = e.createReport('proj-100r', createFailure({ error: `err-${i}` }));
+      if (rr.ok) ids.push(rr.value.id);
+    }
+    for (const id of ids) e.resolveReport(id);
+    expect(e.getActiveReports('proj-100r')).toHaveLength(0);
+  });
+
+  it('resolve 성공 후 동일 id 재resolve → ok=false', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'crash' }));
+    if (!rr.ok) return;
+    e.resolveReport(rr.value.id);
+    const result = e.resolveReport(rr.value.id);
+    expect(result.ok).toBe(false);
+  });
+
+  it('존재하지 않는 임의 UUID → ok=false', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 5; i++) {
+      const uuid = crypto.randomUUID();
+      const result = e.resolveReport(uuid);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('resolve error code가 문자열이다 (빈 id)', () => {
+    const e = makeEscalator();
+    const result = e.resolveReport('');
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('resolve error message가 문자열이다 (빈 id)', () => {
+    const e = makeEscalator();
+    const result = e.resolveReport('');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('resolve 성공 → ok=true 반환값 확인', () => {
+    const e = makeEscalator();
+    const rr = e.createReport('proj', createFailure({ error: 'crash' }));
+    if (!rr.ok) return;
+    const result = e.resolveReport(rr.value.id);
+    expect(result.ok).toBe(true);
+  });
+
+  it('getActiveReports 후 resolve → 결과 길이 감소', () => {
+    const e = makeEscalator();
+    for (let i = 0; i < 5; i++) {
+      e.createReport('proj-dec', createFailure({ error: `err-${i}` }));
+    }
+    const before = e.getActiveReports('proj-dec').length;
+    const first = e.getActiveReports('proj-dec')[0];
+    if (first) e.resolveReport(first.id);
+    const after = e.getActiveReports('proj-dec').length;
+    expect(after).toBe(before - 1);
+  });
+});

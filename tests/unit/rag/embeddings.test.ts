@@ -927,3 +927,517 @@ describe('normalizeVector 랜덤 케이스', () => {
     }
   });
 });
+
+// ── normalizeVector 추가 수치 정밀도 케이스 ──────────────────
+
+describe('normalizeVector 수치 정밀도 케이스', () => {
+  it('[5, 12] → norm=1 (피타고라스 13)', () => {
+    const result = normalizeVector(new Float32Array([5, 12]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[5, 12] → [5/13, 12/13]', () => {
+    const result = normalizeVector(new Float32Array([5, 12]));
+    expect(result[0]).toBeCloseTo(5 / 13, 4);
+    expect(result[1]).toBeCloseTo(12 / 13, 4);
+  });
+
+  it('[3, 4] → [0.6, 0.8] 5번 일관성', () => {
+    for (let t = 0; t < 5; t++) {
+      const result = normalizeVector(new Float32Array([3, 4]));
+      expect(result[0]).toBeCloseTo(0.6, 5);
+      expect(result[1]).toBeCloseTo(0.8, 5);
+    }
+  });
+
+  it('[0, 0, 1] → [0, 0, 1]', () => {
+    const result = normalizeVector(new Float32Array([0, 0, 1]));
+    expect(result[2]).toBeCloseTo(1.0, 5);
+    expect(result[0]).toBeCloseTo(0.0, 5);
+    expect(result[1]).toBeCloseTo(0.0, 5);
+  });
+
+  it('[2, 0] → [1, 0]', () => {
+    const result = normalizeVector(new Float32Array([2, 0]));
+    expect(result[0]).toBeCloseTo(1.0, 5);
+    expect(result[1]).toBeCloseTo(0.0, 5);
+  });
+
+  it('[0, 3] → [0, 1]', () => {
+    const result = normalizeVector(new Float32Array([0, 3]));
+    expect(result[0]).toBeCloseTo(0.0, 5);
+    expect(result[1]).toBeCloseTo(1.0, 5);
+  });
+
+  it('512차원 랜덤 벡터 → norm≈1', () => {
+    const arr = Float32Array.from({ length: 512 }, () => Math.random() * 2 - 1);
+    const allZero = Array.from(arr).every((v) => v === 0);
+    if (allZero) return;
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 2);
+  });
+
+  it('1536차원 벡터 norm≈1', () => {
+    const arr = new Float32Array(1536).fill(0.1);
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 2);
+  });
+
+  it('[1, 1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, 1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('영벡터 반환 시 Float32Array이다', () => {
+    const result = normalizeVector(new Float32Array([0, 0]));
+    expect(result).toBeInstanceOf(Float32Array);
+  });
+
+  it('정규화 결과의 모든 원소가 유한하다 (큰 값)', () => {
+    const arr = new Float32Array([1e30, 1e30]);
+    const result = normalizeVector(arr);
+    for (let i = 0; i < result.length; i++) {
+      expect(Number.isFinite(result[i] ?? 0)).toBe(true);
+    }
+  });
+
+  it('[-0, 1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([-0, 1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('입력 Float32Array는 불변이다 (큰 배열)', () => {
+    const input = new Float32Array(100).fill(2.5);
+    const originalValues = Array.from(input);
+    normalizeVector(input);
+    for (let i = 0; i < input.length; i++) {
+      expect(input[i]).toBe(originalValues[i]);
+    }
+  });
+
+  it('[1, -1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, -1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[1, 0, -1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, 0, -1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+});
+
+// ── TransformersEmbeddingProvider 생성자 추가 경계값 3 ────────
+
+describe('TransformersEmbeddingProvider 생성자 경계값 3', () => {
+  it('name이 공백만 있는 경우도 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('   ', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name).toBe('   ');
+  });
+
+  it('dimensions=4096 → 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 4096, logger);
+    expect(p.dimensions).toBe(4096);
+  });
+
+  it('두 인스턴스 name 독립성', () => {
+    const p1 = new TransformersEmbeddingProvider('provider-alpha', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const p2 = new TransformersEmbeddingProvider('provider-beta', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p1.name).toBe('provider-alpha');
+    expect(p2.name).toBe('provider-beta');
+  });
+
+  it('두 인스턴스 dimensions 독립성', () => {
+    const p1 = new TransformersEmbeddingProvider('t', 'Xenova/all-MiniLM-L6-v2', 128, logger);
+    const p2 = new TransformersEmbeddingProvider('t', 'Xenova/all-MiniLM-L6-v2', 768, logger);
+    expect(p1.dimensions).toBe(128);
+    expect(p2.dimensions).toBe(768);
+  });
+
+  it('tier는 "free" 이외의 값이 아니다', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.tier).not.toBe('paid');
+    expect(p.tier).not.toBe('premium');
+    expect(p.tier).toBe('free');
+  });
+
+  it('30개 인스턴스 연속 생성 → 각각 독립', () => {
+    const providers = Array.from({ length: 30 }, (_, i) =>
+      new TransformersEmbeddingProvider(`p-${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger),
+    );
+    for (let i = 0; i < providers.length; i++) {
+      expect(providers[i]?.name).toBe(`p-${i}`);
+    }
+  });
+
+  it('initialize 반환값은 Promise이다', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const result = p.initialize();
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {});
+  });
+
+  it('embed 반환값은 Promise이다', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const result = p.embed(['test']);
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {});
+  });
+
+  it('embedQuery 반환값은 Promise이다', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const result = p.embedQuery('test');
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {});
+  });
+
+  it('name에 슬래시 포함 → 설정됨', () => {
+    const p = new TransformersEmbeddingProvider('Xenova/custom-model', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name).toBe('Xenova/custom-model');
+  });
+});
+
+// ── createTransformersEmbeddingProvider 팩토리 추가 edge ──────
+
+describe('createTransformersEmbeddingProvider 팩토리 추가 edge', () => {
+  it('name="abc" → name="abc"', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'abc');
+    expect(p.name).toBe('abc');
+  });
+
+  it('dimensions=1024 → 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 1024);
+    expect(p.dimensions).toBe(1024);
+  });
+
+  it('dimensions=1536 → 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 1536);
+    expect(p.dimensions).toBe(1536);
+  });
+
+  it('생성된 인스턴스는 tier=free', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'custom-name', 'Xenova/all-MiniLM-L6-v2', 256);
+    expect(p.tier).toBe('free');
+  });
+
+  it('다른 logger로 생성해도 tier=free', () => {
+    const warnLogger = new ConsoleLogger('warn');
+    const p = createTransformersEmbeddingProvider(warnLogger);
+    expect(p.tier).toBe('free');
+  });
+
+  it('생성된 인스턴스의 initialize 메서드 존재', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.initialize).toBe('function');
+  });
+
+  it('생성된 인스턴스의 embed 메서드 존재', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.embed).toBe('function');
+  });
+
+  it('생성된 인스턴스의 embedQuery 메서드 존재', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.embedQuery).toBe('function');
+  });
+
+  it('UUID name으로 팩토리 생성', () => {
+    const uuid = crypto.randomUUID();
+    const p = createTransformersEmbeddingProvider(logger, uuid);
+    expect(p.name).toBe(uuid);
+  });
+
+  it('한글 name으로 팩토리 생성', () => {
+    const p = createTransformersEmbeddingProvider(logger, '임베딩-v2');
+    expect(p.name).toBe('임베딩-v2');
+  });
+
+  it('팩토리 5번 연속 생성 → 모두 dimensions=384', () => {
+    const providers = Array.from({ length: 5 }, () => createTransformersEmbeddingProvider(logger));
+    for (const p of providers) {
+      expect(p.dimensions).toBe(384);
+    }
+  });
+
+  it('팩토리 생성 인스턴스 → 두 인스턴스는 다른 객체', () => {
+    const p1 = createTransformersEmbeddingProvider(logger, 'p1');
+    const p2 = createTransformersEmbeddingProvider(logger, 'p2');
+    expect(p1).not.toBe(p2);
+  });
+});
+
+// ── normalizeVector 특수 케이스 ───────────────────────────────
+
+describe('normalizeVector 특수 케이스', () => {
+  it('[1, 2, 3, 4] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, 2, 3, 4]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[-2, -4, -6] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([-2, -4, -6]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('정규화는 원래 방향을 유지한다 (양수 벡터)', () => {
+    const input = new Float32Array([3, 4]);
+    const result = normalizeVector(input);
+    // 정규화 후 원소 부호가 동일해야 한다
+    expect(result[0]).toBeGreaterThan(0);
+    expect(result[1]).toBeGreaterThan(0);
+  });
+
+  it('정규화는 원래 방향을 유지한다 (음수 벡터)', () => {
+    const input = new Float32Array([-3, -4]);
+    const result = normalizeVector(input);
+    expect(result[0]).toBeLessThan(0);
+    expect(result[1]).toBeLessThan(0);
+  });
+
+  it('Float32Array 길이 100 → 반환 길이 100', () => {
+    const input = new Float32Array(100).fill(1);
+    const result = normalizeVector(input);
+    expect(result.length).toBe(100);
+  });
+
+  it('[1, 0] → [1, 0]', () => {
+    const result = normalizeVector(new Float32Array([1, 0]));
+    expect(result[0]).toBeCloseTo(1.0, 5);
+    expect(result[1]).toBeCloseTo(0.0, 5);
+  });
+
+  it('[0, 5] → [0, 1]', () => {
+    const result = normalizeVector(new Float32Array([0, 5]));
+    expect(result[0]).toBeCloseTo(0.0, 5);
+    expect(result[1]).toBeCloseTo(1.0, 5);
+  });
+
+  it('반환값이 입력 배열과 다른 객체이다 (비영벡터)', () => {
+    const input = new Float32Array([3, 4]);
+    const result = normalizeVector(input);
+    expect(result).not.toBe(input);
+  });
+
+  it('영벡터 반환값은 입력과 동일한 참조', () => {
+    const input = new Float32Array([0, 0, 0]);
+    const result = normalizeVector(input);
+    // WHY: 영벡터는 magnitude=0이면 동일 배열 반환 (구현 의존)
+    expect(result).toBe(input);
+  });
+
+  it('[1e-10, 0] → norm≈1 (매우 작은 값)', () => {
+    const result = normalizeVector(new Float32Array([1e-10, 0]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    // 매우 작은 값이지만 방향은 유지되어야 함
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 3);
+  });
+});
+
+// ── normalizeVector 반복 랜덤 검증 케이스 ─────────────────────
+
+describe('normalizeVector 반복 랜덤 검증', () => {
+  it('랜덤 3차원 벡터 20번 → 모두 norm≈1', () => {
+    for (let t = 0; t < 20; t++) {
+      const arr = Float32Array.from({ length: 3 }, () => Math.random() * 20 - 10);
+      const allZero = Array.from(arr).every((v) => v === 0);
+      if (allZero) continue;
+      const result = normalizeVector(arr);
+      let sumSq = 0;
+      for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+      expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+    }
+  });
+
+  it('[2, 1] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([2, 1]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[10, 10, 10, 10, 10] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([10, 10, 10, 10, 10]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[-10, 10, -10] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([-10, 10, -10]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('32차원 벡터 → norm≈1', () => {
+    const arr = new Float32Array(32).fill(1);
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('64차원 벡터 → norm≈1', () => {
+    const arr = new Float32Array(64).fill(2);
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('[0.0001, 0.0002, 0.0003] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([0.0001, 0.0002, 0.0003]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('[-0.5, 0.5, -0.5, 0.5] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([-0.5, 0.5, -0.5, 0.5]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+
+  it('[1, 2] 정규화 후 [2, 4] 정규화와 동일 방향', () => {
+    const r1 = normalizeVector(new Float32Array([1, 2]));
+    const r2 = normalizeVector(new Float32Array([2, 4]));
+    // 방향 같으면 원소 비율 동일
+    expect(r1[0]).toBeCloseTo(r2[0] ?? 0, 5);
+    expect(r1[1]).toBeCloseTo(r2[1] ?? 0, 5);
+  });
+
+  it('16차원 랜덤 벡터 10번 → 모두 norm≈1', () => {
+    for (let t = 0; t < 10; t++) {
+      const arr = Float32Array.from({ length: 16 }, () => Math.random() * 10 - 5);
+      const allZero = Array.from(arr).every((v) => v === 0);
+      if (allZero) continue;
+      const result = normalizeVector(arr);
+      let sumSq = 0;
+      for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+      expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+    }
+  });
+
+  it('정규화 연속 2회 → 동일 결과 (이미 정규화된 경우)', () => {
+    const input = new Float32Array([3, 4]);
+    const r1 = normalizeVector(input);
+    const r2 = normalizeVector(r1);
+    for (let i = 0; i < r1.length; i++) {
+      expect(r2[i]).toBeCloseTo(r1[i] ?? 0, 4);
+    }
+  });
+
+  it('[1000, 2000, 3000] → norm≈1', () => {
+    const result = normalizeVector(new Float32Array([1000, 2000, 3000]));
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 4);
+  });
+
+  it('8차원 벡터 → norm≈1', () => {
+    const arr = new Float32Array([1, -1, 2, -2, 3, -3, 4, -4]);
+    const result = normalizeVector(arr);
+    let sumSq = 0;
+    for (let i = 0; i < result.length; i++) sumSq += (result[i] ?? 0) ** 2;
+    expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 5);
+  });
+});
+
+// ── TransformersEmbeddingProvider 메서드 존재 추가 확인 ────────
+
+describe('TransformersEmbeddingProvider 메서드 타입 확인', () => {
+  it('initialize 메서드가 함수이다', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.initialize).toBe('function');
+  });
+
+  it('embed 메서드가 함수이다', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.embed).toBe('function');
+  });
+
+  it('embedQuery 메서드가 함수이다', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.embedQuery).toBe('function');
+  });
+
+  it('name 속성이 문자열이다 (팩토리)', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'my-provider');
+    expect(typeof p.name).toBe('string');
+    expect(p.name).toBe('my-provider');
+  });
+
+  it('dimensions 속성이 숫자이다 (팩토리)', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 768);
+    expect(typeof p.dimensions).toBe('number');
+    expect(p.dimensions).toBe(768);
+  });
+
+  it('tier 속성이 "free"이다 (팩토리)', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(p.tier).toBe('free');
+  });
+
+  it('10번 연속 팩토리 → 모두 instanceof TransformersEmbeddingProvider', () => {
+    for (let i = 0; i < 10; i++) {
+      const p = createTransformersEmbeddingProvider(logger, `p-${i}`);
+      expect(p).toBeInstanceOf(TransformersEmbeddingProvider);
+    }
+  });
+
+  it('생성자로 생성한 인스턴스 → instanceof TransformersEmbeddingProvider', () => {
+    for (let i = 0; i < 5; i++) {
+      const p = new TransformersEmbeddingProvider(`t-${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
+      expect(p).toBeInstanceOf(TransformersEmbeddingProvider);
+    }
+  });
+
+  it('name 설정값 독립성 (10 인스턴스)', () => {
+    const names = Array.from({ length: 10 }, (_, i) => `name-${i}`);
+    const providers = names.map((n) => createTransformersEmbeddingProvider(logger, n));
+    names.forEach((n, i) => {
+      expect(providers[i]?.name).toBe(n);
+    });
+  });
+
+  it('dimensions 설정값 독립성 (5 인스턴스)', () => {
+    const dims = [128, 256, 384, 512, 768];
+    const providers = dims.map((d) => createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', d));
+    dims.forEach((d, i) => {
+      expect(providers[i]?.dimensions).toBe(d);
+    });
+  });
+});
