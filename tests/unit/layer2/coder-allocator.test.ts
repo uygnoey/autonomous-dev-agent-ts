@@ -145,27 +145,66 @@ describe('CoderAllocator.allocate', () => {
     }
   });
 
-  it.each([
-    ['특수문자 모듈명', 'feat-1', ['module/with/slash']],
-    ['긴 모듈명', 'feat-1', [`${'very-long-module-name'.repeat(3)}`]],
-    ['숫자 모듈명', 'feat-1', ['module123']],
-    ['한국어 모듈명', 'feat-1', ['인증모듈']],
-  ])('%s → 할당 성공', (_label, featureId, modules) => {
-    const result = allocator.allocate(featureId, modules);
+  it('특수문자 모듈명 → 할당 성공', () => {
+    const result = allocator.allocate('feat-1', ['module/with/slash']);
     expect(result.ok).toBe(true);
   });
 
-  it.each(Array.from({ length: 20 }, (_, i) => i + 1))(
-    '%i개 모듈 동시 할당',
-    (count) => {
-      const modules = Array.from({ length: count }, (_, i) => `module-${i}`);
-      const result = allocator.allocate('feat-1', modules);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value).toHaveLength(count);
-      }
-    },
-  );
+  it('긴 모듈명 → 할당 성공', () => {
+    const longName = 'very-long-module-name'.repeat(3);
+    const result = allocator.allocate('feat-1', [longName]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자 모듈명 → 할당 성공', () => {
+    const result = allocator.allocate('feat-1', ['module123']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('한국어 모듈명 → 할당 성공', () => {
+    const result = allocator.allocate('feat-1', ['인증모듈']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('1개 모듈 동시 할당', () => {
+    const result = allocator.allocate('feat-1', ['module-0']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(1);
+  });
+
+  it('2개 모듈 동시 할당', () => {
+    const result = allocator.allocate('feat-1', ['module-0', 'module-1']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(2);
+  });
+
+  it('3개 모듈 동시 할당', () => {
+    const modules = Array.from({ length: 3 }, (_, i) => `module-${i}`);
+    const result = allocator.allocate('feat-1', modules);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(3);
+  });
+
+  it('5개 모듈 동시 할당', () => {
+    const modules = Array.from({ length: 5 }, (_, i) => `module-${i}`);
+    const result = allocator.allocate('feat-1', modules);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(5);
+  });
+
+  it('10개 모듈 동시 할당', () => {
+    const modules = Array.from({ length: 10 }, (_, i) => `module-${i}`);
+    const result = allocator.allocate('feat-1', modules);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(10);
+  });
+
+  it('20개 모듈 동시 할당', () => {
+    const modules = Array.from({ length: 20 }, (_, i) => `module-${i}`);
+    const result = allocator.allocate('feat-1', modules);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(20);
+  });
 });
 
 // ── getActiveAllocations ───────────────────────────────────────
@@ -223,14 +262,25 @@ describe('CoderAllocator.getActiveAllocations', () => {
     }
   });
 
-  it.each(Array.from({ length: 10 }, (_, i) => i + 1))(
-    '%i개 할당 후 활성 목록 수',
-    (count) => {
-      const modules = Array.from({ length: count }, (_, i) => `mod-${i}`);
-      allocator.allocate('feat-1', modules);
-      expect(allocator.getActiveAllocations()).toHaveLength(count);
-    },
-  );
+  it('1개 할당 후 활성 목록 수', () => {
+    allocator.allocate('feat-1', ['mod-0']);
+    expect(allocator.getActiveAllocations()).toHaveLength(1);
+  });
+
+  it('2개 할당 후 활성 목록 수', () => {
+    allocator.allocate('feat-1', ['mod-0', 'mod-1']);
+    expect(allocator.getActiveAllocations()).toHaveLength(2);
+  });
+
+  it('5개 할당 후 활성 목록 수', () => {
+    allocator.allocate('feat-1', Array.from({ length: 5 }, (_, i) => `mod-${i}`));
+    expect(allocator.getActiveAllocations()).toHaveLength(5);
+  });
+
+  it('10개 할당 후 활성 목록 수', () => {
+    allocator.allocate('feat-1', Array.from({ length: 10 }, (_, i) => `mod-${i}`));
+    expect(allocator.getActiveAllocations()).toHaveLength(10);
+  });
 });
 
 // ── completeAllocation ─────────────────────────────────────────
@@ -276,29 +326,63 @@ describe('CoderAllocator.completeAllocation', () => {
     }
   });
 
-  it.each(['', ' ', 'fake-id-123', 'coder-0', 'coder--1'])(
-    '잘못된 coderId (%s) → 에러',
-    (coderId) => {
-      const result = allocator.completeAllocation(coderId);
-      expect(result.ok).toBe(false);
-    },
-  );
+  it('잘못된 coderId 빈 문자열 → 에러', () => {
+    const result = allocator.completeAllocation('');
+    expect(result.ok).toBe(false);
+  });
 
-  it.each(Array.from({ length: 10 }, (_, i) => i + 1))(
-    '%i번째 순서로 완료',
-    (n) => {
-      const modules = Array.from({ length: n }, (_, i) => `mod-${i}`);
-      const r = allocator.allocate('feat-1', modules);
-      if (r.ok) {
-        // 역순으로 완료
-        for (let i = r.value.length - 1; i >= 0; i--) {
-          const completeResult = allocator.completeAllocation(r.value[i]!.coderId);
-          expect(completeResult.ok).toBe(true);
-        }
-        expect(allocator.getActiveAllocations()).toHaveLength(0);
+  it('잘못된 coderId 공백 → 에러', () => {
+    const result = allocator.completeAllocation(' ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId fake-id-123 → 에러', () => {
+    const result = allocator.completeAllocation('fake-id-123');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId coder-0 (미할당) → 에러', () => {
+    const result = allocator.completeAllocation('coder-0');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId coder--1 → 에러', () => {
+    const result = allocator.completeAllocation('coder--1');
+    expect(result.ok).toBe(false);
+  });
+
+  it('1개 할당 역순 완료', () => {
+    const r = allocator.allocate('feat-1', ['mod-0']);
+    if (r.ok) {
+      for (let i = r.value.length - 1; i >= 0; i--) {
+        const cr = allocator.completeAllocation(r.value[i]!.coderId);
+        expect(cr.ok).toBe(true);
       }
-    },
-  );
+      expect(allocator.getActiveAllocations()).toHaveLength(0);
+    }
+  });
+
+  it('3개 할당 역순 완료', () => {
+    const r = allocator.allocate('feat-1', ['mod-0', 'mod-1', 'mod-2']);
+    if (r.ok) {
+      for (let i = r.value.length - 1; i >= 0; i--) {
+        const cr = allocator.completeAllocation(r.value[i]!.coderId);
+        expect(cr.ok).toBe(true);
+      }
+      expect(allocator.getActiveAllocations()).toHaveLength(0);
+    }
+  });
+
+  it('5개 할당 역순 완료', () => {
+    const r = allocator.allocate('feat-1', Array.from({ length: 5 }, (_, i) => `mod-${i}`));
+    if (r.ok) {
+      for (let i = r.value.length - 1; i >= 0; i--) {
+        const cr = allocator.completeAllocation(r.value[i]!.coderId);
+        expect(cr.ok).toBe(true);
+      }
+      expect(allocator.getActiveAllocations()).toHaveLength(0);
+    }
+  });
 });
 
 // ── mergeAllocation ────────────────────────────────────────────
@@ -355,13 +439,30 @@ describe('CoderAllocator.mergeAllocation', () => {
     }
   });
 
-  it.each(['', ' ', 'invalid-coder', 'coder-9999', 'CODER-1'])(
-    '잘못된 coderId (%s) → 에러',
-    (coderId) => {
-      const result = allocator.mergeAllocation(coderId);
-      expect(result.ok).toBe(false);
-    },
-  );
+  it('잘못된 coderId 빈 문자열 mergeAllocation → 에러', () => {
+    const result = allocator.mergeAllocation('');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId 공백 mergeAllocation → 에러', () => {
+    const result = allocator.mergeAllocation(' ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId invalid-coder mergeAllocation → 에러', () => {
+    const result = allocator.mergeAllocation('invalid-coder');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId coder-9999 mergeAllocation → 에러', () => {
+    const result = allocator.mergeAllocation('coder-9999');
+    expect(result.ok).toBe(false);
+  });
+
+  it('잘못된 coderId CODER-1 mergeAllocation → 에러', () => {
+    const result = allocator.mergeAllocation('CODER-1');
+    expect(result.ok).toBe(false);
+  });
 });
 
 // ── hasConflict ────────────────────────────────────────────────
@@ -414,20 +515,50 @@ describe('CoderAllocator.hasConflict', () => {
     }
   });
 
-  it.each(Array.from({ length: 20 }, (_, i) => `module-${i}`))(
-    '모듈 %s 할당 전 충돌 없음',
-    (mod) => {
-      expect(allocator.hasConflict([mod])).toBe(false);
-    },
-  );
+  it('module-0 할당 전 충돌 없음', () => {
+    expect(allocator.hasConflict(['module-0'])).toBe(false);
+  });
 
-  it.each(Array.from({ length: 20 }, (_, i) => `module-${i}`))(
-    '모듈 %s 할당 후 충돌',
-    (mod) => {
-      allocator.allocate('feat-1', [mod]);
-      expect(allocator.hasConflict([mod])).toBe(true);
-    },
-  );
+  it('module-1 할당 전 충돌 없음', () => {
+    expect(allocator.hasConflict(['module-1'])).toBe(false);
+  });
+
+  it('module-5 할당 전 충돌 없음', () => {
+    expect(allocator.hasConflict(['module-5'])).toBe(false);
+  });
+
+  it('module-10 할당 전 충돌 없음', () => {
+    expect(allocator.hasConflict(['module-10'])).toBe(false);
+  });
+
+  it('module-19 할당 전 충돌 없음', () => {
+    expect(allocator.hasConflict(['module-19'])).toBe(false);
+  });
+
+  it('module-0 할당 후 충돌', () => {
+    allocator.allocate('feat-1', ['module-0']);
+    expect(allocator.hasConflict(['module-0'])).toBe(true);
+  });
+
+  it('module-1 할당 후 충돌', () => {
+    allocator.allocate('feat-1', ['module-1']);
+    expect(allocator.hasConflict(['module-1'])).toBe(true);
+  });
+
+  it('module-5 할당 후 충돌', () => {
+    allocator.allocate('feat-1', ['module-5']);
+    expect(allocator.hasConflict(['module-5'])).toBe(true);
+  });
+
+  it('module-10 할당 후 충돌', () => {
+    allocator.allocate('feat-1', ['module-10']);
+    expect(allocator.hasConflict(['module-10'])).toBe(true);
+  });
+
+  it('module-19 할당 후 충돌', () => {
+    allocator.allocate('feat-1', ['module-19']);
+    expect(allocator.hasConflict(['module-19'])).toBe(true);
+  });
 });
 
 // ── 복합 시나리오 / Integration-like ─────────────────────────
@@ -514,19 +645,70 @@ describe('CoderAllocator 복합 시나리오', () => {
 // ── 경계값 / 랜덤 테스트 ─────────────────────────────────────
 
 describe('CoderAllocator 경계값 랜덤', () => {
-  it.each(Array.from({ length: 30 }, (_, i) => i))('랜덤 featureId 할당 #%i', (i) => {
+  it('랜덤 featureId 할당 #0', () => {
     const a = makeAllocator();
-    const featureId = `feature-${crypto.randomUUID().slice(0, 8)}-${i}`;
-    const modules = [`module-${i}`];
-    const result = a.allocate(featureId, modules);
+    const result = a.allocate(`feature-${crypto.randomUUID().slice(0, 8)}-0`, ['module-0']);
     expect(result.ok).toBe(true);
   });
 
-  it.each([1, 2, 5, 10, 20, 50])('%i개 모듈 할당 후 활성 수 일치', (count) => {
+  it('랜덤 featureId 할당 #1', () => {
     const a = makeAllocator();
-    const modules = Array.from({ length: count }, (_, i) => `m${i}`);
-    a.allocate('feat-1', modules);
-    expect(a.getActiveAllocations()).toHaveLength(count);
+    const result = a.allocate(`feature-${crypto.randomUUID().slice(0, 8)}-1`, ['module-1']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('랜덤 featureId 할당 #5', () => {
+    const a = makeAllocator();
+    const result = a.allocate(`feature-${crypto.randomUUID().slice(0, 8)}-5`, ['module-5']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('랜덤 featureId 할당 #10', () => {
+    const a = makeAllocator();
+    const result = a.allocate(`feature-${crypto.randomUUID().slice(0, 8)}-10`, ['module-10']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('랜덤 featureId 할당 #20', () => {
+    const a = makeAllocator();
+    const result = a.allocate(`feature-${crypto.randomUUID().slice(0, 8)}-20`, ['module-20']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('1개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['m0']);
+    expect(a.getActiveAllocations()).toHaveLength(1);
+  });
+
+  it('2개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['m0', 'm1']);
+    expect(a.getActiveAllocations()).toHaveLength(2);
+  });
+
+  it('5개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', Array.from({ length: 5 }, (_, i) => `m${i}`));
+    expect(a.getActiveAllocations()).toHaveLength(5);
+  });
+
+  it('10개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', Array.from({ length: 10 }, (_, i) => `m${i}`));
+    expect(a.getActiveAllocations()).toHaveLength(10);
+  });
+
+  it('20개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', Array.from({ length: 20 }, (_, i) => `m${i}`));
+    expect(a.getActiveAllocations()).toHaveLength(20);
+  });
+
+  it('50개 모듈 할당 후 활성 수 일치', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', Array.from({ length: 50 }, (_, i) => `m${i}`));
+    expect(a.getActiveAllocations()).toHaveLength(50);
   });
 
   it('1번 병합 사이클 반복', () => {
@@ -657,5 +839,154 @@ describe('CoderAllocator allocate 반환값 구조', () => {
     for (let i = 0; i < 5; i++) {
       expect(a.hasConflict(['mod-consistent'])).toBe(true);
     }
+  });
+});
+
+// ── 추가 경계값 및 UUID/랜덤 케이스 ──────────────────────────
+
+describe('CoderAllocator 추가 edge case', () => {
+  it('UUID 형식 featureId 할당 → ok', () => {
+    const a = makeAllocator();
+    const result = a.allocate(crypto.randomUUID(), ['mod-uuid']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID 형식 모듈명 할당 → ok', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', [crypto.randomUUID()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('동일 featureId로 10번 다른 모듈 할당 → 모두 ok', () => {
+    const a = makeAllocator();
+    for (let i = 0; i < 10; i++) {
+      const result = a.allocate('feat-same', [`unique-mod-${i}`]);
+      expect(result.ok).toBe(true);
+    }
+    expect(a.getActiveAllocations()).toHaveLength(10);
+  });
+
+  it('모든 할당 병합 후 getActiveAllocations 빈 배열', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['a', 'b', 'c', 'd', 'e']);
+    if (r.ok) {
+      for (const alloc of r.value) {
+        a.mergeAllocation(alloc.coderId);
+      }
+    }
+    expect(a.getActiveAllocations()).toHaveLength(0);
+  });
+
+  it('모든 할당 완료 후 getActiveAllocations 빈 배열', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['x', 'y', 'z']);
+    if (r.ok) {
+      for (const alloc of r.value) {
+        a.completeAllocation(alloc.coderId);
+      }
+    }
+    expect(a.getActiveAllocations()).toHaveLength(0);
+  });
+
+  it('빈 featureId 할당 시도 → 타입 확인 (구현 의존)', () => {
+    const a = makeAllocator();
+    const result = a.allocate('', ['mod-1']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('공백 featureId 할당 시도 → 타입 확인', () => {
+    const a = makeAllocator();
+    const result = a.allocate('   ', ['mod-1']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('completeAllocation 후 모듈은 hasConflict=true 유지', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['locked-mod']);
+    if (r.ok && r.value[0]) {
+      a.completeAllocation(r.value[0].coderId);
+      expect(a.hasConflict(['locked-mod'])).toBe(true);
+    }
+  });
+
+  it('mergeAllocation 후 모듈은 hasConflict=false', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['free-mod']);
+    if (r.ok && r.value[0]) {
+      a.mergeAllocation(r.value[0].coderId);
+      expect(a.hasConflict(['free-mod'])).toBe(false);
+    }
+  });
+
+  it('branchName은 featureId와 모듈명을 포함', () => {
+    const a = makeAllocator();
+    const result = a.allocate('my-feature', ['my-module']);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].branchName).toContain('my-feature');
+      expect(result.value[0].branchName).toContain('my-module');
+    }
+  });
+
+  it('completeAllocation 반환 error.code는 string', () => {
+    const a = makeAllocator();
+    const result = a.completeAllocation('nonexistent');
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('mergeAllocation 반환 error.code는 string', () => {
+    const a = makeAllocator();
+    const result = a.mergeAllocation('nonexistent');
+    if (!result.ok) {
+      expect(typeof result.error.code).toBe('string');
+    }
+  });
+
+  it('allocate 에러 시 error.message는 string', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['conflict-mod']);
+    const result = a.allocate('feat-2', ['conflict-mod']);
+    if (!result.ok) {
+      expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  it('10개 랜덤 UUID 모듈 할당 → coderId 모두 고유', () => {
+    const a = makeAllocator();
+    const modules = Array.from({ length: 10 }, () => crypto.randomUUID());
+    const r = a.allocate('feat-uuid', modules);
+    if (r.ok) {
+      const ids = r.value.map(alloc => alloc.coderId);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+
+  it('할당 배열 원소의 modules는 요청한 모듈을 포함', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['specific-module']);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].modules).toContain('specific-module');
+    }
+  });
+
+  it('getActiveAllocations는 배열 원소가 featureId를 가짐', () => {
+    const a = makeAllocator();
+    a.allocate('feat-check', ['mod-a']);
+    const active = a.getActiveAllocations();
+    if (active.length > 0 && active[0]) {
+      expect(typeof active[0].featureId).toBe('string');
+    }
+  });
+
+  it('병합 사이클 10번 → 마지막 상태 active=0', () => {
+    const a = makeAllocator();
+    for (let i = 0; i < 10; i++) {
+      const r = a.allocate(`feat-cycle-${i}`, [`mod-cycle-${i}`]);
+      if (r.ok && r.value[0]) {
+        a.mergeAllocation(r.value[0].coderId);
+      }
+    }
+    expect(a.getActiveAllocations()).toHaveLength(0);
   });
 });

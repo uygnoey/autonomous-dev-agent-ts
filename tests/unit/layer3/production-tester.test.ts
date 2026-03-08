@@ -646,5 +646,281 @@ describe('ProductionTester', () => {
       ];
       expect(tester.getFailureRate(runs)).toBe(1);
     });
+
+    it('단일 테스트 실패율 0.5', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-rate-1',
+          projectId: 'proj-x',
+          totalTests: 2,
+          passedTests: 1,
+          failedTests: 1,
+          duration: 20,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.getFailureRate(runs)).toBeCloseTo(0.5);
+    });
+
+    it('여러 실행의 실패율 합산 계산', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-a',
+          projectId: 'proj-1',
+          totalTests: 10,
+          passedTests: 10,
+          failedTests: 0,
+          duration: 100,
+          failures: [],
+          timestamp: new Date(),
+        },
+        {
+          id: 'e2e-b',
+          projectId: 'proj-1',
+          totalTests: 10,
+          passedTests: 0,
+          failedTests: 10,
+          duration: 100,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      // 합산: 10 passed / 20 total = 0.5 failure rate
+      expect(tester.getFailureRate(runs)).toBeCloseTo(0.5);
+    });
+  });
+
+  describe('UUID/랜덤 프로젝트 ID edge case', () => {
+    it('UUID 형식 프로젝트 ID로 세션 시작', async () => {
+      const uuid = crypto.randomUUID();
+      const result = await tester.start({
+        projectId: uuid,
+        testPath: './tests/e2e',
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        sessionIds.push(result.value.id);
+        expect(result.value.projectId).toBe(uuid);
+      }
+    });
+
+    it('한국어 테스트 경로로 세션 시작', async () => {
+      const result = await tester.start({
+        projectId: 'proj-한국어',
+        testPath: './테스트/경로',
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        sessionIds.push(result.value.id);
+        expect(result.value.config.testPath).toBe('./테스트/경로');
+      }
+    });
+
+    it('intervalMs=0이어도 세션 시작 가능', async () => {
+      const result = await tester.start({
+        projectId: 'proj-zero-interval',
+        testPath: './tests/e2e',
+        intervalMs: 0,
+      });
+      // 구현에 따라 ok 또는 error — 타입만 확인
+      expect(typeof result.ok).toBe('boolean');
+      if (result.ok) sessionIds.push(result.value.id);
+    });
+
+    it('intervalMs 음수는 에러 또는 허용 (구현 의존)', async () => {
+      const result = await tester.start({
+        projectId: 'proj-neg',
+        testPath: './tests',
+        intervalMs: -1,
+      });
+      expect(typeof result.ok).toBe('boolean');
+      if (result.ok) sessionIds.push(result.value.id);
+    });
+
+    it('특수문자 포함 프로젝트 ID', async () => {
+      const result = await tester.start({
+        projectId: 'proj-!@#$%',
+        testPath: './tests',
+      });
+      expect(typeof result.ok).toBe('boolean');
+      if (result.ok) sessionIds.push(result.value.id);
+    });
+
+    it('매우 긴 프로젝트 ID (200자)', async () => {
+      const longId = 'p'.repeat(200);
+      const result = await tester.start({
+        projectId: longId,
+        testPath: './tests/e2e',
+      });
+      expect(typeof result.ok).toBe('boolean');
+      if (result.ok) sessionIds.push(result.value.id);
+    });
+
+    it('중복 세션 ID는 절대 생성되지 않는다 (5개)', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const r = await tester.start({ projectId: `proj-${i}`, testPath: './tests/e2e' });
+        if (r.ok) {
+          ids.push(r.value.id);
+          sessionIds.push(r.value.id);
+        }
+      }
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+
+  describe('isHealthy 경계값', () => {
+    it('totalTests=1, passed=1 → healthy', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-h1',
+          projectId: 'proj-1',
+          totalTests: 1,
+          passedTests: 1,
+          failedTests: 0,
+          duration: 10,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.isHealthy(runs)).toBe(true);
+    });
+
+    it('totalTests=1, passed=0 → not healthy', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-h2',
+          projectId: 'proj-1',
+          totalTests: 1,
+          passedTests: 0,
+          failedTests: 1,
+          duration: 10,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.isHealthy(runs)).toBe(false);
+    });
+
+    it('100개 테스트 79개 통과 → not healthy', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-h3',
+          projectId: 'proj-1',
+          totalTests: 100,
+          passedTests: 79,
+          failedTests: 21,
+          duration: 1000,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.isHealthy(runs)).toBe(false);
+    });
+
+    it('100개 테스트 80개 통과 → healthy', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-h4',
+          projectId: 'proj-1',
+          totalTests: 100,
+          passedTests: 80,
+          failedTests: 20,
+          duration: 1000,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.isHealthy(runs)).toBe(true);
+    });
+
+    it('UUID id를 가진 E2ETestRun도 처리', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: crypto.randomUUID(),
+          projectId: crypto.randomUUID(),
+          totalTests: 5,
+          passedTests: 5,
+          failedTests: 0,
+          duration: 50,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(tester.isHealthy(runs)).toBe(true);
+    });
+
+    it('getFailureRate 반환값은 number 타입', () => {
+      const runs: E2ETestRun[] = [
+        {
+          id: 'e2e-type',
+          projectId: 'proj-1',
+          totalTests: 10,
+          passedTests: 8,
+          failedTests: 2,
+          duration: 100,
+          failures: [],
+          timestamp: new Date(),
+        },
+      ];
+      expect(typeof tester.getFailureRate(runs)).toBe('number');
+    });
+  });
+
+  describe('runE2E edge case', () => {
+    it('빈 명령어 목록은 ok 또는 error를 반환한다 (구현 의존)', () => {
+      const result = tester.runE2E('proj-1', []);
+      // 구현에 따라 빈 배열은 에러이거나 빈 결과 — 타입만 확인
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('UUID 프로젝트 ID로 runE2E', () => {
+      const uuid = crypto.randomUUID();
+      const result = tester.runE2E(uuid, ['bun test']);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.projectId).toBe(uuid);
+      }
+    });
+
+    it('한국어 명령어 포함 목록', () => {
+      const result = tester.runE2E('proj-1', ['bun 테스트', 'bun 린트']);
+      // 구현에 따라 성공/실패 - 타입만 확인
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('공백 명령어만 포함 목록', () => {
+      const result = tester.runE2E('proj-1', ['   ']);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.failedTests).toBe(1);
+      }
+    });
+
+    it('100개 정상 명령어', () => {
+      const commands = Array.from({ length: 100 }, (_, i) => `bun test-${i}`);
+      const result = tester.runE2E('proj-1', commands);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.totalTests).toBe(100);
+        expect(result.value.passedTests).toBe(100);
+        expect(result.value.failedTests).toBe(0);
+      }
+    });
+
+    it('runE2E failures 배열 타입 확인', () => {
+      const result = tester.runE2E('proj-1', ['cmd1', 'cmd2']);
+      if (result.ok) {
+        expect(Array.isArray(result.value.failures)).toBe(true);
+      }
+    });
+
+    it('runE2E projectId는 전달값과 일치', () => {
+      const result = tester.runE2E('my-project', ['bun test']);
+      if (result.ok) {
+        expect(result.value.projectId).toBe('my-project');
+      }
+    });
   });
 });

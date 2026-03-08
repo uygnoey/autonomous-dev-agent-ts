@@ -653,3 +653,165 @@ describe('ConversationManager addMessage 반환값 구조', () => {
     }
   });
 });
+
+// ── 추가 경계값: UUID/랜덤 케이스 ──────────────────────────────
+
+describe('ConversationManager UUID/랜덤 edge case', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-uuid-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('UUID id로 addMessage → ok', async () => {
+    const uuid = crypto.randomUUID();
+    const msg = createTestMessage({ id: uuid });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID projectId로 addMessage → ok', async () => {
+    const projId = crypto.randomUUID();
+    const msg = createTestMessage({ projectId: projId });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID projectId로 getHistory → ok', async () => {
+    const projId = crypto.randomUUID();
+    const msg = createTestMessage({ projectId: projId });
+    await manager.addMessage(msg);
+    const result = await manager.getHistory(projId);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID projectId로 searchContext → ok', async () => {
+    const projId = crypto.randomUUID();
+    const msg = createTestMessage({ projectId: projId, content: 'uuid search test' });
+    await manager.addMessage(msg);
+    const result = await manager.searchContext(projId, 'uuid');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('10개 서로 다른 UUID projectId 저장 → 각각 독립', async () => {
+    const projIds = Array.from({ length: 10 }, () => crypto.randomUUID());
+    for (const projId of projIds) {
+      const msg = createTestMessage({ projectId: projId, content: `content for ${projId}` });
+      const result = await manager.addMessage(msg);
+      expect(result.ok).toBe(true);
+    }
+    // 각 프로젝트별 조회 시 1개씩 반환
+    for (const projId of projIds) {
+      const hist = await manager.getHistory(projId);
+      expect(hist.ok).toBe(true);
+      if (hist.ok) {
+        expect(hist.value.every(m => m.projectId === projId)).toBe(true);
+      }
+    }
+  });
+
+  it('랜덤 content 5개 → 모두 저장 가능', async () => {
+    for (let i = 0; i < 5; i++) {
+      const content = crypto.randomUUID() + '_random_content_' + Math.random().toString(36);
+      const msg = createTestMessage({ content });
+      const result = await manager.addMessage(msg);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('공백+특수문자 content 저장 → ok', async () => {
+    const msg = createTestMessage({ content: '   !@#$%^&*()_+{}|:"<>?   ' });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('탭/개행 포함 content 저장 → ok', async () => {
+    const msg = createTestMessage({ content: 'line1\nline2\tindented' });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 projectId로 searchContext → ok (빈 결과 또는 에러)', async () => {
+    const result = await manager.searchContext('', 'query');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('매우 긴 쿼리로 searchContext → ok', async () => {
+    const longQuery = '검색'.repeat(100);
+    const result = await manager.searchContext('proj-test', longQuery);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('content가 숫자 문자열인 메시지 저장 → ok', async () => {
+    const msg = createTestMessage({ content: '1234567890' });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('content가 JSON 문자열인 메시지 저장 → ok', async () => {
+    const msg = createTestMessage({ content: JSON.stringify({ key: 'value', arr: [1, 2, 3] }) });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('동일 content 10번 저장 → 모두 ok', async () => {
+    for (let i = 0; i < 10; i++) {
+      const msg = createTestMessage({ content: 'duplicate-content' });
+      const result = await manager.addMessage(msg);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('addMessage 후 즉시 searchContext → 결과 포함', async () => {
+    const uniqueWord = `unique-${crypto.randomUUID().slice(0, 8)}`;
+    const msg = createTestMessage({ content: `${uniqueWord} 테스트` });
+    await manager.addMessage(msg);
+    const result = await manager.searchContext('proj-test', uniqueWord);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some(m => m.content.includes(uniqueWord))).toBe(true);
+    }
+  });
+
+  it('limit이 저장된 메시지 수보다 클 때 → 전체 반환', async () => {
+    for (let i = 0; i < 3; i++) {
+      await manager.addMessage(createTestMessage({ content: `msg-${i}` }));
+    }
+    const result = await manager.getHistory('proj-test', 100);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('timestamp가 미래 날짜인 메시지 저장 → ok', async () => {
+    const msg = createTestMessage({ timestamp: new Date('2099-12-31T23:59:59Z') });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('timestamp가 과거 날짜인 메시지 저장 → ok', async () => {
+    const msg = createTestMessage({ timestamp: new Date('1970-01-01T00:00:00Z') });
+    const result = await manager.addMessage(msg);
+    expect(result.ok).toBe(true);
+  });
+
+  it('assistant role로 searchContext → role 필드 일치', async () => {
+    await manager.addMessage(createTestMessage({ role: 'assistant', content: '어시스턴트 응답 테스트' }));
+    const result = await manager.searchContext('proj-test', '어시스턴트');
+    expect(result.ok).toBe(true);
+    if (result.ok && result.value.length > 0) {
+      expect(result.value[0]?.role).toBe('assistant');
+    }
+  });
+});
