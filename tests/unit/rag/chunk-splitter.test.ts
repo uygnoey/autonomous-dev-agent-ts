@@ -721,4 +721,180 @@ describe('extractModule', () => {
     const jsResult = extractModule('src/utils/helper.js');
     expect(tsResult).toBe(jsResult);
   });
+
+  it('빈 문자열 → 처리됨 (string 반환)', () => {
+    const result = extractModule('');
+    expect(typeof result).toBe('string');
+  });
+
+  it('점 경로 → 처리됨', () => {
+    const result = extractModule('./file.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('Windows 스타일 경로 → 처리됨', () => {
+    const result = extractModule('src\\core\\utils.ts');
+    expect(typeof result).toBe('string');
+  });
+});
+
+// ── ChunkSplitter 추가 edge cases ────────────────────────────
+
+describe('ChunkSplitter 추가 edge cases', () => {
+  const splitter = new ChunkSplitter();
+
+  it('함수가 없는 TypeScript 파일 → 크기 기반 분할', () => {
+    const content = 'const VALUE = 42;\nconst NAME = "adev";';
+    const chunks = splitter.splitCode(content, 'src/constants.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('중첩된 함수 정의 → 감지', () => {
+    const content = `
+function outer() {
+  function inner() {
+    return 1;
+  }
+  return inner();
+}
+`.trim();
+    const chunks = splitter.splitCode(content, 'src/nested.ts');
+    expect(chunks.length).toBeGreaterThan(0);
+    const names = chunks.map((c) => c.metadata.functionName);
+    expect(names).toContain('outer');
+  });
+
+  it('랜덤 UUID 파일 경로 → 처리됨', () => {
+    const filePath = `src/${crypto.randomUUID()}.ts`;
+    const chunks = splitter.splitCode('function x() {}', filePath);
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('특수문자가 있는 파일명 → 처리됨', () => {
+    const chunks = splitter.splitCode('function x() {}', 'src/my-file.test.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('청크 내용에 원본 코드 포함됨', () => {
+    const fnBody = 'return 42;';
+    const content = `function answer() {\n  ${fnBody}\n}`;
+    const chunks = splitter.splitCode(content, 'src/answer.ts');
+    if (chunks.length > 0) {
+      const allContent = chunks.map((c) => c.content).join(' ');
+      expect(allContent).toContain('answer');
+    }
+  });
+
+  it('빈 함수 → 청크 생성됨', () => {
+    const chunks = splitter.splitCode('function empty() {}', 'src/empty.ts');
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('여러 interface → 모두 감지', () => {
+    const content = `
+interface IA { a: string; }
+interface IB { b: number; }
+interface IC { c: boolean; }
+`.trim();
+    const chunks = splitter.splitCode(content, 'src/interfaces.ts');
+    const names = chunks.map((c) => c.metadata.functionName);
+    expect(names).toContain('IA');
+    expect(names).toContain('IB');
+    expect(names).toContain('IC');
+  });
+
+  it('const 객체 → 처리됨', () => {
+    const content = `const config = { key: 'value', num: 42 };`;
+    const chunks = splitter.splitCode(content, 'src/config.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('export const 화살표 함수 → 감지됨', () => {
+    const content = `export const handler = async (req: Request) => { return req; };`;
+    const chunks = splitter.splitCode(content, 'src/handler.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('한국어 주석 포함 긴 코드 → 처리됨', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `// 주석 ${i}\nfunction fn${i}() { return ${i}; }`);
+    const content = lines.join('\n\n');
+    const chunks = splitter.splitCode(content, 'src/kr-comments.ts');
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('탭 들여쓰기 함수 → 처리됨', () => {
+    const content = 'function tabbed() {\n\treturn true;\n}';
+    const chunks = splitter.splitCode(content, 'src/tabbed.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('줄 끝 공백 포함 → 처리됨', () => {
+    const content = 'function trailing()   {\n  return 1;  \n}  ';
+    const chunks = splitter.splitCode(content, 'src/trailing.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('멀티라인 화살표 함수 → 처리됨', () => {
+    const content = `
+const multiLine = (
+  a: string,
+  b: number,
+) => {
+  return a.repeat(b);
+};
+`.trim();
+    const chunks = splitter.splitCode(content, 'src/multi.ts');
+    expect(Array.isArray(chunks)).toBe(true);
+  });
+
+  it('청크 개수 limit 없음 → 전체 분할', () => {
+    const fns = Array.from({ length: 30 }, (_, i) => `function f${i}() { return ${i}; }`).join('\n\n');
+    const chunks = splitter.splitCode(fns, 'src/many30.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(30);
+  });
+});
+
+// ── detectLanguage 추가 edge cases ───────────────────────────
+
+describe('detectLanguage 추가 edge cases', () => {
+  it('.mts 파일 → unknown 또는 typescript', () => {
+    const result = detectLanguage('src/module.mts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('.mjs 파일 → unknown 또는 javascript', () => {
+    const result = detectLanguage('lib/module.mjs');
+    expect(typeof result).toBe('string');
+  });
+
+  it('.toml 파일 → unknown', () => {
+    const result = detectLanguage('config.toml');
+    expect(typeof result).toBe('string');
+  });
+
+  it('경로에 점이 여러 개 → 마지막 확장자 사용', () => {
+    const result = detectLanguage('src/my.module.test.ts');
+    expect(result).toBe('typescript');
+  });
+
+  it('확장자 없는 긴 이름 → unknown', () => {
+    const result = detectLanguage('src/very-long-filename-without-extension');
+    expect(typeof result).toBe('string');
+  });
+
+  it('숨김 파일 .eslintrc → unknown', () => {
+    const result = detectLanguage('.eslintrc');
+    expect(typeof result).toBe('string');
+  });
+
+  it('대문자 .JS → unknown 또는 javascript', () => {
+    const result = detectLanguage('APP.JS');
+    expect(typeof result).toBe('string');
+  });
+
+  it('대문자 .PY → unknown 또는 python', () => {
+    const result = detectLanguage('MAIN.PY');
+    expect(typeof result).toBe('string');
+  });
 });

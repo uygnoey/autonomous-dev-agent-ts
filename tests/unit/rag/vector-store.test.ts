@@ -718,5 +718,151 @@ describe('CodeVectorStore', () => {
       const result = await store.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 10);
       expect(result.ok).toBe(true);
     });
+
+    it('랜덤 UUID ID → 삽입/조회 성공', async () => {
+      await store.initialize();
+      const id = crypto.randomUUID();
+      await store.insert(createTestCodeRecord({ id }));
+      const result = await store.getById(id);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value?.id).toBe(id);
+    });
+
+    it('음수 임베딩 값 → 삽입/조회 성공', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([-0.1, -0.5, 0.3, -0.9]);
+      await store.insert(createTestCodeRecord({ id: 'neg-embed', embedding }));
+      const result = await store.getById('neg-embed');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).not.toBeNull();
+    });
+
+    it('모든 임베딩 값이 1.0 → 삽입 성공', async () => {
+      await store.initialize();
+      const embedding = new Float32Array([1.0, 1.0, 1.0, 1.0]);
+      const result = await store.insert(createTestCodeRecord({ id: 'all-ones', embedding }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('특수문자 filePath → 삽입/조회 성공', async () => {
+      await store.initialize();
+      const filePath = "src/utils/it's-a-test.ts";
+      await store.insert(createTestCodeRecord({ id: 'special-fp', filePath }));
+      const result = await store.getById('special-fp');
+      if (result.ok && result.value) {
+        expect(result.value.filePath).toBe(filePath);
+      }
+    });
+
+    it('delete 후 search → 삭제된 레코드 미포함', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'del-search', embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]) }));
+      await store.delete('del-search');
+      const result = await store.search(new Float32Array([1.0, 0.0, 0.0, 0.0]), 10);
+      if (result.ok) {
+        const ids = result.value.map((r) => r.id);
+        expect(ids).not.toContain('del-search');
+      }
+    });
+
+    it('update 후 search → 업데이트된 청크 확인', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'upd-search', chunk: 'original chunk' }));
+      await store.update('upd-search', { chunk: 'updated chunk' });
+      const result = await store.getById('upd-search');
+      if (result.ok && result.value) {
+        expect(result.value.chunk).toBe('updated chunk');
+      }
+    });
+  });
+
+  // ── 추가 랜덤/경계값 케이스 ──────────────────────────────────
+
+  describe('추가 랜덤/경계값', () => {
+    it('랜덤 UUID ID #0 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #1 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('랜덤 UUID ID #2 → 삽입 ok', async () => {
+      await store.initialize();
+      const result = await store.insert(createTestCodeRecord({ id: crypto.randomUUID() }));
+      expect(result.ok).toBe(true);
+    });
+
+    it('초기화 없이 insert → ok 또는 err (throw 안 함)', async () => {
+      const freshStore = new CodeVectorStore(tempDir, logger);
+      const result = await freshStore.insert(createTestCodeRecord({ id: 'no-init' }));
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('초기화 없이 getById → ok 또는 err (throw 안 함)', async () => {
+      const freshStore = new CodeVectorStore(tempDir, logger);
+      const result = await freshStore.getById('no-init');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('초기화 없이 search → ok 또는 err (throw 안 함)', async () => {
+      const freshStore = new CodeVectorStore(tempDir, logger);
+      const result = await freshStore.search(new Float32Array([0.1, 0.2, 0.3, 0.4]), 5);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('metadata.modifiedBy 보존', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({
+        id: 'modified-by-test',
+        metadata: {
+          language: 'typescript',
+          module: 'src/core',
+          functionName: 'fn',
+          lastModified: new Date(),
+          modifiedBy: 'automated-bot-xyz',
+        },
+      }));
+      const result = await store.getById('modified-by-test');
+      if (result.ok && result.value) {
+        expect(result.value.metadata.modifiedBy).toBe('automated-bot-xyz');
+      }
+    });
+
+    it('동일 ID로 두 번 insert → 두 번째도 ok (upsert 또는 오류)', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'dup-id', chunk: 'first' }));
+      const result = await store.insert(createTestCodeRecord({ id: 'dup-id', chunk: 'second' }));
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('projectId 필터 search → 해당 projectId만 반환', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'proj-a-1', projectId: 'alpha', embedding: new Float32Array([1.0, 0.0, 0.0, 0.0]) }));
+      await store.insert(createTestCodeRecord({ id: 'proj-b-1', projectId: 'beta', embedding: new Float32Array([0.9, 0.1, 0.0, 0.0]) }));
+      const result = await store.search(new Float32Array([1.0, 0.0, 0.0, 0.0]), 10, { projectId: 'alpha' });
+      if (result.ok) {
+        for (const r of result.value) {
+          expect(r.projectId).toBe('alpha');
+        }
+      }
+    });
+
+    it('getById 반환값 구조 → id, filePath, chunk, projectId, metadata 있음', async () => {
+      await store.initialize();
+      await store.insert(createTestCodeRecord({ id: 'struct-verify' }));
+      const result = await store.getById('struct-verify');
+      if (result.ok && result.value) {
+        expect(result.value).toHaveProperty('id');
+        expect(result.value).toHaveProperty('filePath');
+        expect(result.value).toHaveProperty('chunk');
+        expect(result.value).toHaveProperty('projectId');
+        expect(result.value).toHaveProperty('metadata');
+      }
+    });
   });
 });

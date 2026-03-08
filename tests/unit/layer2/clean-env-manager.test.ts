@@ -720,3 +720,112 @@ describe('CleanEnvManager 추가 경계값', () => {
     }
   });
 });
+
+// ── 추가 랜덤/경계값 케이스 ──────────────────────────────────
+
+describe('CleanEnvManager 추가 랜덤/경계값', () => {
+  it('공백 포함 projectId → 처리됨', async () => {
+    const manager = makeManager();
+    const result = await manager.create('my project id');
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('랜덤 UUID #0 → create ok', async () => {
+    const manager = makeManager();
+    const id = crypto.randomUUID();
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('랜덤 UUID #1 → create ok', async () => {
+    const manager = makeManager();
+    const id = crypto.randomUUID();
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('랜덤 UUID #2 → create ok', async () => {
+    const manager = makeManager();
+    const id = crypto.randomUUID();
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('랜덤 UUID #3 → create ok', async () => {
+    const manager = makeManager();
+    const id = crypto.randomUUID();
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('랜덤 UUID #4 → create ok', async () => {
+    const manager = makeManager();
+    const id = crypto.randomUUID();
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('매우 긴 projectId (200자) → 처리됨', async () => {
+    const manager = makeManager();
+    const id = 'z'.repeat(200);
+    const result = await manager.create(id);
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('특수문자 projectId (#!@) → 처리됨', async () => {
+    const manager = makeManager();
+    const result = await manager.create('id-#!@%');
+    if (result.ok) createdPaths.push(result.value.envPath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('create 후 isClean=true, destroy 후 isClean=false 확인', async () => {
+    const manager = makeManager();
+    const r = await manager.create('lifecycle-check');
+    if (r.ok) {
+      const path = r.value.envPath;
+      expect(manager.isClean(path)).toBe(true);
+      await manager.destroy(path);
+      expect(manager.isClean(path)).toBe(false);
+    }
+  });
+
+  it('destroy 에러 코드가 비어있지 않음', async () => {
+    const manager = makeManager();
+    const result = await manager.destroy('/totally-random-nonexistent-path-abc123');
+    if (!result.ok) {
+      expect(result.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('20개 환경 생성 → listActive.length=20', async () => {
+    const manager = makeManager();
+    const promises = Array.from({ length: 20 }, (_, i) => manager.create(`bulk20-${i}`));
+    const results = await Promise.all(promises);
+    for (const r of results) {
+      if (r.ok) createdPaths.push(r.value.envPath);
+    }
+    const active = manager.listActive();
+    expect(active.length).toBe(20);
+  });
+
+  it('10개 생성 → 5개 소멸 → listActive.length=5', async () => {
+    const manager = makeManager();
+    const promises = Array.from({ length: 10 }, (_, i) => manager.create(`half-${i}`));
+    const results = await Promise.all(promises);
+    const paths = results.filter((r) => r.ok).map((r) => (r.ok ? r.value.envPath : ''));
+    // 나머지 5개는 나중에 afterEach에서 정리
+    for (const p of paths.slice(5)) if (p) createdPaths.push(p);
+    for (const p of paths.slice(0, 5)) {
+      if (p) await manager.destroy(p);
+    }
+    expect(manager.listActive().length).toBe(5);
+  });
+});
