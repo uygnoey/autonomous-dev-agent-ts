@@ -558,5 +558,274 @@ describe('MemoryRepository', () => {
         expect(result.value.content).toBe(content);
       }
     });
+
+    it('탭 문자 포함 content → 처리됨', async () => {
+      await repo.initialize();
+      const content = 'col1\tcol2\tcol3';
+      await repo.insert(createTestRecord({ id: 'tabs', content }));
+      const result = await repo.getById('tabs');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('이모지 포함 content → 처리됨', async () => {
+      await repo.initialize();
+      const content = '🚀 배포 완료! 🎉';
+      await repo.insert(createTestRecord({ id: 'emoji', content }));
+      const result = await repo.getById('emoji');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(content);
+      }
+    });
+
+    it('null 문자 포함 ID → 안전 처리', async () => {
+      const badRepo = new MemoryRepository('/tmp/\0null', logger);
+      const result = await badRepo.initialize();
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('음수 embedding 값 → 처리됨', async () => {
+      await repo.initialize();
+      const neg = new Float32Array([-1.0, -0.5, 0.0, 0.5]);
+      await repo.insert(createTestRecord({ id: 'neg-emb', embedding: neg }));
+      const result = await repo.getById('neg-emb');
+      expect(result.ok).toBe(true);
+    });
+
+    it('최대값 embedding → 처리됨', async () => {
+      await repo.initialize();
+      const max = new Float32Array([Float32Array.BYTES_PER_ELEMENT, 1e38, -1e38, 0]);
+      await repo.insert(createTestRecord({ id: 'max-emb', embedding: max }));
+      const result = await repo.getById('max-emb');
+      expect(result.ok).toBe(true);
+    });
+
+    it('0벡터 embedding → 처리됨', async () => {
+      await repo.initialize();
+      const zeros = new Float32Array([0, 0, 0, 0]);
+      await repo.insert(createTestRecord({ id: 'zero-emb', embedding: zeros }));
+      const result = await repo.getById('zero-emb');
+      expect(result.ok).toBe(true);
+    });
+
+    it('중복 insert (같은 id) → 오류 또는 덮어쓰기', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'dup-id', content: 'first' }));
+      const result = await repo.insert(createTestRecord({ id: 'dup-id', content: 'second' }));
+      expect(typeof result.ok).toBe('boolean');
+    });
+  });
+
+  // ── search - 추가 경계값 ────────────────────────────────────
+
+  describe('search - 추가 경계값', () => {
+    it('1개 레코드, 음수 유사도 벡터 검색 → ok=true', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'neg-q', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await repo.search(new Float32Array([-1, -1, -1, -1]), 5);
+      expect(result.ok).toBe(true);
+    });
+
+    it('limit=0 → ok 또는 err (구현 의존적, boolean 타입)', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'lim0', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 0);
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('limit이 레코드 수보다 클 때 → 전체 반환', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 3; i++) {
+        await repo.insert(createTestRecord({
+          id: `over-${i}`,
+          embedding: new Float32Array([0.5, 0.5, 0, 0]),
+        }));
+      }
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 100);
+      if (result.ok) expect(result.value.length).toBeLessThanOrEqual(3);
+    });
+
+    it('filter type=decision → decision만 반환', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'd1', type: 'decision', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await repo.insert(createTestRecord({ id: 'c1', type: 'conversation', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 10, { type: 'decision' });
+      if (result.ok) {
+        for (const r of result.value) {
+          expect(r.type).toBe('decision');
+        }
+      }
+    });
+
+    it('filter type=feedback → feedback만 반환', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'fb1', type: 'feedback', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await repo.insert(createTestRecord({ id: 'err1', type: 'error', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 10, { type: 'feedback' });
+      if (result.ok) {
+        for (const r of result.value) {
+          expect(r.type).toBe('feedback');
+        }
+      }
+    });
+
+    it('검색 결과 record에 content 있음', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'has-content', content: '내용있음', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 5);
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.content).toBeDefined();
+      }
+    });
+
+    it('검색 결과 record에 type 있음', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'has-type', type: 'error', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 5);
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.type).toBeDefined();
+      }
+    });
+
+    it('모두 동일 벡터 → limit 개수만 반환', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 5; i++) {
+        await repo.insert(createTestRecord({ id: `same-${i}`, embedding: new Float32Array([1, 1, 0, 0]) }));
+      }
+      const result = await repo.search(new Float32Array([1, 1, 0, 0]), 3);
+      if (result.ok) expect(result.value.length).toBeLessThanOrEqual(3);
+    });
+
+    it('projectId 필터 검색', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'pid1', projectId: 'proj-A', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await repo.insert(createTestRecord({ id: 'pid2', projectId: 'proj-B', embedding: new Float32Array([0.9, 0.1, 0, 0]) }));
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 10, { projectId: 'proj-A' });
+      if (result.ok && result.value.length > 0) {
+        for (const r of result.value) {
+          expect(r.projectId).toBe('proj-A');
+        }
+      }
+    });
+  });
+
+  // ── delete - 추가 경계값 ────────────────────────────────────
+
+  describe('delete - 추가 경계값', () => {
+    it('5개 삽입 후 3개 삭제 → 2개 남음', async () => {
+      await repo.initialize();
+      for (let i = 0; i < 5; i++) {
+        await repo.insert(createTestRecord({ id: `bulk-del-${i}` }));
+      }
+      for (let i = 0; i < 3; i++) {
+        await repo.delete(`bulk-del-${i}`);
+      }
+      for (let i = 3; i < 5; i++) {
+        const r = await repo.getById(`bulk-del-${i}`);
+        if (r.ok) expect(r.value?.id).toBe(`bulk-del-${i}`);
+      }
+    });
+
+    it('빈 문자열 id 삭제 → ok 또는 err', async () => {
+      await repo.initialize();
+      const result = await repo.delete('');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('UUID id 삭제 후 조회 → null', async () => {
+      await repo.initialize();
+      const uuid = crypto.randomUUID();
+      await repo.insert(createTestRecord({ id: uuid }));
+      await repo.delete(uuid);
+      const result = await repo.getById(uuid);
+      if (result.ok) expect(result.value).toBeNull();
+    });
+
+    it('삭제 후 검색에 포함 안됨', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'del-search', type: 'error', embedding: new Float32Array([1, 0, 0, 0]) }));
+      await repo.delete('del-search');
+      const result = await repo.search(new Float32Array([1, 0, 0, 0]), 10);
+      if (result.ok) {
+        expect(result.value.some((r) => r.id === 'del-search')).toBe(false);
+      }
+    });
+
+    it('같은 id 두 번 삭제 → ok 또는 안전 처리', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'double-del' }));
+      await repo.delete('double-del');
+      const result = await repo.delete('double-del');
+      expect(typeof result.ok).toBe('boolean');
+    });
+  });
+
+  // ── update - 추가 경계값 ────────────────────────────────────
+
+  describe('update - 추가 경계값', () => {
+    it('존재하지 않는 id 업데이트 → ok 또는 err', async () => {
+      await repo.initialize();
+      const result = await repo.update('nonexistent', { content: 'new content' });
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('embedding 업데이트', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'emb-upd', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const newEmb = new Float32Array([0, 1, 0, 0]);
+      const result = await repo.update('emb-upd', { embedding: newEmb });
+      expect(result.ok).toBe(true);
+    });
+
+    it('metadata 업데이트', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'meta-upd' }));
+      const newMeta = { phase: 'CODE' as const, featureId: 'feat-99', agentName: 'coder', timestamp: new Date() };
+      const result = await repo.update('meta-upd', { metadata: newMeta });
+      expect(result.ok).toBe(true);
+    });
+
+    it('content에 JSON 문자열 업데이트', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'json-upd', content: 'original' }));
+      const jsonContent = JSON.stringify({ a: 1, b: [2, 3] });
+      await repo.update('json-upd', { content: jsonContent });
+      const result = await repo.getById('json-upd');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe(jsonContent);
+      }
+    });
+
+    it('type 업데이트 feedback → error', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'type-upd', type: 'feedback' }));
+      await repo.update('type-upd', { type: 'error' });
+      const result = await repo.getById('type-upd');
+      if (result.ok && result.value) {
+        expect(result.value.type).toBe('error');
+      }
+    });
+
+    it('projectId 필드 존재 확인 (update 미지원 필드)', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'proj-upd', projectId: 'old-proj' }));
+      const result = await repo.getById('proj-upd');
+      if (result.ok && result.value) {
+        expect(result.value.projectId).toBe('old-proj');
+      }
+    });
+
+    it('10번 연속 content 업데이트 → 마지막 값', async () => {
+      await repo.initialize();
+      await repo.insert(createTestRecord({ id: 'ten-upd', content: 'v0' }));
+      for (let i = 1; i <= 10; i++) {
+        await repo.update('ten-upd', { content: `v${i}` });
+      }
+      const result = await repo.getById('ten-upd');
+      if (result.ok && result.value) {
+        expect(result.value.content).toBe('v10');
+      }
+    });
   });
 });

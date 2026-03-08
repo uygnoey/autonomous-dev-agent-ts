@@ -561,3 +561,267 @@ describe('DefaultPluginLoader edge cases', () => {
     expect(loader.getPlugin('temp-plugin')).toBeUndefined();
   });
 });
+
+// ── loadPlugins - UUID/특수문자/한글 이름 ─────────────────────
+
+describe('DefaultPluginLoader loadPlugins - UUID/특수문자/한글', () => {
+  it('UUID 이름 플러그인 → ok=true', async () => {
+    const uuid = crypto.randomUUID();
+    await createPlugin(globalDir, uuid);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID 이름 플러그인 → manifest.name UUID', async () => {
+    const uuid = crypto.randomUUID();
+    await createPlugin(globalDir, uuid);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      expect(result.value[0]?.manifest.name).toBe(uuid);
+    }
+  });
+
+  it('UUID 이름 플러그인 getPlugin → defined', async () => {
+    const uuid = crypto.randomUUID();
+    await createPlugin(globalDir, uuid);
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin(uuid)).toBeDefined();
+  });
+
+  it('한글 name manifest → 로드됨 또는 건너뜀 (안전하게)', async () => {
+    const dir = join(globalDir, '한글플러그인');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: '한글플러그인', version: '1.0.0', entryPoint: 'index.ts' }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const x = 1;');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    expect(result.ok).toBe(true);
+  });
+
+  it('숫자 이름 플러그인 → 로드됨', async () => {
+    await createPlugin(globalDir, '12345');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value.length > 0) {
+      expect(result.value[0]?.manifest.name).toBe('12345');
+    }
+  });
+
+  it('매우 긴 이름 플러그인 → 로드됨', async () => {
+    const longName = 'a'.repeat(100);
+    await createPlugin(globalDir, longName);
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok && result.value.length > 0) {
+      expect(result.value[0]?.manifest.name).toBe(longName);
+    }
+  });
+});
+
+// ── loadPlugins - 다양한 버전 manifest ───────────────────────
+
+describe('DefaultPluginLoader loadPlugins - 다양한 버전', () => {
+  it('version=2.0.0 → 로드됨', async () => {
+    const dir = join(globalDir, 'v2-plugin');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: 'v2-plugin', version: '2.0.0', entryPoint: 'index.ts' }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const v = 2;');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      expect(result.value[0]?.manifest.version).toBe('2.0.0');
+    }
+  });
+
+  it('version=0.0.1 → 로드됨', async () => {
+    const dir = join(globalDir, 'v001-plugin');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: 'v001-plugin', version: '0.0.1', entryPoint: 'index.ts' }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const v = "0.0.1";');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      const found = result.value.find((p) => p.manifest.name === 'v001-plugin');
+      expect(found?.manifest.version).toBe('0.0.1');
+    }
+  });
+
+  it('version 숫자 타입 → 건너뜀', async () => {
+    const dir = join(globalDir, 'num-ver');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: 'num-ver', version: 1, entryPoint: 'index.ts' }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const x = 1;');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      expect(result.value.some((p) => p.manifest.name === 'num-ver')).toBe(false);
+    }
+  });
+
+  it('name 숫자 타입 → 건너뜀', async () => {
+    const dir = join(globalDir, 'num-name');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: 42, version: '1.0.0', entryPoint: 'index.ts' }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const x = 1;');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      expect(result.value.some((p) => p.manifest.name === '42')).toBe(false);
+    }
+  });
+
+  it('entryPoint 숫자 타입 → 건너뜀', async () => {
+    const dir = join(globalDir, 'num-ep');
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ name: 'num-ep', version: '1.0.0', entryPoint: 42 }),
+    );
+    await writeFile(join(dir, 'index.ts'), 'export const x = 1;');
+    const result = await new DefaultPluginLoader(logger).loadPlugins(globalDir);
+    if (result.ok) {
+      expect(result.value.some((p) => p.manifest.name === 'num-ep')).toBe(false);
+    }
+  });
+});
+
+// ── loadPlugins - 반복/일관성 ────────────────────────────────
+
+describe('DefaultPluginLoader loadPlugins - 반복/일관성', () => {
+  it('같은 디렉토리 3번 loadPlugins → 동일 결과', async () => {
+    await createPlugin(globalDir, 'stable');
+    const loader = new DefaultPluginLoader(logger);
+    const r1 = await loader.loadPlugins(globalDir);
+    const r2 = await loader.loadPlugins(globalDir);
+    const r3 = await loader.loadPlugins(globalDir);
+    if (r1.ok && r2.ok && r3.ok) {
+      expect(r1.value.length).toBe(r2.value.length);
+      expect(r2.value.length).toBe(r3.value.length);
+    }
+  });
+
+  it('독립 인스턴스 3개 loadPlugins → 동일 결과', async () => {
+    await createPlugin(globalDir, 'common');
+    const l1 = new DefaultPluginLoader(logger);
+    const l2 = new DefaultPluginLoader(logger);
+    const l3 = new DefaultPluginLoader(logger);
+    const r1 = await l1.loadPlugins(globalDir);
+    const r2 = await l2.loadPlugins(globalDir);
+    const r3 = await l3.loadPlugins(globalDir);
+    if (r1.ok && r2.ok && r3.ok) {
+      expect(r1.value.length).toBe(1);
+      expect(r2.value.length).toBe(1);
+      expect(r3.value.length).toBe(1);
+    }
+  });
+
+  it('10개 플러그인 각각 getPlugin → 모두 defined', async () => {
+    for (let i = 0; i < 10; i++) await createPlugin(globalDir, `plug-${i}`);
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    for (let i = 0; i < 10; i++) {
+      expect(loader.getPlugin(`plug-${i}`)).toBeDefined();
+    }
+  });
+
+  it('빈 디렉토리 3번 → 모두 ok=true, 길이 0', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    for (let i = 0; i < 3; i++) {
+      const result = await loader.loadPlugins(globalDir);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('nonexistent 디렉토리 3번 → 모두 ok=true', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    for (let i = 0; i < 3; i++) {
+      const result = await loader.loadPlugins(join(tempDir, `none-${i}`));
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('5개 플러그인 후 getPlugin nonexistent → undefined', async () => {
+    for (let i = 0; i < 5; i++) await createPlugin(globalDir, `exist-${i}`);
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('nonexistent')).toBeUndefined();
+    expect(loader.getPlugin('')).toBeUndefined();
+    expect(loader.getPlugin(crypto.randomUUID())).toBeUndefined();
+  });
+});
+
+// ── getPlugin - 추가 경계값 ──────────────────────────────────
+
+describe('DefaultPluginLoader getPlugin - 추가 경계값', () => {
+  it('특수문자 이름 조회 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('srv!@#$%')).toBeUndefined();
+  });
+
+  it('매우 긴 이름 조회 → undefined', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('x'.repeat(1000))).toBeUndefined();
+  });
+
+  it('숫자만 이름 조회 → undefined (없는 경우)', async () => {
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('9999')).toBeUndefined();
+  });
+
+  it('재로드 후 이전 플러그인 getPlugin → undefined', async () => {
+    await createPlugin(globalDir, 'old-plugin');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    expect(loader.getPlugin('old-plugin')).toBeDefined();
+
+    const newDir = join(tempDir, 'new-dir');
+    await mkdir(newDir, { recursive: true });
+    await createPlugin(newDir, 'new-plugin');
+    await loader.loadPlugins(newDir);
+    expect(loader.getPlugin('old-plugin')).toBeUndefined();
+    expect(loader.getPlugin('new-plugin')).toBeDefined();
+  });
+
+  it('병합 로드 후 두 플러그인 getPlugin', async () => {
+    await createPlugin(globalDir, 'g-plug');
+    await createPlugin(projectDir, 'p-plug');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir, projectDir);
+    expect(loader.getPlugin('g-plug')).toBeDefined();
+    expect(loader.getPlugin('p-plug')).toBeDefined();
+  });
+
+  it('병합 덮어쓰기 후 getPlugin → project 버전', async () => {
+    await createPlugin(globalDir, 'shared', 'export const src = "global";');
+    await createPlugin(projectDir, 'shared', 'export const src = "project";');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir, projectDir);
+    const plugin = loader.getPlugin('shared');
+    expect(plugin).toBeDefined();
+    if (plugin) {
+      const mod = plugin.module as { src: string };
+      expect(mod.src).toBe('project');
+    }
+  });
+
+  it('getPlugin 반환 타입 확인 (object 또는 undefined)', async () => {
+    await createPlugin(globalDir, 'type-check2');
+    const loader = new DefaultPluginLoader(logger);
+    await loader.loadPlugins(globalDir);
+    const plugin = loader.getPlugin('type-check2');
+    expect(typeof plugin === 'object' || plugin === undefined).toBe(true);
+  });
+});

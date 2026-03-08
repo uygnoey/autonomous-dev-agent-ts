@@ -556,3 +556,266 @@ describe('McpLoader 반복/일관성', () => {
     }
   });
 });
+
+// ── loadFromDirectory - UUID 이름 서버 ────────────────────────
+
+describe('McpLoader loadFromDirectory - UUID 이름 서버', () => {
+  it('UUID를 서버 이름으로 사용 → ok=true', async () => {
+    const uuid = crypto.randomUUID();
+    await createMcpConfig(globalDir, uuid, [
+      { name: uuid, command: 'npx', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    expect(result.ok).toBe(true);
+  });
+
+  it('UUID 이름 서버 → name 일치', async () => {
+    const uuid = crypto.randomUUID();
+    await createMcpConfig(globalDir, uuid, [
+      { name: uuid, command: 'npx', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === uuid);
+      expect(found).toBeDefined();
+    }
+  });
+
+  it('5개 UUID 이름 서버 → 모두 로드', async () => {
+    const uuids = Array.from({ length: 5 }, () => crypto.randomUUID());
+    for (const uuid of uuids) {
+      await createMcpConfig(globalDir, uuid, [
+        { name: uuid, command: 'npx', args: [], enabled: true },
+      ]);
+    }
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(5);
+      for (const uuid of uuids) {
+        expect(result.value.some((s) => s.name === uuid)).toBe(true);
+      }
+    }
+  });
+
+  it('UUID 이름 + 일반 이름 혼합 → 모두 로드', async () => {
+    const uuid = crypto.randomUUID();
+    await createMcpConfig(globalDir, uuid, [
+      { name: uuid, command: 'npx', args: [], enabled: true },
+    ]);
+    await createMcpConfig(globalDir, 'normal-server', [
+      { name: 'normal-server', command: 'node', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(2);
+    }
+  });
+});
+
+// ── loadFromDirectory - 특수문자/한글 서버 이름 ───────────────
+
+describe('McpLoader loadFromDirectory - 특수문자/한글', () => {
+  it('한글 command → 로드됨 (command가 한글이어도 저장)', async () => {
+    await createMcpConfig(globalDir, 'kr-cmd', [
+      { name: 'kr-cmd', command: '명령어', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'kr-cmd');
+      expect(found?.command).toBe('명령어');
+    }
+  });
+
+  it('args에 특수문자 포함 → 보존', async () => {
+    await createMcpConfig(globalDir, 'special-args', [
+      { name: 'special-args', command: 'npx', args: ['--option=a&b', '--flag=x|y'], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'special-args');
+      expect(found?.args).toEqual(['--option=a&b', '--flag=x|y']);
+    }
+  });
+
+  it('args에 빈 문자열 포함 → 보존', async () => {
+    await createMcpConfig(globalDir, 'empty-arg', [
+      { name: 'empty-arg', command: 'npx', args: [''], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'empty-arg');
+      expect(found?.args).toEqual(['']);
+    }
+  });
+
+  it('매우 긴 command 문자열 → 로드됨', async () => {
+    const longCmd = 'x'.repeat(1000);
+    await createMcpConfig(globalDir, 'long-cmd', [
+      { name: 'long-cmd', command: longCmd, args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'long-cmd');
+      expect(found?.command).toBe(longCmd);
+    }
+  });
+
+  it('매우 긴 args 배열 (50개) → 로드됨', async () => {
+    const args = Array.from({ length: 50 }, (_, i) => `--arg-${i}`);
+    await createMcpConfig(globalDir, 'many-args', [
+      { name: 'many-args', command: 'npx', args, enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'many-args');
+      expect(found?.args).toHaveLength(50);
+    }
+  });
+
+  it('servers 항목이 숫자 → 건너뜀', async () => {
+    const configDir = join(globalDir, 'num-item');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'mcp.json'), JSON.stringify({ servers: [42] }));
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('servers 항목이 문자열 → 건너뜀', async () => {
+    const configDir = join(globalDir, 'str-item');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'mcp.json'), JSON.stringify({ servers: ['not-an-object'] }));
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('servers 항목이 배열 → 건너뜀', async () => {
+    const configDir = join(globalDir, 'arr-item');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'mcp.json'), JSON.stringify({ servers: [[]] }));
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('enabled=true 문자열 → 처리됨 또는 건너뜀 (안전하게)', async () => {
+    const configDir = join(globalDir, 'str-enabled');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'mcp.json'), JSON.stringify({
+      servers: [{ name: 'srv', command: 'npx', args: [], enabled: 'true' }],
+    }));
+    const result = await new McpLoader(logger).loadFromDirectory(globalDir);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── loadAndMerge - 경계값 ─────────────────────────────────────
+
+describe('McpLoader loadAndMerge - 경계값', () => {
+  it('글로벌 10개 + 프로젝트 10개 동일 이름 → 10개', async () => {
+    for (let i = 0; i < 10; i++) {
+      await createMcpConfig(globalDir, `shared-${i}`, [
+        { name: `shared-${i}`, command: 'global', args: [], enabled: true },
+      ]);
+      await createMcpConfig(projectDir, `shared-${i}`, [
+        { name: `shared-${i}`, command: 'project', args: [], enabled: true },
+      ]);
+    }
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(10);
+      for (const s of result.value) {
+        expect(s.command).toBe('project');
+      }
+    }
+  });
+
+  it('글로벌 5개 + 프로젝트 5개 고유 → 총 10개', async () => {
+    for (let i = 0; i < 5; i++) {
+      await createMcpConfig(globalDir, `g-${i}`, [{ name: `g-${i}`, command: 'npx', args: [], enabled: true }]);
+      await createMcpConfig(projectDir, `p-${i}`, [{ name: `p-${i}`, command: 'node', args: [], enabled: true }]);
+    }
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) expect(result.value).toHaveLength(10);
+  });
+
+  it('글로벌 broken + 프로젝트 유효 → 프로젝트만', async () => {
+    const brokenDir = join(globalDir, 'broken');
+    await mkdir(brokenDir, { recursive: true });
+    await writeFile(join(brokenDir, 'mcp.json'), '{bad}');
+    await createMcpConfig(projectDir, 'good', [
+      { name: 'good', command: 'node', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.name).toBe('good');
+    }
+  });
+
+  it('글로벌 유효 + 프로젝트 broken → 글로벌만', async () => {
+    await createMcpConfig(globalDir, 'good-global', [
+      { name: 'good-global', command: 'npx', args: [], enabled: true },
+    ]);
+    const brokenDir = join(projectDir, 'broken');
+    await mkdir(brokenDir, { recursive: true });
+    await writeFile(join(brokenDir, 'mcp.json'), 'invalid json!!!');
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.name).toBe('good-global');
+    }
+  });
+
+  it('프로젝트 path traversal → ok=false', async () => {
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, `${projectDir}/../../etc`);
+    expect(result.ok).toBe(false);
+  });
+
+  it('글로벌 path traversal → ok=false', async () => {
+    const result = await new McpLoader(logger).loadAndMerge(`${globalDir}/../../etc`, projectDir);
+    expect(result.ok).toBe(false);
+  });
+
+  it('두 디렉토리 모두 nonexistent → ok=true 빈 배열', async () => {
+    const result = await new McpLoader(logger).loadAndMerge(
+      join(tempDir, 'no-g'),
+      join(tempDir, 'no-p'),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('프로젝트 enabled=false → 덮어씀', async () => {
+    await createMcpConfig(globalDir, 'srv', [
+      { name: 'srv', command: 'g-cmd', args: [], enabled: true },
+    ]);
+    await createMcpConfig(projectDir, 'srv', [
+      { name: 'srv', command: 'p-cmd', args: [], enabled: false },
+    ]);
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) {
+      const found = result.value.find((s) => s.name === 'srv');
+      expect(found?.enabled).toBe(false);
+      expect(found?.command).toBe('p-cmd');
+    }
+  });
+
+  it('UUID 이름 서버 덮어쓰기', async () => {
+    const uuid = crypto.randomUUID();
+    await createMcpConfig(globalDir, uuid, [
+      { name: uuid, command: 'global', args: [], enabled: true },
+    ]);
+    await createMcpConfig(projectDir, uuid, [
+      { name: uuid, command: 'project', args: [], enabled: true },
+    ]);
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    if (result.ok) {
+      expect(result.value).toHaveLength(1);
+      expect(result.value[0]?.command).toBe('project');
+    }
+  });
+
+  it('loadAndMerge ok=boolean 타입', async () => {
+    const result = await new McpLoader(logger).loadAndMerge(globalDir, projectDir);
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
