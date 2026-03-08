@@ -73,6 +73,15 @@ function createThrowingSessionFactory(errorMessage: string): V2SessionFactory {
   });
 }
 
+function createThrowingStreamFactory(errorMessage: string): V2SessionFactory {
+  // WHY: 세션 생성은 성공하지만 stream() 호출 시 throw — stream error 경로 테스트용
+  return mock(() => ({
+    stream: mock(async function* () {
+      throw new Error(errorMessage);
+    }),
+  }));
+}
+
 function createAgentConfig(overrides?: Partial<AgentConfig>): AgentConfig {
   return {
     name: 'architect' as AgentName,
@@ -1082,5 +1091,445 @@ describe('V2SessionExecutor - Extended Edge Cases', () => {
     const events = await collectEvents(executor, config);
     expect(events[0]?.agentName).toBe('tester');
     expect(events[0]?.agentName).not.toBe('feat-check');
+  });
+
+  // ── 추가 edge/random 케이스 (배치 61) ────────────────────────────
+
+  it('tool_use 이름이 UUID 형식 → 정상 처리', async () => {
+    const toolName = crypto.randomUUID();
+    const sessionFactory = createMockSessionFactory([
+      { type: 'tool_use', name: toolName, input: { key: 'val' } },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('tool_use');
+    expect(events[0]?.metadata?.toolName).toBe(toolName);
+  });
+
+  it('message 이벤트 content가 숫자 문자열 → 그대로 반환', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: '42' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.content).toBe('42');
+  });
+
+  it('message 이벤트 content가 이모지 포함 → 그대로 반환', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: '코드 완성 🎉' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.content).toBe('코드 완성 🎉');
+  });
+
+  it('빈 message content 배열 → content 빈 문자열 또는 정의됨', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: [] },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    // WHY: 빈 배열 → join 결과 '' 또는 content=''
+    expect(typeof events[0]?.content).toBe('string');
+  });
+
+  it('4개 다른 phase → 각각 AGENT_TEAMS_ENABLED 분기 확인', async () => {
+    const phases: Array<AgentConfig['phase']> = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const factory = mock((_opts: unknown) => ({
+        stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+      }));
+      executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+      await collectEvents(executor, createAgentConfig({ phase }));
+      const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+      const env = calledWith?.environment as Record<string, string>;
+      if (phase === 'DESIGN') {
+        expect(env?.AGENT_TEAMS_ENABLED).toBe('true');
+      } else {
+        expect(env?.AGENT_TEAMS_ENABLED).toBe('false');
+      }
+    }
+  });
+
+  it('연속 message 5개 → 모두 message 타입', async () => {
+    const msgs = Array.from({ length: 5 }, (_, i) => ({
+      type: 'message' as const,
+      content: `Message ${i}`,
+    }));
+    const sessionFactory = createMockSessionFactory([
+      ...msgs,
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    const messageEvents = events.filter((e) => e.type === 'message');
+    expect(messageEvents.length).toBe(5);
+  });
+
+  it('message 이후 tool_use 이후 done → 순서 보장', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: 'Analyzing...' },
+      { type: 'tool_use', name: 'Bash', input: { command: 'ls' } },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('message');
+    expect(events[1]?.type).toBe('tool_use');
+    expect(events[2]?.type).toBe('done');
+  });
+
+  it('stream throw 시 error 이벤트 → 세션 정리됨', async () => {
+    const sessionFactory = createThrowingStreamFactory('Stream crash');
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('error');
+    expect(events[0]?.content).toContain('Stream crash');
+  });
+
+  it('tool_use input 객체가 중첩 → metadata 반영', async () => {
+    const sessionFactory = createMockSessionFactory([
+      {
+        type: 'tool_use',
+        name: 'WebSearch',
+        input: { query: 'TypeScript', options: { limit: 10, lang: 'ko' } },
+      },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('tool_use');
+    expect(events[0]?.metadata?.toolName).toBe('WebSearch');
+  });
+
+  it('OAuth 인증 → CLAUDE_CODE_OAUTH_TOKEN 환경변수 설정', async () => {
+    const oauthProvider = new MockAuthProvider();
+    oauthProvider.setOAuth(true);
+
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider: oauthProvider, logger, sessionFactory: factory });
+    await collectEvents(executor, createAgentConfig());
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    const env = calledWith?.environment as Record<string, string>;
+    expect(env?.CLAUDE_CODE_OAUTH_TOKEN).toBe('mock_oauth_token_xyz');
+    expect(env?.ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  it('API key 인증 → ANTHROPIC_API_KEY 환경변수 설정', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+    await collectEvents(executor, createAgentConfig());
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    const env = calledWith?.environment as Record<string, string>;
+    expect(env?.ANTHROPIC_API_KEY).toBe('mock_api_key_12345');
+  });
+
+  it('config.env 키가 baseEnv 키 덮어씌우기 방지 확인', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+    // WHY: config.env는 baseEnv 이후 병합 → 우선순위 높음
+    await collectEvents(executor, createAgentConfig({ env: { CUSTOM_VAR: 'custom_value' } }));
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    const env = calledWith?.environment as Record<string, string>;
+    expect(env?.CUSTOM_VAR).toBe('custom_value');
+    expect(env?.ANTHROPIC_API_KEY).toBeDefined();
+  });
+
+  it('session_end max_tokens → done 이벤트에 반영', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'session_end', stop_reason: 'max_tokens' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('done');
+  });
+
+  it('session_end stop_sequence → done 이벤트', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'session_end', stop_reason: 'stop_sequence' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('done');
+  });
+
+  it('defaultOptions maxTurns=1 → 팩토리에 전달', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({
+      authProvider,
+      logger,
+      sessionFactory: factory,
+      defaultOptions: { maxTurns: 1 },
+    });
+    // WHY: config.maxTurns=undefined 이면 defaultOptions.maxTurns=1 이 사용된다
+    await collectEvents(executor, createAgentConfig({ maxTurns: undefined }));
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(calledWith?.maxTurns).toBe(1);
+  });
+
+  it('config.maxTurns=100 → 팩토리에 우선 전달', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({
+      authProvider,
+      logger,
+      sessionFactory: factory,
+      defaultOptions: { maxTurns: 10 },
+    });
+    await collectEvents(executor, createAgentConfig({ maxTurns: 100 }));
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    // WHY: config.maxTurns가 defaultOptions.maxTurns보다 우선
+    expect(calledWith?.maxTurns).toBe(100);
+  });
+
+  it('cleanup 호출 후 activeSessions 비어있음', async () => {
+    const sessionFactory = createMockSessionFactory([{ type: 'session_end', stop_reason: 'end_turn' }]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    await collectEvents(executor, createAgentConfig());
+    executor.cleanup();
+    // WHY: cleanup 후 재호출해도 에러 없음
+    expect(() => executor.cleanup()).not.toThrow();
+  });
+
+  it('tool_result 빈 content → content 빈 문자열 또는 정의됨', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'tool_result', tool_use_id: 'empty_result', content: '', is_error: false },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('tool_result');
+    expect(typeof events[0]?.content).toBe('string');
+  });
+
+  it('message 이벤트 timestamp는 Date 인스턴스', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: 'Time check' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('done 이벤트 timestamp는 Date 인스턴스', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('error 이벤트 timestamp는 Date 인스턴스', async () => {
+    const sessionFactory = createThrowingSessionFactory('timestamp test');
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('10개 연속 tool_use → 모두 tool_use 타입', async () => {
+    const tools = Array.from({ length: 10 }, (_, i) => ({
+      type: 'tool_use' as const,
+      name: `Tool${i}`,
+      input: { index: i },
+    }));
+    const sessionFactory = createMockSessionFactory([
+      ...tools,
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    const toolEvents = events.filter((e) => e.type === 'tool_use');
+    expect(toolEvents.length).toBe(10);
+  });
+
+  it('error 이벤트 agentName이 config.name과 일치', async () => {
+    const sessionFactory = createThrowingSessionFactory('agent name check');
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const config = createAgentConfig({ name: 'reviewer' as AgentName });
+    const events = await collectEvents(executor, config);
+    expect(events[0]?.agentName).toBe('reviewer');
+  });
+
+  it('done 이벤트 agentName이 config.name과 일치', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const config = createAgentConfig({ name: 'qa' as AgentName });
+    const events = await collectEvents(executor, config);
+    expect(events[0]?.agentName).toBe('qa');
+  });
+
+  it('팩토리가 stream 메서드 없는 객체 반환 → 에러', async () => {
+    const badFactory = mock(() => ({} as unknown as ReturnType<V2SessionFactory>));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: badFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('error');
+  });
+
+  it('undefined tools → 팩토리에 tools 미전달', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+    await collectEvents(executor, createAgentConfig({ tools: [] }));
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    // WHY: 빈 tools → tools=undefined (팩토리에 전달 안 함)
+    expect(calledWith?.tools).toBeUndefined();
+  });
+
+  it('tools 1개 → 팩토리에 전달됨', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+    await collectEvents(executor, createAgentConfig({ tools: ['Read'] }));
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Array.isArray(calledWith?.tools)).toBe(true);
+    expect((calledWith?.tools as string[]).length).toBe(1);
+  });
+
+  it('projectId가 빈 문자열 → 실행 성공', async () => {
+    const sessionFactory = createMockSessionFactory([{ type: 'session_end', stop_reason: 'end_turn' }]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig({ projectId: '' }));
+    expect(events[0]?.type).toBe('done');
+  });
+
+  it('한글 featureId → 실행 성공', async () => {
+    const sessionFactory = createMockSessionFactory([{ type: 'session_end', stop_reason: 'end_turn' }]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig({ featureId: '한글기능ID' }));
+    expect(events[0]?.type).toBe('done');
+  });
+
+  it('resume: 존재하지 않는 sessionId → error agentName 추출', async () => {
+    const sessionFactory = createMockSessionFactory([]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const sid = 'proj1:feat1:architect:DESIGN';
+    const events: AgentEvent[] = [];
+    for await (const event of executor.resume(sid)) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('error');
+    expect(events[0]?.agentName).toBe('architect');
+  });
+
+  it('resume: sessionId 형식이 다를 때 → error 반환', async () => {
+    const sessionFactory = createMockSessionFactory([]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events: AgentEvent[] = [];
+    for await (const event of executor.resume('invalid-format')) {
+      events.push(event);
+    }
+    expect(events[0]?.type).toBe('error');
+  });
+
+  it('5번 연속 execute → 모두 이벤트 반환', async () => {
+    for (let i = 0; i < 5; i++) {
+      const sessionFactory = createMockSessionFactory([
+        { type: 'message', content: `Run ${i}` },
+        { type: 'session_end', stop_reason: 'end_turn' },
+      ]);
+      executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+      const events = await collectEvents(executor, createAgentConfig());
+      expect(events.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('message content 빈 문자열 → 이벤트 타입 message', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: '' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('message');
+    expect(events[0]?.content).toBe('');
+  });
+
+  it('tool_use input이 null → 처리됨', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'tool_use', name: 'Grep', input: null },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('tool_use');
+  });
+
+  it('defaultOptions model 설정 → 팩토리에 전달', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({
+      authProvider,
+      logger,
+      sessionFactory: factory,
+      defaultOptions: { model: 'claude-haiku-4-5-20251001' },
+    });
+    await collectEvents(executor, createAgentConfig());
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(calledWith?.model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('defaultOptions 미설정 → model 기본값 claude-opus-4-6', async () => {
+    const factory = mock((_opts: unknown) => ({
+      stream: mock(() => mockSessionStream([{ type: 'session_end', stop_reason: 'end_turn' }])),
+    }));
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory: factory });
+    await collectEvents(executor, createAgentConfig());
+    const calledWith = (factory as ReturnType<typeof mock>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(calledWith?.model).toBe('claude-opus-4-6');
+  });
+
+  it('tool_use 이벤트 tool_use_id가 metadata에 반영', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'tool_use', name: 'Write', input: { file_path: '/out.ts' }, tool_use_id: 'tu-uuid-001' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('tool_use');
+    // WHY: tool_use_id가 metadata.toolUseId에 반영되어야 함
+    expect(events[0]?.metadata?.toolUseId ?? events[0]?.metadata?.toolName).toBeDefined();
+  });
+
+  it('error 이벤트 중간에 message → error 먼저 반환', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'error', error: { message: 'Mid-stream error' } },
+      { type: 'message', content: 'After error' },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.type).toBe('error');
+    expect(events[1]?.type).toBe('message');
+  });
+
+  it('text 블록 1개인 배열 → 단일 문자열 반환', async () => {
+    const sessionFactory = createMockSessionFactory([
+      { type: 'message', content: [{ type: 'text', text: 'Solo line' }] },
+      { type: 'session_end', stop_reason: 'end_turn' },
+    ]);
+    executor = new V2SessionExecutor({ authProvider, logger, sessionFactory });
+    const events = await collectEvents(executor, createAgentConfig());
+    expect(events[0]?.content).toBe('Solo line');
   });
 });

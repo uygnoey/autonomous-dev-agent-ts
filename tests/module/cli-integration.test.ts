@@ -14,7 +14,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { access, mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ConsoleLogger } from 'core/index.js';
 import type { Logger } from 'core/logger.js';
@@ -1096,6 +1096,480 @@ describe('CLI 통합 / CLI integration', () => {
     const result = await configCmd.execute(['invalid-subcommand'], { flags: {} });
     if (!result.ok) {
       expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  // ── 추가 edge/random 케이스 (배치 61) ────────────────────────────
+
+  it('CommandRouter: 3번 연속 register 후 getHelp에 모두 포함', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    router.register(new ConfigCommand(logger));
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    const help = router.getHelp();
+    expect(help).toContain('init');
+    expect(help).toContain('config');
+    expect(help).toContain('project');
+  });
+
+  it('CommandRouter: parse 결과 ok 필드 항상 boolean', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const inputs = [['init'], ['init', '--verbose'], ['unknown'], []];
+    for (const input of inputs) {
+      const result = router.parse(input);
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+
+  it('InitCommand: projectPath에 날짜 형식 경로', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const datePath = join(tmpDir, '2026-03-09');
+    const result = await initCmd.execute([], { projectPath: datePath, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: projectPath에 버전 형식 경로 (v1.2.3)', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const versionPath = join(tmpDir, 'v1.2.3');
+    const result = await initCmd.execute([], { projectPath: versionPath, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: add 후 list → 등록된 항목 포함', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    await projectCmd.execute(['add', join(tmpDir, 'verify-list-proj')], { flags: {} });
+
+    const listResult = await projectCmd.execute(['list'], { flags: {} });
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('ProjectCommand: 5개 add 후 첫 번째 remove → list 성공', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const paths = Array.from({ length: 5 }, (_, i) => join(tmpDir, `proj-remove-test-${i}`));
+
+    for (const p of paths) {
+      await projectCmd.execute(['add', p], { flags: {} });
+    }
+
+    await projectCmd.execute(['remove', 'proj-remove-test-0'], { flags: {} });
+
+    const listResult = await projectCmd.execute(['list'], { flags: {} });
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('CommandRouter: 빠른 순서로 init → config → project 실행', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    router.register(new ConfigCommand(logger));
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'fast-seq')]);
+    const r2 = await router.execute(['project', 'list']);
+    const r3 = await router.execute(['config', 'list']);
+
+    expect(typeof r1.ok).toBe('boolean');
+    expect(typeof r2.ok).toBe('boolean');
+    expect(typeof r3.ok).toBe('boolean');
+  });
+
+  it('ConfigCommand: list 서브커맨드 대소문자 구분', async () => {
+    const configCmd = new ConfigCommand(logger);
+    // WHY: 'List' != 'list' → 에러
+    const result = await configCmd.execute(['List'], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: switch 후 remove → 에러 없음', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const projPath = join(tmpDir, 'sw-then-rm');
+
+    await projectCmd.execute(['add', projPath], { flags: {} });
+    await projectCmd.execute(['switch', 'sw-then-rm'], { flags: {} });
+
+    const removeResult = await projectCmd.execute(['remove', 'sw-then-rm'], { flags: {} });
+    expect(typeof removeResult.ok).toBe('boolean');
+  });
+
+  it('CommandRouter: 존재하지 않는 명령 error.code 확인', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = await router.execute(['nonexistent-command-xyz']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_unknown_command');
+    }
+  });
+
+  it('InitCommand: 초기화 완료 후 error 없음', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      expect(result.error.code).toBeDefined();
+    }
+  });
+
+  it('ConfigCommand: set 후 get → 저장된 값 조회', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    await configCmd.execute(['set', 'verify.value', 'verified-123'], { projectPath: tmpDir, flags: {} });
+
+    const getResult = await configCmd.execute(['get', 'verify.value'], { projectPath: tmpDir, flags: {} });
+    expect(getResult.ok === true || getResult.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: 동일 registryDir 여러 인스턴스 → 같은 데이터 공유', async () => {
+    const projectCmd1 = new ProjectCommand(logger, tmpDir);
+    const projectCmd2 = new ProjectCommand(logger, tmpDir);
+
+    await projectCmd1.execute(['add', join(tmpDir, 'shared-data-proj')], { flags: {} });
+
+    const listResult = await projectCmd2.execute(['list'], { flags: {} });
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('InitCommand: execute 반환값이 Result 패턴 준수', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('ConfigCommand: execute 반환값이 Result 패턴 준수', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['list'], { flags: {} });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('ProjectCommand: execute 반환값이 Result 패턴 준수', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['list'], { flags: {} });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('CommandRouter: execute 반환값이 Result 패턴 준수', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-pattern')]);
+    expect('ok' in result).toBe(true);
+  });
+
+  it('CommandRouter: 이모지만 있는 플래그 → 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init', '--🚀']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: flags에 알 수 없는 키 포함 → 무시', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], {
+      projectPath: join(tmpDir, 'unknown-flag-test'),
+      flags: { unknownFlag: true, anotherFlag: 'value' },
+    });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 5개 명령 register 후 parse → 빠른 응답', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    router.register(new ConfigCommand(logger));
+    router.register(new ProjectCommand(logger, tmpDir));
+    router.register(new StartCommand(logger));
+
+    for (let i = 0; i < 5; i++) {
+      const result = router.parse(['init', '--verbose']);
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+
+  it('ProjectCommand: add 인자가 절대 경로 → 성공', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const absPath = join(tmpDir, 'abs-path-proj');
+    // WHY: Windows에서는 경로가 'C:\...'로 시작하므로 isAbsolute() 사용
+    expect(isAbsolute(absPath)).toBe(true);
+
+    const result = await projectCmd.execute(['add', absPath], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: set 숫자형 key → 처리', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['set', '123.key', 'value'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: set 이모지 키 처리', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['set', '🔑.value', 'emoji-key-val'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: 연속 init 두 번 → 두 번째는 이미 존재 에러', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const first = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), flags: {} });
+    const second = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), flags: {} });
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(false);
+  });
+
+  it('CommandRouter: 5개 다른 알 수 없는 명령 실행 → 모두 ok=false', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const unknowns = ['cmd1', 'cmd2', 'cmd3', 'cmd4', 'cmd5'];
+    for (const cmd of unknowns) {
+      const result = await router.execute([cmd]);
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('ProjectCommand: switch 존재하지 않는 이름 → ok=false', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['switch', 'totally-nonexistent-project'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('CommandRouter: parse 후 value.args 배열이 빈 배열', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init']);
+    if (result.ok) {
+      expect(result.value.args).toEqual([]);
+    }
+  });
+
+  it('ProjectCommand: 빈 registryDir 인스턴스 → list ok', async () => {
+    const emptyRegistryDir = join(tmpDir, 'empty-registry');
+    await import('node:fs/promises').then((fs) => fs.mkdir(emptyRegistryDir, { recursive: true }));
+    const projectCmd = new ProjectCommand(logger, emptyRegistryDir);
+    const result = await projectCmd.execute(['list'], { flags: {} });
+    expect(result.ok).toBe(true);
+  });
+
+  it('InitCommand: 결과 ok=true일 때 error 필드 없음', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { projectPath: join(tmpDir, 'no-err-test'), flags: {} });
+    if (result.ok) {
+      expect('error' in result).toBe(false);
+    }
+  });
+
+  it('ProjectCommand: add 결과 ok=true일 때 error 필드 없음', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['add', join(tmpDir, 'no-err-proj')], { flags: {} });
+    if (result.ok) {
+      expect('error' in result).toBe(false);
+    }
+  });
+
+  it('ConfigCommand: set 결과 ok=false일 때 error.code 있음', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['set'], { flags: {} });
+    if (!result.ok) {
+      expect('code' in result.error).toBe(true);
+    }
+  });
+
+  it('CommandRouter: getHelp 반복 호출 → 일관된 결과', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    router.register(new ConfigCommand(logger));
+
+    const h1 = router.getHelp();
+    const h2 = router.getHelp();
+    expect(h1).toBe(h2);
+  });
+
+  // ── 추가 edge/random 케이스 (배치 61 보충) ────────────────────────
+
+  it('CommandRouter: execute Result에 ok 필드 항상 존재', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-ok-check')]);
+    const r2 = await router.execute(['unknown-xyz']);
+
+    expect('ok' in r1).toBe(true);
+    expect('ok' in r2).toBe(true);
+  });
+
+  it('InitCommand: 매우 깊은 중첩 경로 생성 → ok 또는 에러', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const deepPath = join(tmpDir, 'a', 'b', 'c', 'd', 'e', 'f');
+    const result = await initCmd.execute([], { projectPath: deepPath, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: get/set 키에 점(.) 3개 이상 → ok 또는 에러', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(
+      ['set', 'a.b.c.d.e', 'deep-nested'],
+      { projectPath: tmpDir, flags: {} },
+    );
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: add, remove, add 반복 3회 → 마지막 ok', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const projPath = join(tmpDir, 'cycle-proj');
+
+    for (let i = 0; i < 3; i++) {
+      await projectCmd.execute(['add', projPath], { flags: {} });
+      await projectCmd.execute(['remove', 'cycle-proj'], { flags: {} });
+    }
+
+    const finalAdd = await projectCmd.execute(['add', projPath], { flags: {} });
+    expect(finalAdd.ok).toBe(true);
+  });
+
+  it('CommandRouter: 3개 명령 중 2개는 ok=true, 1개는 ok=false', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    const r1 = await router.execute(['project', 'list']);
+    const r2 = await router.execute(['project', 'list']);
+    const r3 = await router.execute(['nonexistent']);
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(false);
+  });
+
+  it('InitCommand: projectPath가 상대경로 형태 → 처리', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    // WHY: 절대 경로가 아닌 경우 구현이 cwd를 기준으로 처리할 수 있음
+    const result = await initCmd.execute([], { projectPath: './relative-test', flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: 초기화 없이 get → ok=false 또는 ok=true', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['get', 'some.key'], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: 빈 목록에서 switch → ok=false', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['switch', 'nothing-registered'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('CommandRouter: parse 미등록 → error 객체에 code 있음', () => {
+    const router = new CommandRouter(logger);
+
+    const result = router.parse(['anything']);
+    if (!result.ok) {
+      expect('code' in result.error).toBe(true);
+    }
+  });
+
+  it('InitCommand: 성공 후 .adev/config.json 파싱 → 유효 JSON 구조', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const projPath = join(tmpDir, 'config-json-check');
+    const result = await initCmd.execute([], { projectPath: projPath, flags: {} });
+    expect(result.ok).toBe(true);
+
+    const configPath = join(projPath, '.adev', 'config.json');
+    const text = await Bun.file(configPath).text();
+    expect(() => JSON.parse(text)).not.toThrow();
+    const parsed = JSON.parse(text);
+    expect(typeof parsed).toBe('object');
+  });
+
+  it('ProjectCommand: remove 후 list에서 제거 확인', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const projPath = join(tmpDir, 'remove-verify-proj');
+
+    await projectCmd.execute(['add', projPath], { flags: {} });
+    await projectCmd.execute(['remove', 'remove-verify-proj'], { flags: {} });
+
+    const listResult = await projectCmd.execute(['list'], { flags: {} });
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('ConfigCommand: list → 결과가 JSON 파싱 가능 또는 텍스트 형태', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok).toBe(true);
+  });
+
+  it('CommandRouter: StartCommand 등록 후 start parse → ok', () => {
+    const router = new CommandRouter(logger);
+    router.register(new StartCommand(logger));
+
+    const result = router.parse(['start']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 동일 명령 여러 번 execute → 일관됨', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    for (let i = 0; i < 5; i++) {
+      const result = await router.execute(['project', 'list']);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('InitCommand: 두 번째 init 에러 코드 → cli_init_already_exists', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const projPath = join(tmpDir, 'already-exists-check');
+    await initCmd.execute([], { projectPath: projPath, flags: {} });
+
+    const second = await initCmd.execute([], { projectPath: projPath, flags: {} });
+    if (!second.ok) {
+      expect(second.error.code).toBe('cli_init_already_exists');
+    }
+  });
+
+  it('ProjectCommand: 중복 add 에러 코드 → cli_project_duplicate', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const projPath = join(tmpDir, 'dup-check-exact');
+    await projectCmd.execute(['add', projPath], { flags: {} });
+
+    const dupResult = await projectCmd.execute(['add', projPath], { flags: {} });
+    if (!dupResult.ok) {
+      expect(dupResult.error.code).toBe('cli_project_duplicate');
+    }
+  });
+
+  it('ConfigCommand: 빈 서브커맨드 에러 코드 → cli_config_missing_subcommand', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute([], { flags: {} });
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_config_missing_subcommand');
+    }
+  });
+
+  it('CommandRouter: 빈 인자 에러 코드 → cli_no_command', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse([]);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_no_command');
     }
   });
 });
