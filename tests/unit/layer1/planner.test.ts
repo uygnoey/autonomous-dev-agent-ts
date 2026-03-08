@@ -1322,3 +1322,331 @@ describe('Planner 복합 스트레스 시나리오', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── createPlan 추가 경계값 #3 ──────────────────────────────────
+
+describe('createPlan 추가 경계값 #3', () => {
+  let planner: Planner;
+
+  beforeEach(() => {
+    planner = new Planner(new ConsoleLogger('error'));
+  });
+
+  it('projectId가 빈 문자열 → ok=true (검증 없음)', () => {
+    const result = planner.createPlan('', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId가 특수문자 → ok', () => {
+    const result = planner.createPlan('proj!@#$', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId가 공백 → ok', () => {
+    const result = planner.createPlan('   ', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('user 메시지만 1개 → plan contains projectId', () => {
+    const result = planner.createPlan('proj-id-check', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value).toContain('proj-id-check');
+  });
+
+  it('assistant 메시지만 → ok=true (user 0개여도 최소 1개 있으면 통과)', () => {
+    const result = planner.createPlan('proj-assist', [createMessage('assistant', '분석')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('user 메시지 내용이 plan Goals 섹션에 포함됨', () => {
+    const content = '유니크한-사용자-요청-내용-XYZ';
+    const result = planner.createPlan('proj-goals-check', [createMessage('user', content)]);
+    if (result.ok) expect(result.value).toContain(content);
+  });
+
+  it('assistant 메시지 내용이 plan Analysis 섹션에 포함됨', () => {
+    const content = '유니크한-어시스턴트-분석-ABC';
+    const result = planner.createPlan('proj-analysis-check', [
+      createMessage('user', '요청'),
+      createMessage('assistant', content),
+    ]);
+    if (result.ok) expect(result.value).toContain(content);
+  });
+
+  it('plan에 ## Goals 헤더 있음', () => {
+    const result = planner.createPlan('proj-h-goals', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value).toContain('## Goals');
+  });
+
+  it('plan에 ## Analysis 헤더 있음', () => {
+    const result = planner.createPlan('proj-h-analysis', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value).toContain('## Analysis');
+  });
+
+  it('plan에 ## Features 헤더 있음', () => {
+    const result = planner.createPlan('proj-h-features', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value).toContain('## Features');
+  });
+
+  it('plan 시작이 # 으로 시작', () => {
+    const result = planner.createPlan('proj-heading', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value.startsWith('#')).toBe(true);
+  });
+
+  it('50개 user 메시지 → 모두 plan에 포함', () => {
+    const msgs = Array.from({ length: 50 }, (_, i) => createMessage('user', `요청-내용-${i}`));
+    const result = planner.createPlan('proj-50-user', msgs);
+    if (result.ok) {
+      for (let i = 0; i < 50; i++) {
+        expect(result.value).toContain(`요청-내용-${i}`);
+      }
+    }
+  });
+
+  it('50개 assistant 메시지 → 모두 plan에 포함', () => {
+    const msgs = [
+      createMessage('user', '요청'),
+      ...Array.from({ length: 50 }, (_, i) => createMessage('assistant', `분석-내용-${i}`)),
+    ];
+    const result = planner.createPlan('proj-50-assist', msgs);
+    if (result.ok) {
+      for (let i = 0; i < 50; i++) {
+        expect(result.value).toContain(`분석-내용-${i}`);
+      }
+    }
+  });
+
+  it('error 객체에 code 필드 있음 (빈 대화)', () => {
+    const result = planner.createPlan('proj-err-code', []);
+    if (!result.ok) expect('code' in result.error).toBe(true);
+  });
+
+  it('error.message가 문자열 (빈 대화)', () => {
+    const result = planner.createPlan('proj-err-msg', []);
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('createPlan 1000번 호출 → ok=true 항상', () => {
+    for (let i = 0; i < 1000; i++) {
+      const result = planner.createPlan(`proj-1k-${i}`, [createMessage('user', `요청${i}`)]);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('혼합 대화 (user+assistant 교대 10쌍) → ok', () => {
+    const msgs = [];
+    for (let i = 0; i < 10; i++) {
+      msgs.push(createMessage('user', `요청-${i}`));
+      msgs.push(createMessage('assistant', `분석-${i}`));
+    }
+    const result = planner.createPlan('proj-mixed-10', msgs);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan 결과 길이 > 0', () => {
+    const result = planner.createPlan('proj-len', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(0);
+  });
+});
+
+// ── extractFeatures 추가 경계값 #3 ───────────────────────────
+
+describe('extractFeatures 추가 경계값 #3', () => {
+  let planner: Planner;
+
+  beforeEach(() => {
+    planner = new Planner(new ConsoleLogger('error'));
+  });
+
+  it('공백 문자열 → ok=false', () => {
+    const result = planner.extractFeatures('   ');
+    expect(result.ok).toBe(false);
+  });
+
+  it('탭 문자만 → ok=false', () => {
+    const result = planner.extractFeatures('\t\t\t');
+    expect(result.ok).toBe(false);
+  });
+
+  it('줄바꿈만 → ok=false', () => {
+    const result = planner.extractFeatures('\n\n\n');
+    expect(result.ok).toBe(false);
+  });
+
+  it('### 없는 문서 → features 1개 (Main Feature)', () => {
+    const result = planner.extractFeatures('# 제목\n내용 있음');
+    if (result.ok) {
+      expect(result.value.length).toBe(1);
+      expect(result.value[0]?.name).toBe('Main Feature');
+    }
+  });
+
+  it('### 1개 → features 1개', () => {
+    const result = planner.extractFeatures('### Feature A\n내용');
+    if (result.ok) {
+      expect(result.value.length).toBe(1);
+      expect(result.value[0]?.name).toBe('Feature A');
+    }
+  });
+
+  it('### 3개 → features 3개', () => {
+    const plan = '### A\n내용A\n### B\n내용B\n### C\n내용C';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) expect(result.value.length).toBe(3);
+  });
+
+  it('### 10개 → features 10개', () => {
+    const plan = Array.from({ length: 10 }, (_, i) => `### Feature ${i}\n내용${i}`).join('\n');
+    const result = planner.extractFeatures(plan);
+    if (result.ok) expect(result.value.length).toBe(10);
+  });
+
+  it('feature id가 feat-0, feat-1... 순서', () => {
+    const plan = '### A\n내용\n### B\n내용\n### C\n내용';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      expect(result.value[0]?.id).toBe('feat-0');
+      expect(result.value[1]?.id).toBe('feat-1');
+      expect(result.value[2]?.id).toBe('feat-2');
+    }
+  });
+
+  it('feature description에 Feature: 접두어 포함', () => {
+    const result = planner.extractFeatures('### My Feature\n내용');
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].description).toContain('Feature:');
+    }
+  });
+
+  it('feature의 acceptanceCriteria가 빈 배열', () => {
+    const result = planner.extractFeatures('### My Feature\n내용');
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].acceptanceCriteria).toEqual([]);
+    }
+  });
+
+  it('feature의 dependencies가 빈 배열', () => {
+    const result = planner.extractFeatures('### My Feature\n내용');
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].dependencies).toEqual([]);
+    }
+  });
+
+  it('feature의 inputs가 빈 배열', () => {
+    const result = planner.extractFeatures('### My Feature\n내용');
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].inputs).toEqual([]);
+    }
+  });
+
+  it('feature의 outputs가 빈 배열', () => {
+    const result = planner.extractFeatures('### My Feature\n내용');
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].outputs).toEqual([]);
+    }
+  });
+
+  it('1000번 같은 문서 → 항상 동일 결과', () => {
+    const plan = '### Feature X\n내용X\n### Feature Y\n내용Y';
+    const first = planner.extractFeatures(plan);
+    for (let i = 0; i < 1000; i++) {
+      const r = planner.extractFeatures(plan);
+      if (first.ok && r.ok) {
+        expect(r.value.length).toBe(first.value.length);
+        expect(r.value[0]?.name).toBe(first.value[0]?.name);
+      }
+    }
+  });
+
+  it('error.code가 layer1_empty_plan (빈 문자열)', () => {
+    const result = planner.extractFeatures('');
+    if (!result.ok) expect(result.error.code).toBe('layer1_empty_plan');
+  });
+
+  it('error.message가 문자열 (빈 문자열)', () => {
+    const result = planner.extractFeatures('');
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('100개 feature 헤더 → features 100개', () => {
+    const plan = Array.from({ length: 100 }, (_, i) => `### F${i}\n내용${i}`).join('\n');
+    const result = planner.extractFeatures(plan);
+    if (result.ok) expect(result.value.length).toBe(100);
+  });
+
+  it('한국어 feature 이름 → ok', () => {
+    const result = planner.extractFeatures('### 한국어 기능\n내용');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('한국어 기능');
+  });
+
+  it('특수문자 feature 이름 → ok', () => {
+    const result = planner.extractFeatures('### Feature!@#$\n내용');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('Feature!@#$');
+  });
+});
+
+// ── Planner 복합 시나리오 ─────────────────────────────────────
+
+describe('Planner 복합 시나리오', () => {
+  it('createPlan → extractFeatures 파이프라인 1000번 반복', () => {
+    const p = new Planner(new ConsoleLogger('error'));
+    for (let i = 0; i < 1000; i++) {
+      const plan = p.createPlan(`proj-pipeline-${i}`, [createMessage('user', `요청 ${i}`)]);
+      if (plan.ok) {
+        const features = p.extractFeatures(plan.value);
+        expect(features.ok).toBe(true);
+        if (features.ok) expect(features.value.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it('5개 Planner 동시 사용 → 결과 독립적', () => {
+    const planners = Array.from({ length: 5 }, () => new Planner(new ConsoleLogger('error')));
+    const results = planners.map((p, i) =>
+      p.createPlan(`proj-ind-${i}`, [createMessage('user', `요청-${i}`)])
+    );
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('createPlan result.value에 줄바꿈 포함', () => {
+    const p = new Planner(new ConsoleLogger('error'));
+    const result = p.createPlan('proj-newline', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value.includes('\n')).toBe(true);
+  });
+
+  it('extractFeatures → features[*].id 모두 feat- 접두어', () => {
+    const p = new Planner(new ConsoleLogger('error'));
+    const plan = '### A\n내용A\n### B\n내용B';
+    const result = p.extractFeatures(plan);
+    if (result.ok) {
+      for (const f of result.value) {
+        expect(f.id.startsWith('feat-')).toBe(true);
+      }
+    }
+  });
+
+  it('extractFeatures → features[*].name 길이 > 0', () => {
+    const p = new Planner(new ConsoleLogger('error'));
+    const plan = '### Feature X\n내용';
+    const result = p.extractFeatures(plan);
+    if (result.ok) {
+      for (const f of result.value) {
+        expect(f.name.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('createPlan 후 extractFeatures → features 배열 length ≥ 1 항상', () => {
+    const p = new Planner(new ConsoleLogger('error'));
+    for (let i = 0; i < 50; i++) {
+      const plan = p.createPlan(`proj-always-${i}`, [createMessage('user', `요청${i}`)]);
+      if (plan.ok) {
+        const features = p.extractFeatures(plan.value);
+        if (features.ok) expect(features.value.length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+});

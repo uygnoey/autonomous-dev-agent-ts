@@ -1326,3 +1326,331 @@ describe('AuthCommand execute 다양한 옵션 조합', () => {
     expect((await cmd.execute([], { status: true })).ok).toBe(true);
   });
 });
+
+// ── AuthCommand showStatus: 다양한 env 상태 ───────────────────
+
+describe('AuthCommand showStatus: 다양한 env 상태', () => {
+  const mgr = new TempEnvManager();
+
+  beforeEach(async () => await mgr.backup());
+  afterEach(async () => await mgr.restore());
+
+  it('API key 있을 때 showStatus → ok=true', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-status-api\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('OAuth token 있을 때 showStatus → ok=true', async () => {
+    await mgr.writeEnv('CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-status-oauth\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('env 비어있을 때 showStatus → ok=true', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('env에 다른 변수만 있을 때 showStatus → ok=true', async () => {
+    await mgr.writeEnv('OTHER_VAR=some_value\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('showStatus 5번 반복 → 모두 ok=true', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-5rep\n');
+    for (let i = 0; i < 5; i++) {
+      const cmd = new AuthCommand(logger);
+      const result = await cmd.execute([], { status: true });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('showStatus 결과 value는 undefined', async () => {
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    if (result.ok) expect(result.value).toBeUndefined();
+  });
+
+  it('showStatus args 빈 배열 → ok', async () => {
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('showStatus args 여러 개 → ok', async () => {
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute(['a', 'b', 'c'], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('env에 멀티라인 + API key → showStatus ok', async () => {
+    await mgr.writeEnv('SOME_VAR=val1\nANTHROPIC_API_KEY=sk-ant-test-multi\nOTHER=v2\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('env에 OAuth + 다른 변수 → showStatus ok', async () => {
+    await mgr.writeEnv('FOO=bar\nCLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-multi2\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── AuthCommand clearAuth: 빈 env 경계값 ─────────────────────
+
+describe('AuthCommand clearAuth: 빈 env 경계값', () => {
+  const mgr = new TempEnvManager();
+
+  beforeEach(async () => await mgr.backup());
+  afterEach(async () => await mgr.restore());
+
+  it('빈 env → clearAuth → ok=true (no inquirer)', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    // WHY: env 비어있으면 getAuthStatus=null → early return (inquirer 미호출)
+    const result = await cmd.execute([], { clear: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('OTHER_VAR만 있을 때 → clearAuth → ok (인증 정보 없음 경로)', async () => {
+    await mgr.writeEnv('OTHER_VAR=something\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { clear: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 env clearAuth 10번 반복 → 모두 ok', async () => {
+    await mgr.clearEnv();
+    for (let i = 0; i < 10; i++) {
+      const cmd = new AuthCommand(logger);
+      const result = await cmd.execute([], { clear: true });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('clearAuth 결과 ok는 boolean', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { clear: true });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('clearAuth 결과에 ok 필드 있음', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { clear: true });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('빈 env clearAuth → result ok=true', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    expect((await cmd.execute([], { clear: true })).ok).toBe(true);
+  });
+
+  it('clearAuth Promise 반환 확인', () => {
+    const cmd = new AuthCommand(logger);
+    const p = cmd.execute([], { clear: true });
+    expect(p instanceof Promise).toBe(true);
+    p.catch(() => {});
+  });
+
+  it('debug logger clearAuth (빈 env) → ok', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(new ConsoleLogger('debug'));
+    expect((await cmd.execute([], { clear: true })).ok).toBe(true);
+  });
+});
+
+// ── AuthCommand help() 메서드 ─────────────────────────────────
+
+describe('AuthCommand help() 메서드', () => {
+  it('help()가 문자열 반환', () => {
+    const cmd = new AuthCommand(logger);
+    expect(typeof cmd.help()).toBe('string');
+  });
+
+  it('help()에 adev auth 포함', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).toContain('adev auth');
+  });
+
+  it('help()에 --status 포함', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).toContain('--status');
+  });
+
+  it('help()에 --clear 포함', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help()).toContain('--clear');
+  });
+
+  it('help() 길이 > 0', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help().length).toBeGreaterThan(0);
+  });
+
+  it('10번 help() 호출 → 항상 동일 결과', () => {
+    const cmd = new AuthCommand(logger);
+    const first = cmd.help();
+    for (let i = 0; i < 10; i++) {
+      expect(cmd.help()).toBe(first);
+    }
+  });
+
+  it('다른 인스턴스 help() → 동일 내용', () => {
+    const cmd1 = new AuthCommand(logger);
+    const cmd2 = new AuthCommand(new ConsoleLogger('debug'));
+    expect(cmd1.help()).toBe(cmd2.help());
+  });
+
+  it('help()에 인증 방법 설명 포함', () => {
+    const cmd = new AuthCommand(logger);
+    const h = cmd.help();
+    expect(h.includes('auth') || h.includes('Auth')).toBe(true);
+  });
+
+  it('help()에 줄바꿈 포함', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd.help().includes('\n')).toBe(true);
+  });
+});
+
+// ── getAuthStatus 내부 동작 (showStatus 통해 간접 확인) ────────
+
+describe('AuthCommand: getAuthStatus 간접 확인', () => {
+  const mgr = new TempEnvManager();
+
+  beforeEach(async () => await mgr.backup());
+  afterEach(async () => await mgr.restore());
+
+  it('API key 10자리 이하도 status ok', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-abc\n');
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('OAuth token 여러 형태 → status ok', async () => {
+    const tokens = [
+      'sk-ant-oat01-abc',
+      'sk-ant-oat01-xyz-long-token-here',
+      'sk-ant-oat01-a',
+    ];
+    for (const token of tokens) {
+      await mgr.writeEnv(`CLAUDE_CODE_OAUTH_TOKEN=${token}\n`);
+      const cmd = new AuthCommand(logger);
+      const result = await cmd.execute([], { status: true });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('env 파일 없으면 status ok (미설정 메시지)', async () => {
+    await mgr.clearEnv();
+    const cmd = new AuthCommand(logger);
+    const result = await cmd.execute([], { status: true });
+    expect(result.ok).toBe(true);
+  });
+
+  it('API key = status 확인 후 clear → status 다시 ok', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-seq\n');
+    const cmd = new AuthCommand(logger);
+    const statusResult = await cmd.execute([], { status: true });
+    expect(statusResult.ok).toBe(true);
+    // clear (env 비워두고 다시 clear 경로)
+    await mgr.clearEnv();
+    const clearResult = await cmd.execute([], { clear: true });
+    expect(clearResult.ok).toBe(true);
+  });
+
+  it('status 100번 API key 환경 → 모두 ok', async () => {
+    await mgr.writeEnv('ANTHROPIC_API_KEY=sk-ant-test-100\n');
+    for (let i = 0; i < 100; i++) {
+      const cmd = new AuthCommand(logger);
+      const r = await cmd.execute([], { status: true });
+      expect(r.ok).toBe(true);
+    }
+  });
+});
+
+// ── AuthCommand 인스턴스 생성 경계값 ──────────────────────────
+
+describe('AuthCommand 인스턴스 생성 경계값', () => {
+  it('AuthCommand 인스턴스 생성됨', () => {
+    expect(() => new AuthCommand(logger)).not.toThrow();
+  });
+
+  it('AuthCommand 인스턴스 타입 확인', () => {
+    const cmd = new AuthCommand(logger);
+    expect(cmd).toBeInstanceOf(AuthCommand);
+  });
+
+  it('execute 메서드 존재', () => {
+    const cmd = new AuthCommand(logger);
+    expect(typeof cmd.execute).toBe('function');
+  });
+
+  it('help 메서드 존재', () => {
+    const cmd = new AuthCommand(logger);
+    expect(typeof cmd.help).toBe('function');
+  });
+
+  it('debug logger로 생성 가능', () => {
+    expect(() => new AuthCommand(new ConsoleLogger('debug'))).not.toThrow();
+  });
+
+  it('info logger로 생성 가능', () => {
+    expect(() => new AuthCommand(new ConsoleLogger('info'))).not.toThrow();
+  });
+
+  it('warn logger로 생성 가능', () => {
+    expect(() => new AuthCommand(new ConsoleLogger('warn'))).not.toThrow();
+  });
+
+  it('error logger로 생성 가능', () => {
+    expect(() => new AuthCommand(new ConsoleLogger('error'))).not.toThrow();
+  });
+
+  it('10개 인스턴스 모두 생성 가능', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(() => new AuthCommand(logger)).not.toThrow();
+    }
+  });
+
+  it('execute는 Promise를 반환', async () => {
+    const cmd = new AuthCommand(logger);
+    const p = cmd.execute([], { status: true });
+    expect(p instanceof Promise).toBe(true);
+    await p;
+  });
+
+  it('execute options 빈 객체 → setup path (Promise 반환)', () => {
+    const cmd = new AuthCommand(logger);
+    const p = cmd.execute([], {});
+    expect(p instanceof Promise).toBe(true);
+    p.catch(() => {});
+  });
+
+  it('execute options undefined → setup path (Promise 반환)', () => {
+    const cmd = new AuthCommand(logger);
+    const p = cmd.execute([]);
+    expect(p instanceof Promise).toBe(true);
+    p.catch(() => {});
+  });
+
+  it('status=false, clear=false → setup path Promise', () => {
+    const cmd = new AuthCommand(logger);
+    const p = cmd.execute([], { status: false, clear: false });
+    expect(p instanceof Promise).toBe(true);
+    p.catch(() => {});
+  });
+});

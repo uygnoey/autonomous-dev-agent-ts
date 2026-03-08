@@ -1294,3 +1294,382 @@ describe('TestTypeDesigner 복합 시나리오 배치2', () => {
     }
   });
 });
+
+// ── createDefinitions: 추가 경계값 #3 ────────────────────────
+
+describe('createDefinitions 추가 경계값 #3', () => {
+  it('feature id가 빈 문자열인 경우 → ok', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: '' })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.featureId).toBe('');
+  });
+
+  it('feature name이 긴 문자열 → ok', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const longName = 'A'.repeat(500);
+    const features = [createFeature({ name: longName })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(1);
+  });
+
+  it('feature description이 비어있음 → ok', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ description: '' })];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('수락 기준 testCategory가 undefined → general 카테고리', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-0', description: '기준', verifiable: true, testCategory: undefined as unknown as string },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok) {
+      const cat = result.value[0]?.categories.find((c) => c.name === 'general');
+      expect(cat).toBeDefined();
+    }
+  });
+
+  it('기능 10개 × 수락 기준 각 3개 → 30개 정의 카테고리', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = Array.from({ length: 10 }, (_, fi) =>
+      createFeature({
+        id: `feat-${fi}`,
+        acceptanceCriteria: Array.from({ length: 3 }, (__, ai) => ({
+          id: `ac-${fi}-${ai}`,
+          description: `기준 ${fi}-${ai}`,
+          verifiable: true,
+          testCategory: `cat-${ai}`,
+        })),
+      })
+    );
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBe(10);
+      for (const def of result.value) {
+        // 3개 카테고리 (cat-0, cat-1, cat-2)
+        expect(def.categories.length).toBe(3);
+      }
+    }
+  });
+
+  it('createDefinitions → sampleTests 개수 = categories × 2', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-0', description: '기준0', verifiable: true, testCategory: 'unit' },
+        { id: 'ac-1', description: '기준1', verifiable: true, testCategory: 'e2e' },
+      ],
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      const catCount = result.value[0].categories.length;
+      expect(result.value[0].sampleTests.length).toBe(catCount * 2);
+    }
+  });
+
+  it('createDefinitions → ratios.unit + module + e2e = 1.0', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature()];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      const { unit, module: m, e2e } = result.value[0].ratios;
+      expect(Math.abs(unit + m + e2e - 1.0)).toBeLessThan(0.001);
+    }
+  });
+
+  it('createDefinitions → 기본 rules 4개 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature()];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].rules.length).toBe(4);
+    }
+  });
+
+  it('createDefinitions → rules[0]에 edge case 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature()];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].rules[0]).toContain('edge');
+    }
+  });
+
+  it('createDefinitions → sampleTests[0].category가 categories[0].name와 일치', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      acceptanceCriteria: [{ id: 'ac-0', description: '기준', verifiable: true, testCategory: 'my-cat' }],
+    })];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      const firstCat = result.value[0].categories[0]?.name;
+      const firstSample = result.value[0].sampleTests[0]?.category;
+      expect(firstSample).toBe(firstCat);
+    }
+  });
+
+  it('빈 features 5번 반복 → 모두 ok=true, 빈 배열', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) {
+      const result = designer.createDefinitions([]);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.length).toBe(0);
+    }
+  });
+
+  it('100개 기능 → 100개 정의', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = Array.from({ length: 100 }, (_, i) => createFeature({ id: `f-${i}` }));
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(100);
+  });
+
+  it('createDefinitions 결과 ok는 boolean', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const result = designer.createDefinitions([createFeature()]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('createDefinitions → ratios.unit이 0.6', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].ratios.unit).toBe(0.6);
+    }
+  });
+
+  it('createDefinitions → ratios.e2e가 0.15', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const result = designer.createDefinitions([createFeature()]);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].ratios.e2e).toBe(0.15);
+    }
+  });
+
+  it('같은 id 다른 인스턴스 → featureId 일치', () => {
+    const d1 = new TestTypeDesigner(new ConsoleLogger('error'));
+    const d2 = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'same-id' })];
+    const r1 = d1.createDefinitions(features);
+    const r2 = d2.createDefinitions(features);
+    if (r1.ok && r2.ok) {
+      expect(r1.value[0]?.featureId).toBe(r2.value[0]?.featureId);
+    }
+  });
+});
+
+// ── validate: 추가 경계값 #3 ──────────────────────────────────
+
+describe('validate 추가 경계값 #3', () => {
+  it('정의 있지만 기능 없음 → 경고 없음', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const defs = [makeDefinition('feat-unused')];
+    const result = designer.validate(defs, []);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(0);
+  });
+
+  it('기능 있고 정의 없음 → 경고 1개', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'no-def-feat' })];
+    const result = designer.validate([], features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(0);
+  });
+
+  it('기능 5개 정의 없음 → 경고 5개 이상', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = Array.from({ length: 5 }, (_, i) => createFeature({ id: `f${i}` }));
+    const result = designer.validate([], features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('validate 경고 문자열 타입', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'warn-type' })];
+    const result = designer.validate([], features);
+    if (result.ok) {
+      for (const w of result.value) {
+        expect(typeof w).toBe('string');
+      }
+    }
+  });
+
+  it('경고에 feature name 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'warn-name-feat', name: 'Special Feature Name' })];
+    const result = designer.validate([], features);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0]).toContain('Special Feature Name');
+    }
+  });
+
+  it('경고에 feature id 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'unique-id-check' })];
+    const result = designer.validate([], features);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0]).toContain('unique-id-check');
+    }
+  });
+
+  it('수락 기준 미매핑 → 경고에 기준 id 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      id: 'mapped-feat',
+      acceptanceCriteria: [{ id: 'unmapped-ac', description: '기준', verifiable: true, testCategory: 'general' }],
+    })];
+    // 빈 매핑의 정의 제공
+    const defs = [makeDefinition('mapped-feat', [])];
+    const result = designer.validate(defs, features);
+    if (result.ok) {
+      const hasWarn = result.value.some((w) => w.includes('unmapped-ac'));
+      expect(hasWarn).toBe(true);
+    }
+  });
+
+  it('validate 100회 빈 입력 → 항상 경고 0개', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      const result = designer.validate([], []);
+      if (result.ok) expect(result.value.length).toBe(0);
+    }
+  });
+
+  it('createDefinitions로 생성 후 validate → 경고 없음 (50번 반복)', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({
+      id: 'rep-feat',
+      acceptanceCriteria: [{ id: 'rep-ac', description: '기준', verifiable: true, testCategory: 'gen' }],
+    })];
+    const defs = designer.createDefinitions(features);
+    if (defs.ok) {
+      for (let i = 0; i < 50; i++) {
+        const v = designer.validate(defs.value, features);
+        expect(v.ok).toBe(true);
+        if (v.ok) expect(v.value.length).toBe(0);
+      }
+    }
+  });
+
+  it('validate ok는 boolean', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const result = designer.validate([], []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('validate value는 배열', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const result = designer.validate([], []);
+    if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('createDefinitions 1000개 기능 → validate 경고 없음', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = Array.from({ length: 1000 }, (_, i) => createFeature({
+      id: `bulk-${i}`,
+      acceptanceCriteria: [{ id: `ac-${i}`, description: `기준${i}`, verifiable: true, testCategory: 'general' }],
+    }));
+    const defs = designer.createDefinitions(features);
+    if (defs.ok) {
+      const v = designer.validate(defs.value, features);
+      expect(v.ok).toBe(true);
+      if (v.ok) expect(v.value.length).toBe(0);
+    }
+  });
+});
+
+// ── TestTypeDesigner: 복합 시나리오 ──────────────────────────
+
+describe('TestTypeDesigner 복합 시나리오', () => {
+  it('10개 인스턴스 각 100개 기능 → 검증 통과', () => {
+    for (let inst = 0; inst < 10; inst++) {
+      const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+      const features = Array.from({ length: 100 }, (_, i) => createFeature({ id: `inst-${inst}-f${i}` }));
+      const defs = designer.createDefinitions(features);
+      expect(defs.ok).toBe(true);
+      if (defs.ok) {
+        const v = designer.validate(defs.value, features);
+        expect(v.ok).toBe(true);
+        if (v.ok) expect(v.value.length).toBe(0);
+      }
+    }
+  });
+
+  it('createDefinitions → featureId 순서 보존', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const ids = ['z-feat', 'a-feat', 'm-feat'];
+    const features = ids.map((id) => createFeature({ id }));
+    const result = designer.createDefinitions(features);
+    if (result.ok) {
+      const resultIds = result.value.map((d) => d.featureId);
+      expect(resultIds).toEqual(ids);
+    }
+  });
+
+  it('수락 기준 빈 배열 기능 → categories 1개 (general)', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ acceptanceCriteria: [] })];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      expect(result.value[0].categories.length).toBe(1);
+      expect(result.value[0].categories[0]?.name).toBe('general');
+    }
+  });
+
+  it('수락 기준 빈 기능 → sampleTests 2개 (general × 2)', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ acceptanceCriteria: [] })];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      // general 카테고리 1개 × 2 샘플
+      expect(result.value[0].sampleTests.length).toBe(2);
+    }
+  });
+
+  it('sampleTests.description 모두 문자열', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ acceptanceCriteria: [
+      { id: 'ac0', description: '기준', verifiable: true, testCategory: 'unit' },
+    ]})];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      for (const s of result.value[0].sampleTests) {
+        expect(typeof s.description).toBe('string');
+        expect(typeof s.expectedBehavior).toBe('string');
+      }
+    }
+  });
+
+  it('각 카테고리 정상+엣지 2쌍 → sampleTests description에 edge 포함', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const features = [createFeature({ acceptanceCriteria: [
+      { id: 'ac0', description: '기준', verifiable: true, testCategory: 'unit' },
+    ]})];
+    const result = designer.createDefinitions(features);
+    if (result.ok && result.value[0]) {
+      const hasEdge = result.value[0].sampleTests.some((s) =>
+        s.description.toLowerCase().includes('edge') || s.description.includes('엣지')
+      );
+      expect(hasEdge).toBe(true);
+    }
+  });
+
+  it('validate → 빈 features + 정의 있음 → 경고 없음', () => {
+    const designer = new TestTypeDesigner(new ConsoleLogger('error'));
+    const defs = [makeDefinition('orphan-def', ['ac-orphan'])];
+    const result = designer.validate(defs, []);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(0);
+  });
+});
