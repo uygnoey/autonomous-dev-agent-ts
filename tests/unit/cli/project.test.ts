@@ -687,3 +687,203 @@ describe('ProjectCommand 추가 경계값', () => {
     }
   });
 });
+
+// ── saveRegistry 추가 경계값 ─────────────────────────────────
+
+describe('saveRegistry 추가 경계값', () => {
+  let tempDir: string;
+  let registryDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `adev-save-test-${crypto.randomUUID()}`);
+    registryDir = join(tempDir, '.adev');
+    await mkdir(registryDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('빈 projects 배열 저장 → ok', async () => {
+    const r = await saveRegistry({ activeProject: null, projects: [] }, registryDir);
+    expect(r.ok).toBe(true);
+  });
+
+  it('5개 프로젝트 저장 → ok', async () => {
+    const projects = Array.from({ length: 5 }, (_, i) => ({
+      id: `id-${i}`,
+      name: `proj-${i}`,
+      path: `/tmp/proj-${i}`,
+      createdAt: new Date(),
+      lastAccessedAt: new Date(),
+    }));
+    const r = await saveRegistry({ activeProject: 'proj-0', projects }, registryDir);
+    expect(r.ok).toBe(true);
+  });
+
+  it('저장 후 불러오면 프로젝트 이름 일치', async () => {
+    const name = `proj-save-${crypto.randomUUID().slice(0, 8)}`;
+    await saveRegistry({
+      activeProject: name,
+      projects: [{ id: 'x', name, path: '/tmp/x', createdAt: new Date(), lastAccessedAt: new Date() }],
+    }, registryDir);
+    const r = await loadRegistry(registryDir);
+    if (r.ok) {
+      expect(r.value.projects[0]?.name).toBe(name);
+    }
+  });
+
+  it('activeProject가 string인지 확인', async () => {
+    await saveRegistry({
+      activeProject: 'active-p',
+      projects: [{ id: 'y', name: 'active-p', path: '/tmp/y', createdAt: new Date(), lastAccessedAt: new Date() }],
+    }, registryDir);
+    const r = await loadRegistry(registryDir);
+    if (r.ok) {
+      expect(typeof r.value.activeProject).toBe('string');
+    }
+  });
+
+  it('3번 반복 저장/불러오기 → 마지막 상태 유지', async () => {
+    let reg = { activeProject: null as string | null, projects: [] as typeof projects };
+    const projects: Array<{ id: string; name: string; path: string; createdAt: Date; lastAccessedAt: Date }> = [];
+    for (let i = 0; i < 3; i++) {
+      projects.push({ id: `id-${i}`, name: `p${i}`, path: `/tmp/p${i}`, createdAt: new Date(), lastAccessedAt: new Date() });
+      reg = { activeProject: `p${i}`, projects: [...projects] };
+      await saveRegistry(reg, registryDir);
+    }
+    const r = await loadRegistry(registryDir);
+    if (r.ok) {
+      expect(r.value.projects.length).toBe(3);
+      expect(r.value.activeProject).toBe('p2');
+    }
+  });
+});
+
+// ── ProjectCommand switch 추가 경계값 ────────────────────────
+
+describe('ProjectCommand switch 추가 경계값', () => {
+  let tempDir: string;
+  let registryDir: string;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `adev-switch-extra-${crypto.randomUUID()}`);
+    registryDir = join(tempDir, '.adev');
+    await mkdir(registryDir, { recursive: true });
+    projectDir = join(tempDir, 'base-proj');
+    await mkdir(projectDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('switch 전 active → switch 후 active 변경 확인', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const d1 = join(tempDir, 'proj-a');
+    const d2 = join(tempDir, 'proj-b');
+    await mkdir(d1, { recursive: true });
+    await mkdir(d2, { recursive: true });
+    await cmd.execute(['add', d1], defaultOptions);
+    await cmd.execute(['add', d2], defaultOptions);
+
+    const before = await loadRegistry(registryDir);
+    expect(before.ok && before.value.activeProject).toBe('proj-a');
+
+    await cmd.execute(['switch', 'proj-b'], defaultOptions);
+    const after = await loadRegistry(registryDir);
+    expect(after.ok && after.value.activeProject).toBe('proj-b');
+  });
+
+  it('switch 3번 순환 → 마지막 값 유지', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const dirs = ['s1', 's2', 's3'].map((n) => join(tempDir, n));
+    for (const d of dirs) await mkdir(d, { recursive: true });
+    for (const d of dirs) await cmd.execute(['add', d], defaultOptions);
+
+    await cmd.execute(['switch', 's2'], defaultOptions);
+    await cmd.execute(['switch', 's3'], defaultOptions);
+    await cmd.execute(['switch', 's1'], defaultOptions);
+
+    const reg = await loadRegistry(registryDir);
+    if (reg.ok) expect(reg.value.activeProject).toBe('s1');
+  });
+
+  it('switch 에러 메시지 타입은 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['switch', 'no-such-project'], defaultOptions);
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('switch missing name → cli_project_missing_name', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['switch'], defaultOptions);
+    if (!result.ok) expect(result.error.code).toBe('cli_project_missing_name');
+  });
+});
+
+// ── ProjectCommand remove 추가 경계값 ────────────────────────
+
+describe('ProjectCommand remove 추가 경계값', () => {
+  let tempDir: string;
+  let registryDir: string;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `adev-remove-extra-${crypto.randomUUID()}`);
+    registryDir = join(tempDir, '.adev');
+    await mkdir(registryDir, { recursive: true });
+    projectDir = join(tempDir, 'remove-proj');
+    await mkdir(projectDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('remove 후 다시 add → 동일 이름 등록 가능', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    await cmd.execute(['add', projectDir], defaultOptions);
+    await cmd.execute(['remove', 'remove-proj'], defaultOptions);
+    const r = await cmd.execute(['add', projectDir], defaultOptions);
+    expect(r.ok).toBe(true);
+  });
+
+  it('remove 에러 메시지 타입은 string', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['remove', 'no-proj'], defaultOptions);
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('3개 중 중간 제거 → 남은 2개', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const dirs = ['r1', 'r2', 'r3'].map((n) => join(tempDir, n));
+    for (const d of dirs) await mkdir(d, { recursive: true });
+    for (const d of dirs) await cmd.execute(['add', d], defaultOptions);
+
+    await cmd.execute(['remove', 'r2'], defaultOptions);
+    const reg = await loadRegistry(registryDir);
+    if (reg.ok) expect(reg.value.projects.length).toBe(2);
+  });
+
+  it('3개 전부 제거 → projects=[], activeProject=null', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const dirs = ['x1', 'x2', 'x3'].map((n) => join(tempDir, n));
+    for (const d of dirs) await mkdir(d, { recursive: true });
+    for (const d of dirs) await cmd.execute(['add', d], defaultOptions);
+    for (const name of ['x1', 'x2', 'x3']) await cmd.execute(['remove', name], defaultOptions);
+
+    const reg = await loadRegistry(registryDir);
+    if (reg.ok) {
+      expect(reg.value.projects).toHaveLength(0);
+      expect(reg.value.activeProject).toBeNull();
+    }
+  });
+
+  it('remove missing name → cli_project_missing_name', async () => {
+    const cmd = new ProjectCommand(logger, registryDir);
+    const result = await cmd.execute(['remove'], defaultOptions);
+    if (!result.ok) expect(result.error.code).toBe('cli_project_missing_name');
+  });
+});

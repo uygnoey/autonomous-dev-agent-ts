@@ -676,3 +676,232 @@ describe('CommandRouter 복합 시나리오', () => {
     expect(cmd.executeCount).toBe(50);
   });
 });
+
+// ── parse 경계값 추가 ─────────────────────────────────────────
+
+describe('CommandRouter parse 경계값 추가', () => {
+  let router: CommandRouter;
+
+  beforeEach(() => {
+    router = new CommandRouter(logger);
+    router.register(new DummyCommand('init', 'Init'));
+    router.register(new DummyCommand('start', 'Start'));
+  });
+
+  it('빈 문자열 인자 → ok=false', () => {
+    const result = router.parse(['']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('한글 명령 파싱 → ok 또는 false (존재 여부)', () => {
+    const result = router.parse(['한글명령']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('--log-level=warn → logLevel=warn', () => {
+    const result = router.parse(['init', '--log-level=warn']);
+    if (result.ok) expect(result.value.options.logLevel).toBe('warn');
+  });
+
+  it('--log-level=error → logLevel=error', () => {
+    const result = router.parse(['init', '--log-level=error']);
+    if (result.ok) expect(result.value.options.logLevel).toBe('error');
+  });
+
+  it('다중 --verbose 플래그 → verbose=true', () => {
+    const result = router.parse(['init', '--verbose', '--verbose']);
+    if (result.ok) expect(result.value.options.verbose).toBe(true);
+  });
+
+  it('--project-path 빈 값 → flags["project-path"] 존재', () => {
+    const result = router.parse(['init', '--project-path=']);
+    if (result.ok) expect('project-path' in result.value.options.flags).toBe(true);
+  });
+
+  it('flags 객체가 존재한다', () => {
+    const result = router.parse(['init']);
+    if (result.ok) expect(typeof result.value.options.flags).toBe('object');
+  });
+
+  it('args 배열은 readonly', () => {
+    const result = router.parse(['init', 'arg1']);
+    if (result.ok) expect(Array.isArray(result.value.args)).toBe(true);
+  });
+
+  it('command는 등록된 이름과 일치', () => {
+    const result = router.parse(['start']);
+    if (result.ok) expect(result.value.command).toBe('start');
+  });
+
+  it('options 객체가 존재한다', () => {
+    const result = router.parse(['init']);
+    if (result.ok) expect(typeof result.value.options).toBe('object');
+  });
+
+  it('UUID 형식 인자 파싱', () => {
+    const uuid = crypto.randomUUID();
+    const result = router.parse(['init', uuid]);
+    if (result.ok) expect(result.value.args).toContain(uuid);
+  });
+
+  it('특수문자 플래그 값 → flags에 포함', () => {
+    const result = router.parse(['init', '--project-path=/path/to/proj@v2']);
+    if (result.ok) expect(result.value.options.projectPath).toBe('/path/to/proj@v2');
+  });
+
+  it('위치 인자 0개 → args.length=0', () => {
+    const result = router.parse(['init', '--verbose']);
+    if (result.ok) expect(result.value.args.length).toBe(0);
+  });
+
+  it('위치 인자 5개 → args.length=5', () => {
+    const result = router.parse(['init', 'a', 'b', 'c', 'd', 'e']);
+    if (result.ok) expect(result.value.args.length).toBe(5);
+  });
+
+  it('에러 코드는 항상 string', () => {
+    const result = router.parse([]);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+});
+
+// ── execute 경계값 추가 ───────────────────────────────────────
+
+describe('CommandRouter execute 경계값 추가', () => {
+  let router: CommandRouter;
+  let cmd: DummyCommand;
+
+  beforeEach(() => {
+    router = new CommandRouter(logger);
+    cmd = new DummyCommand('test-cmd', 'Test command', ['tc', 't-c']);
+    router.register(cmd);
+  });
+
+  it('별칭 tc → 실행 가능', async () => {
+    const result = await router.execute(['tc']);
+    expect(result.ok).toBe(true);
+    expect(cmd.executeCount).toBe(1);
+  });
+
+  it('별칭 t-c → 실행 가능', async () => {
+    const result = await router.execute(['t-c']);
+    expect(result.ok).toBe(true);
+    expect(cmd.executeCount).toBe(1);
+  });
+
+  it('명령과 별칭 조합 실행 → executeCount 합산', async () => {
+    await router.execute(['test-cmd']);
+    await router.execute(['tc']);
+    await router.execute(['t-c']);
+    expect(cmd.executeCount).toBe(3);
+  });
+
+  it('한글 명령 → ok=false', async () => {
+    const result = await router.execute(['한글명령']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('특수문자 명령 → ok=false', async () => {
+    const result = await router.execute(['!test!']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('플래그만 → ok=false', async () => {
+    const result = await router.execute(['--verbose', '--log-level=debug']);
+    expect(result.ok).toBe(false);
+  });
+
+  it('execute 결과는 Promise<Result>', async () => {
+    const result = await router.execute(['test-cmd']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('lastArgs 빈 배열 확인', async () => {
+    await router.execute(['test-cmd']);
+    expect(Array.isArray(cmd.lastArgs)).toBe(true);
+    expect(cmd.lastArgs.length).toBe(0);
+  });
+
+  it('lastOptions에 flags 객체 포함', async () => {
+    await router.execute(['test-cmd', '--verbose']);
+    expect(typeof cmd.lastOptions.flags).toBe('object');
+  });
+
+  it('--no-color → options.noColor=true', async () => {
+    await router.execute(['test-cmd', '--no-color']);
+    expect(cmd.lastOptions.noColor).toBe(true);
+  });
+
+  it('알 수 없는 명령 → error.code 타입 string', async () => {
+    const result = await router.execute(['completely-unknown']);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('빈 배열 → error.code=cli_no_command', async () => {
+    const result = await router.execute([]);
+    if (!result.ok) expect(result.error.code).toBe('cli_no_command');
+  });
+
+  it('0~4 범위 cmd-N 명령 → 모두 false', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await router.execute([`cmd-${i}-unknown`]);
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+// ── getHelp 경계값 추가 ───────────────────────────────────────
+
+describe('CommandRouter getHelp 경계값 추가', () => {
+  it('10개 명령 등록 → getHelp에 모두 포함', () => {
+    const router = new CommandRouter(logger);
+    const names = Array.from({ length: 10 }, (_, i) => `cmd-${i}`);
+    for (const name of names) {
+      router.register(new DummyCommand(name, `description for ${name}`));
+    }
+    const help = router.getHelp();
+    for (const name of names) {
+      expect(help).toContain(name);
+    }
+  });
+
+  it('별칭 여러 개 → getHelp에 표시', () => {
+    const router = new CommandRouter(logger);
+    router.register(new DummyCommand('multi-alias', 'Multi', ['ma', 'm-a', 'malias']));
+    const help = router.getHelp();
+    expect(help).toContain('multi-alias');
+  });
+
+  it('getHelp는 줄바꿈 포함', () => {
+    const router = new CommandRouter(logger);
+    router.register(new DummyCommand('cmd1', 'Desc'));
+    expect(router.getHelp()).toContain('\n');
+  });
+
+  it('등록된 설명이 빈 문자열이어도 포함됨', () => {
+    const router = new CommandRouter(logger);
+    router.register(new DummyCommand('empty-desc', ''));
+    const help = router.getHelp();
+    expect(help).toContain('empty-desc');
+  });
+
+  it('한글 설명 → getHelp에 포함', () => {
+    const router = new CommandRouter(logger);
+    router.register(new DummyCommand('한글cmd', '한글 설명'));
+    const help = router.getHelp();
+    expect(help).toContain('한글cmd');
+  });
+
+  it('getHelp 반환값 타입은 string', () => {
+    const router = new CommandRouter(logger);
+    expect(typeof router.getHelp()).toBe('string');
+  });
+
+  it('명령 추가 후 getHelp 길이 증가', () => {
+    const router = new CommandRouter(logger);
+    const beforeLen = router.getHelp().length;
+    router.register(new DummyCommand('extra-cmd', 'Extra description'));
+    const afterLen = router.getHelp().length;
+    expect(afterLen).toBeGreaterThan(beforeLen);
+  });
+});

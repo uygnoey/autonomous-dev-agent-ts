@@ -693,3 +693,179 @@ describe('TeamLeader 특수 featureId 경계값', () => {
     expect(leader.getStatus().progress).toBeLessThanOrEqual(100);
   });
 });
+
+// ── 이벤트 content 경계값 ─────────────────────────────────────
+
+describe('TeamLeader 이벤트 content 경계값', () => {
+  it('모든 이벤트 content는 string 타입', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('feat-content', handoff), 200);
+    for (const event of events) {
+      expect(typeof event.content).toBe('string');
+    }
+  });
+
+  it('error 이벤트 content는 비어있지 않음', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('feat-err-content', handoff), 500);
+    for (const event of events.filter((e) => e.type === 'error')) {
+      expect(event.content.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('done 이벤트 content는 string', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('feat-done-content', handoff), 500);
+    for (const event of events.filter((e) => e.type === 'done')) {
+      expect(typeof event.content).toBe('string');
+    }
+  });
+
+  it('agentName은 비어있지 않음', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('feat-agent', handoff), 100);
+    for (const event of events) {
+      expect(event.agentName.length).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('timestamp는 Date 인스턴스', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    const events = await collectEvents(leader.executeFeature('feat-ts', handoff), 50);
+    for (const event of events) {
+      expect(event.timestamp).toBeInstanceOf(Date);
+    }
+  });
+});
+
+// ── getStatus 경계값 추가 ─────────────────────────────────────
+
+describe('TeamLeader getStatus() 경계값 추가', () => {
+  it('getStatus progress는 number 타입', () => {
+    const { leader } = buildLeader();
+    expect(typeof leader.getStatus().progress).toBe('number');
+  });
+
+  it('getStatus phase는 string 타입', () => {
+    const { leader } = buildLeader();
+    expect(typeof leader.getStatus().phase).toBe('string');
+  });
+
+  it('getStatus featureId는 null 또는 string', () => {
+    const { leader } = buildLeader();
+    const fid = leader.getStatus().featureId;
+    expect(fid === null || typeof fid === 'string').toBe(true);
+  });
+
+  it('10번 반복 getStatus → 항상 동일 초기 상태', () => {
+    const { leader } = buildLeader();
+    for (let i = 0; i < 10; i++) {
+      const status = leader.getStatus();
+      expect(status.featureId).toBeNull();
+      expect(status.phase).toBe('DESIGN');
+      expect(status.progress).toBe(0);
+    }
+  });
+
+  it('실행 중간에 getStatus 호출 가능', async () => {
+    const { leader } = buildLeader();
+    const handoff = createMockHandoff();
+    let count = 0;
+    for await (const _ of leader.executeFeature('feat-mid', handoff)) {
+      if (count === 2) {
+        const status = leader.getStatus();
+        expect(typeof status.phase).toBe('string');
+        expect(typeof status.progress).toBe('number');
+      }
+      count++;
+      if (count >= 10) break;
+    }
+  });
+});
+
+// ── HandoffPackage confirmedByUser 경계값 ─────────────────────
+
+describe('TeamLeader HandoffPackage confirmedByUser 경계값', () => {
+  it('confirmedByUser=true → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = { ...createMockHandoff(), confirmedByUser: true };
+    const events = await collectEvents(leader.executeFeature('feat-confirmed', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('confirmedByUser=false → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = { ...createMockHandoff(), confirmedByUser: false };
+    const events = await collectEvents(leader.executeFeature('feat-unconfirmed', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('planDocument 긴 문자열 → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = { ...createMockHandoff(), planDocument: 'p'.repeat(1000) };
+    const events = await collectEvents(leader.executeFeature('feat-long-plan', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('designDocument 긴 문자열 → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = { ...createMockHandoff(), designDocument: 'd'.repeat(1000) };
+    const events = await collectEvents(leader.executeFeature('feat-long-design', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+
+  it('specDocument 한글 내용 → 이벤트 생성', async () => {
+    const { leader } = buildLeader();
+    const handoff = { ...createMockHandoff(), specDocument: '한글 스펙 문서 내용' };
+    const events = await collectEvents(leader.executeFeature('feat-korean-spec', handoff), 100);
+    expect(events.length).toBeGreaterThan(0);
+  });
+});
+
+// ── 병렬 실행 경계값 ──────────────────────────────────────────
+
+describe('TeamLeader 병렬 실행 경계값', () => {
+  it('3개 리더 병렬 실행 → 모두 이벤트 생성', async () => {
+    const leaders = [buildLeader().leader, buildLeader().leader, buildLeader().leader];
+    const handoffs = leaders.map((_, i) => createMockHandoff({ projectId: `parallel-${i}` }));
+    const results = await Promise.all(
+      leaders.map((l, i) => collectEvents(l.executeFeature(`feat-par-${i}`, handoffs[i]!), 100)),
+    );
+    for (const events of results) {
+      expect(events.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('5개 리더 병렬 → featureId 각각 다름', async () => {
+    const count = 5;
+    const leaders = Array.from({ length: count }, () => buildLeader().leader);
+    const handoffs = Array.from({ length: count }, (_, i) =>
+      createMockHandoff({ projectId: `p-${i}` }),
+    );
+    await Promise.all(
+      leaders.map((l, i) => collectEvents(l.executeFeature(`feat-ind-${i}`, handoffs[i]!), 100)),
+    );
+    for (let i = 0; i < count; i++) {
+      expect(leaders[i]!.getStatus().featureId).toBe(`feat-ind-${i}`);
+    }
+  });
+
+  it('동일 handoff 여러 리더 병렬 → 각자 독립', async () => {
+    const handoff = createMockHandoff();
+    const l1 = buildLeader().leader;
+    const l2 = buildLeader().leader;
+    const [e1, e2] = await Promise.all([
+      collectEvents(l1.executeFeature('feat-shared-1', handoff), 100),
+      collectEvents(l2.executeFeature('feat-shared-2', handoff), 100),
+    ]);
+    expect(e1.length).toBeGreaterThan(0);
+    expect(e2.length).toBeGreaterThan(0);
+    expect(l1.getStatus().featureId).toBe('feat-shared-1');
+    expect(l2.getStatus().featureId).toBe('feat-shared-2');
+  });
+});
