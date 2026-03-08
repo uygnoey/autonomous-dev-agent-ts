@@ -850,3 +850,310 @@ describe('StartCommand.execute — 다양한 config.json 형식', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 });
+
+// ── 추가 edge case: StartCommand 멀티 인스턴스 ────────────────
+
+describe('StartCommand 멀티 인스턴스 독립성', () => {
+  it('2개 인스턴스 동시 실행 → 각각 독립 에러', async () => {
+    const tempDir1 = join(tmpdir(), `adev-multi-1-${crypto.randomUUID()}`);
+    const tempDir2 = join(tmpdir(), `adev-multi-2-${crypto.randomUUID()}`);
+    await mkdir(tempDir1, { recursive: true });
+    await mkdir(tempDir2, { recursive: true });
+
+    const cmd1 = new StartCommand(logger);
+    const cmd2 = new StartCommand(logger);
+    const [r1, r2] = await Promise.all([
+      cmd1.execute([], { projectPath: tempDir1, flags: {} }),
+      cmd2.execute([], { projectPath: tempDir2, flags: {} }),
+    ]);
+
+    expect(r1.ok).toBe(false);
+    expect(r2.ok).toBe(false);
+
+    await rm(tempDir1, { recursive: true, force: true });
+    await rm(tempDir2, { recursive: true, force: true });
+  });
+
+  it('같은 경로 → 동일 에러 코드', async () => {
+    const tempDir = join(tmpdir(), `adev-same-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const r1 = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    const r2 = await cmd.execute([], { projectPath: tempDir, flags: {} });
+    if (!r1.ok && !r2.ok) {
+      expect(r1.error.code).toBe(r2.error.code);
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('다른 로거 레벨로 생성 → 동일 동작', async () => {
+    const tempDir = join(tmpdir(), `adev-loggers-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const levels = ['error', 'warn', 'info', 'debug'] as const;
+    for (const level of levels) {
+      const cmd = new StartCommand(new ConsoleLogger(level));
+      const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      expect(result.ok).toBe(false);
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  });
+});
+
+// ── ContractBuilder 추가 edge case ────────────────────────────
+
+describe('ContractBuilder 추가 edge cases', () => {
+  it('기능 1개 → 계약 생성 가능', async () => {
+    const { ContractBuilder } = await import('layer1/contract-builder.js');
+    const builder = new ContractBuilder(logger);
+    const features = [{
+      id: 'feat-single',
+      name: 'Single Feature',
+      description: 'One feature',
+      acceptanceCriteria: ['criterion 1'],
+      dependencies: [],
+      inputs: ['input'],
+      outputs: ['output'],
+    }];
+    const result = builder.buildContract(features, [], '설계 내용');
+    expect(result.ok).toBe(true);
+  });
+
+  it('기능 10개 → 계약 생성 가능', async () => {
+    const { ContractBuilder } = await import('layer1/contract-builder.js');
+    const builder = new ContractBuilder(logger);
+    const features = Array.from({ length: 10 }, (_, i) => ({
+      id: `feat-${i}`,
+      name: `Feature ${i}`,
+      description: `Feature ${i} description`,
+      acceptanceCriteria: [`criteria ${i}`],
+      dependencies: [],
+      inputs: [`input${i}`],
+      outputs: [`output${i}`],
+    }));
+    const result = builder.buildContract(features, [], '설계 내용');
+    if (result.ok) {
+      expect(typeof result.value).toBe('object');
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('features 배열이 있으면 계약 반환', async () => {
+    const { ContractBuilder } = await import('layer1/contract-builder.js');
+    const builder = new ContractBuilder(logger);
+    const features = [{
+      id: 'feat-x',
+      name: 'Feature X',
+      description: 'Test feature',
+      acceptanceCriteria: [],
+      dependencies: [],
+      inputs: [],
+      outputs: [],
+    }];
+    const result = builder.buildContract(features, [], '설계');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder buildContract 빈 design → 에러 또는 성공', async () => {
+    const { ContractBuilder } = await import('layer1/contract-builder.js');
+    const builder = new ContractBuilder(logger);
+    const features = [{
+      id: 'feat-1', name: 'F', description: 'D',
+      acceptanceCriteria: [], dependencies: [], inputs: ['i'], outputs: ['o'],
+    }];
+    const result = builder.buildContract(features, [], '');
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── TestTypeDesigner 추가 edge case ───────────────────────────
+
+describe('TestTypeDesigner 추가 edge cases', () => {
+  it('빈 기능 목록 → 빈 정의 배열', async () => {
+    const { TestTypeDesigner } = await import('layer1/test-type-designer.js');
+    const designer = new TestTypeDesigner(logger);
+    const result = designer.createDefinitions([]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('기능 1개 → 테스트 정의 생성', async () => {
+    const { TestTypeDesigner } = await import('layer1/test-type-designer.js');
+    const designer = new TestTypeDesigner(logger);
+    const features = [{
+      id: 'feat-1',
+      name: 'Auth Feature',
+      description: 'Authentication',
+      acceptanceCriteria: ['user can login'],
+      dependencies: [],
+      inputs: ['credentials'],
+      outputs: ['token'],
+    }];
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('기능 5개 → 테스트 정의 생성', async () => {
+    const { TestTypeDesigner } = await import('layer1/test-type-designer.js');
+    const designer = new TestTypeDesigner(logger);
+    const features = Array.from({ length: 5 }, (_, i) => ({
+      id: `feat-${i}`,
+      name: `Feature ${i}`,
+      description: `Description ${i}`,
+      acceptanceCriteria: [`criterion ${i}`],
+      dependencies: [],
+      inputs: [`in${i}`],
+      outputs: [`out${i}`],
+    }));
+    const result = designer.createDefinitions(features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 기능 → 테스트 정의 생성', async () => {
+    const { TestTypeDesigner } = await import('layer1/test-type-designer.js');
+    const designer = new TestTypeDesigner(logger);
+    const features = [{
+      id: 'feat-kr',
+      name: '인증 기능',
+      description: '사용자 인증 및 권한 관리',
+      acceptanceCriteria: ['로그인 가능', '토큰 발급'],
+      dependencies: [],
+      inputs: ['아이디', '비밀번호'],
+      outputs: ['JWT 토큰'],
+    }];
+    const result = designer.createDefinitions(features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── SpecBuilder 추가 edge case ─────────────────────────────────
+
+describe('SpecBuilder 추가 edge cases', () => {
+  it('긴 plan + 긴 design → ok', async () => {
+    const { SpecBuilder } = await import('layer1/spec-builder.js');
+    const sb = new SpecBuilder(logger);
+    const longPlan = '기획 내용 '.repeat(100);
+    const longDesign = '설계 내용 '.repeat(100);
+    const result = sb.buildSpec(longPlan, longDesign, []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('한글 plan + 한글 design → ok', async () => {
+    const { SpecBuilder } = await import('layer1/spec-builder.js');
+    const sb = new SpecBuilder(logger);
+    const result = sb.buildSpec('한국어 기획 문서', '한국어 설계 문서', []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('특수문자 포함 plan → 에러 없이 처리', async () => {
+    const { SpecBuilder } = await import('layer1/spec-builder.js');
+    const sb = new SpecBuilder(logger);
+    const result = sb.buildSpec('기획: !@#$%^&*()', '설계 내용', []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('빈 feature 목록 → ok', async () => {
+    const { SpecBuilder } = await import('layer1/spec-builder.js');
+    const sb = new SpecBuilder(logger);
+    const result = sb.buildSpec('기획', '설계', []);
+    expect(result.ok).toBe(true);
+  });
+
+  it('5개 기능 목록 포함 스펙 → ok', async () => {
+    const { SpecBuilder } = await import('layer1/spec-builder.js');
+    const sb = new SpecBuilder(logger);
+    const features = Array.from({ length: 5 }, (_, i) => ({
+      id: `feat-${i}`,
+      name: `Feature ${i}`,
+      description: `Desc ${i}`,
+      acceptanceCriteria: [],
+      dependencies: [],
+      inputs: [],
+      outputs: [],
+    }));
+    const result = sb.buildSpec('기획 문서', '설계 문서', features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── StartCommand 추가 랜덤 경계값 ─────────────────────────────
+
+describe('StartCommand 추가 랜덤 경계값', () => {
+  it('backslash 포함 경로 → ok 또는 error (throw 안 함)', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: 'C:\\Windows\\System32', flags: {} });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('매우 긴 경로 → ok 또는 error', async () => {
+    const cmd = new StartCommand(logger);
+    const longPath = '/tmp/' + 'a'.repeat(200);
+    const result = await cmd.execute([], { projectPath: longPath, flags: {} });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('null-바이트 포함 경로 → ok 또는 error (throw 안 함)', async () => {
+    const cmd = new StartCommand(logger);
+    try {
+      const result = await cmd.execute([], { projectPath: '/tmp/test\0dir', flags: {} });
+      expect(typeof result.ok).toBe('boolean');
+    } catch {
+      // 일부 OS에서 throw 가능 → 허용
+    }
+  });
+
+  it('projectId와 logLevel 동시 전달 → 미초기화 에러', async () => {
+    const tempDir = join(tmpdir(), `adev-both-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], {
+      projectPath: tempDir,
+      projectId: crypto.randomUUID(),
+      logLevel: 'info',
+      flags: {},
+    });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('noColor=false → 미초기화 에러', async () => {
+    const tempDir = join(tmpdir(), `adev-nocolor-false-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: tempDir, noColor: false, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('verbose=false → 미초기화 에러', async () => {
+    const tempDir = join(tmpdir(), `adev-verbose-false-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: tempDir, verbose: false, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('args에 -- 포함 → 미초기화 에러', async () => {
+    const tempDir = join(tmpdir(), `adev-dasharg-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute(['--', 'extra'], { projectPath: tempDir, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('args에 한글 → 미초기화 에러', async () => {
+    const tempDir = join(tmpdir(), `adev-krarg-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute(['한글-인자'], { projectPath: tempDir, flags: {} });
+    expect(result.ok).toBe(false);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+});

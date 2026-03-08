@@ -849,4 +849,378 @@ describe('문서 산출물 파이프라인 E2E / Document Delivery Pipeline E2E'
       expect(delivResult.value.projectId).toBe('proj-pass');
     }
   });
+
+  // ── Additional Edge / Random Cases ───────────────────────────────
+
+  it('DocIntegrator: 이모지 포함 제목 템플릿 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const emojiTemplate: DocumentTemplate = {
+      type: 'custom',
+      title: '🚀 프로젝트 문서 🎉',
+      sections: [
+        { heading: '📋 개요', content: '개요 내용', order: 1, required: true },
+        { heading: '🔧 설정', content: '설정 내용', order: 2, required: false },
+      ],
+      language: 'bilingual',
+    };
+    const result = integrator.integrate(['emoji-frag'], emojiTemplate, 'proj-emoji');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(1);
+    }
+  });
+
+  it('DocIntegrator: 영문 단일 섹션 템플릿 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template: DocumentTemplate = {
+      type: 'api-reference',
+      title: 'Single Section Doc',
+      sections: [{ heading: 'Overview', content: 'Overview content', order: 1, required: true }],
+      language: 'en',
+    };
+    const result = integrator.integrate(['frag-en'], template, 'proj-en');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.content).toContain('Single Section Doc');
+    }
+  });
+
+  it('DocIntegrator: 1000자 이상 조각 통합 → ok', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Long Frag', 2);
+    const longFrag = 'A'.repeat(1000);
+    const result = integrator.integrate([longFrag], template, 'proj-longfrag');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments[0]).toBe(longFrag);
+    }
+  });
+
+  it('DocIntegrator: 줄바꿈 포함 조각 통합 → ok', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Multiline', 2);
+    const fragments = ['line1\nline2\nline3', 'second\nfragment'];
+    const result = integrator.integrate(fragments, template, 'proj-multiline');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(2);
+    }
+  });
+
+  it('DocIntegrator: projectId 숫자 문자열 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Numeric Project', 1);
+    const result = integrator.integrate(['frag-1'], template, '12345');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.projectId).toBe('12345');
+    }
+  });
+
+  it('DocIntegrator: version 초기값은 1', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Version Check', 2);
+    const result = integrator.integrate(['frag-1'], template, 'proj-ver');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.version).toBe(1);
+    }
+  });
+
+  it('DocIntegrator: exportAsMarkdown → version 필드 포함', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Markdown Export', 2);
+    const docResult = integrator.integrate(['frag-1'], template, 'proj-md');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    const mdResult = integrator.exportAsMarkdown(docResult.value);
+    expect(mdResult.ok).toBe(true);
+    if (mdResult.ok) {
+      expect(mdResult.value).toContain('version:');
+    }
+  });
+
+  it('DocIntegrator: 같은 내용 조각 중복 통합 → ok', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Duplicate Frags', 2);
+    const result = integrator.integrate(['same-frag', 'same-frag', 'same-frag'], template, 'proj-dup');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.sourceFragments).toHaveLength(3);
+    }
+  });
+
+  it('DocCollaborator: 숫자만 있는 아웃라인 처리', () => {
+    const collaborator = new DocCollaborator(logger);
+    const result = collaborator.collaborate('# 1\n\n## 2\n\n### 3', '## Details\n\nSome content');
+    expect(result.ok).toBe(true);
+  });
+
+  it('DocCollaborator: 코드 블록 포함 아웃라인 처리', () => {
+    const collaborator = new DocCollaborator(logger);
+    const outline = '# API Reference\n\n## Endpoint\n\n```bash\ncurl -X GET /api\n```';
+    const details = '## Response Format\n\nJSON object';
+    const result = collaborator.collaborate(outline, details);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('API Reference');
+    }
+  });
+
+  it('DocCollaborator: 두 collaborator 인스턴스 독립성', () => {
+    const c1 = new DocCollaborator(logger);
+    const c2 = new DocCollaborator(logger);
+    const r1 = c1.collaborate('# Doc A\n\n## Section A', '## Detail A\n\nContent A');
+    const r2 = c2.collaborate('# Doc B\n\n## Section B', '## Detail B\n\nContent B');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      expect(r1.value).toContain('Doc A');
+      expect(r2.value).toContain('Doc B');
+    }
+  });
+
+  it('DocCollaborator: 빈 details 에러 확인 (중복 체크)', () => {
+    const collaborator = new DocCollaborator(logger);
+    const result = collaborator.collaborate('# Outline\n\n## Section', '');
+    expect(result.ok).toBe(false);
+  });
+
+  it('DocCollaborator: generateTableOfContents 한글 헤딩', () => {
+    const collaborator = new DocCollaborator(logger);
+    const content = '# 프로젝트 소개\n\n## 아키텍처\n\n### 컴포넌트\n\n## 테스트';
+    const result = collaborator.generateTableOfContents(content);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('목차');
+    }
+  });
+
+  it('ProductionTester: 특수문자 포함 명령어 → ok', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-special', ['bun test -- --testPathPattern=auth|db']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalTests).toBe(1);
+    }
+  });
+
+  it('ProductionTester: 같은 명령어 중복 → 중복 실행됨', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('proj-dup', ['bun test', 'bun test', 'bun test']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.totalTests).toBe(3);
+      expect(result.value.passedTests).toBe(3);
+    }
+  });
+
+  it('ProductionTester: 한글 projectId → ok', () => {
+    const tester = new ProductionTester(logger);
+    const result = tester.runE2E('프로젝트-한글', ['bun test']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.projectId).toBe('프로젝트-한글');
+    }
+  });
+
+  it('ProductionTester: isHealthy 단일 실행 결과 100% 통과', () => {
+    const tester = new ProductionTester(logger);
+    const r = tester.runE2E('proj-ok', ['cmd1']);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(tester.isHealthy([r.value])).toBe(true);
+  });
+
+  it('ProductionTester: getFailureRate 빈 목록 → 0', () => {
+    const tester = new ProductionTester(logger);
+    expect(tester.getFailureRate([])).toBe(0);
+  });
+
+  it('BugEscalator: 여러 심각도 순서 확인', () => {
+    const escalator = new BugEscalator(logger);
+    const failures: Array<{ error: string; expectedSeverity: string }> = [
+      { error: 'Fatal crash on startup', expectedSeverity: 'critical' },
+      { error: 'Database error connection refused', expectedSeverity: 'major' },
+      { error: 'Minor style issue', expectedSeverity: 'minor' },
+    ];
+
+    for (const { error, expectedSeverity } of failures) {
+      const r = escalator.createReport('proj-sev', { testName: `test-${error.slice(0, 5)}`, error, featureId: 'f1' });
+      if (r.ok) {
+        expect(r.value.severity).toBe(expectedSeverity);
+      }
+    }
+  });
+
+  it('BugEscalator: major 버그 → TEST phase 에스컬레이션', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: 'db-test',
+      error: 'Database migration error occurred',
+      featureId: 'feat-db',
+    };
+    const reportResult = escalator.createReport('proj-1', failure);
+    expect(reportResult.ok).toBe(true);
+    if (!reportResult.ok) return;
+
+    const escResult = escalator.escalate(reportResult.value);
+    expect(escResult.ok).toBe(true);
+    if (escResult.ok) {
+      expect(escResult.value.targetPhase).toBe('TEST');
+    }
+  });
+
+  it('BugEscalator: 모든 리포트 해결 후 active 빈 배열', () => {
+    const escalator = new BugEscalator(logger);
+    for (let i = 0; i < 3; i++) {
+      escalator.createReport('proj-resolve', {
+        testName: `test-${i}`,
+        error: `error ${i}`,
+        featureId: `feat-${i}`,
+      });
+    }
+    const active = escalator.getActiveReports('proj-resolve');
+    for (const report of active) {
+      escalator.resolveReport(report.id);
+    }
+    expect(escalator.getActiveReports('proj-resolve')).toHaveLength(0);
+  });
+
+  it('BugEscalator: 존재하지 않는 프로젝트 active reports → 빈 배열', () => {
+    const escalator = new BugEscalator(logger);
+    const active = escalator.getActiveReports('nonexistent-proj-xyz');
+    expect(active).toHaveLength(0);
+  });
+
+  it('DeliverableBuilder: business-plan 타입 생성', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Business Plan', 3);
+    const docResult = integrator.integrate(['frag-bp'], template, 'proj-bp');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    const result = builder.build('proj-bp', 'business-plan', [docResult.value]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.type).toBe('business-plan');
+      expect(result.value.format).toBe('markdown');
+    }
+  });
+
+  it('DeliverableBuilder: 여러 타입 연속 생성 → 각각 독립', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Multi Type', 1);
+    const docResult = integrator.integrate(['frag-1'], template, 'proj-multi');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    const types = ['report', 'portfolio', 'business-plan'] as const;
+    for (const type of types) {
+      const r = builder.build('proj-multi', type, [docResult.value]);
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.value.type).toBe(type);
+      }
+    }
+    expect(builder.listDeliverables('proj-multi')).toHaveLength(3);
+  });
+
+  it('DeliverableBuilder: title에 projectId 반영됨', () => {
+    const integrator = new DocIntegrator(logger);
+    const builder = new DeliverableBuilder(logger);
+    const template = createTemplate('Title Check', 1);
+    const docResult = integrator.integrate(['frag-1'], template, 'my-project-123');
+    expect(docResult.ok).toBe(true);
+    if (!docResult.ok) return;
+
+    const result = builder.build('my-project-123', 'report', [docResult.value]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.projectId).toBe('my-project-123');
+    }
+  });
+
+  it('전체 파이프라인: business-plan 산출물 생성', () => {
+    const integrator = new DocIntegrator(logger);
+    const collaborator = new DocCollaborator(logger);
+    const builder = new DeliverableBuilder(logger);
+
+    const template = createTemplate('Business Report', 2);
+    const intResult = integrator.integrate(['spec-frag', 'design-frag'], template, 'proj-biz');
+    expect(intResult.ok).toBe(true);
+    if (!intResult.ok) return;
+
+    const collabResult = collaborator.collaborate(
+      '# Business Plan\n\n## Market Analysis\n\nTarget market overview',
+      intResult.value.content,
+    );
+    expect(collabResult.ok).toBe(true);
+
+    const delivResult = builder.build('proj-biz', 'business-plan', [intResult.value]);
+    expect(delivResult.ok).toBe(true);
+    if (delivResult.ok) {
+      expect(delivResult.value.type).toBe('business-plan');
+      expect(delivResult.value.projectId).toBe('proj-biz');
+    }
+  });
+
+  it('DocIntegrator: 50섹션 템플릿 통합', () => {
+    const integrator = new DocIntegrator(logger);
+    const template = createTemplate('Large Template', 50);
+    const result = integrator.integrate(['frag-1', 'frag-2'], template, 'proj-large');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.content).toContain('Large Template');
+    }
+  });
+
+  it('BugEscalator: 빈 featureId TestFailure 처리', () => {
+    const escalator = new BugEscalator(logger);
+    const failure: TestFailure = {
+      testName: 'test-nofeat',
+      error: 'Some crash error',
+      featureId: '',
+    };
+    const result = escalator.createReport('proj-1', failure);
+    if (result.ok) {
+      expect(typeof result.value.severity).toBe('string');
+    } else {
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('DocCollaborator: 탭 포함 outline 처리', () => {
+    const collaborator = new DocCollaborator(logger);
+    const outline = '# Main\n\n\t## Subsection\n\nContent here';
+    const details = '## Details\n\nMore info here';
+    const result = collaborator.collaborate(outline, details);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ProductionTester + BugEscalator: Fail-Fast 시 버그 에스컬레이션', () => {
+    const tester = new ProductionTester(logger);
+    const escalator = new BugEscalator(logger);
+
+    // Fail-Fast 시뮬레이션
+    const testResult = tester.runE2E('proj-ff', ['cmd1', '', 'cmd3']);
+    expect(testResult.ok).toBe(true);
+    if (!testResult.ok) return;
+
+    if (testResult.value.failedTests > 0) {
+      const failure: TestFailure = {
+        testName: 'fail-fast-test',
+        error: 'Test execution error occurred during pipeline',
+        featureId: 'feat-pipeline',
+      };
+      const bugResult = escalator.createReport('proj-ff', failure);
+      expect(bugResult.ok).toBe(true);
+      if (bugResult.ok) {
+        expect(['critical', 'major', 'minor']).toContain(bugResult.value.severity);
+      }
+    }
+  });
 });

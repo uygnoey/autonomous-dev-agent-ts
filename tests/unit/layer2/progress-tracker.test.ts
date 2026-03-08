@@ -117,14 +117,35 @@ describe('ProgressTracker initFeature', () => {
     expect(r2.ok).toBe(true);
   });
 
-  it.each(['feat-1', 'feat-abc', 'feature-long-name-123', 'f', 'feat-x-y-z'])(
-    'featureId %s → ok 반환',
-    (featureId) => {
-      const result = tracker.initFeature(featureId);
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value.featureId).toBe(featureId);
-    },
-  );
+  it('featureId feat-1 → ok 반환', () => {
+    const result = tracker.initFeature('feat-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feat-1');
+  });
+
+  it('featureId feat-abc → ok 반환', () => {
+    const result = tracker.initFeature('feat-abc');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feat-abc');
+  });
+
+  it('featureId feature-long-name-123 → ok 반환', () => {
+    const result = tracker.initFeature('feature-long-name-123');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feature-long-name-123');
+  });
+
+  it('featureId f → ok 반환', () => {
+    const result = tracker.initFeature('f');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('f');
+  });
+
+  it('featureId feat-x-y-z → ok 반환', () => {
+    const result = tracker.initFeature('feat-x-y-z');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.featureId).toBe('feat-x-y-z');
+  });
 
   it('100개 기능 초기화 → 모두 ok', () => {
     for (let i = 0; i < 100; i++) {
@@ -145,11 +166,46 @@ describe('ProgressTracker updateStatus', () => {
     tracker.initFeature('feat-1');
   });
 
-  it.each(ALL_STATUSES)('status %s로 갱신 → ok', (status) => {
-    const result = tracker.updateStatus('feat-1', status);
+  it('status pending으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'pending');
     expect(result.ok).toBe(true);
-    const progress = tracker.getProgress('feat-1');
-    expect(progress?.status).toBe(status);
+    expect(tracker.getProgress('feat-1')?.status).toBe('pending');
+  });
+
+  it('status designing으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'designing');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('designing');
+  });
+
+  it('status coding으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'coding');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('coding');
+  });
+
+  it('status testing으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'testing');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('testing');
+  });
+
+  it('status verifying으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'verifying');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('verifying');
+  });
+
+  it('status complete으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'complete');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('complete');
+  });
+
+  it('status failed으로 갱신 → ok', () => {
+    const result = tracker.updateStatus('feat-1', 'failed');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.status).toBe('failed');
   });
 
   it('존재하지 않는 featureId → err', () => {
@@ -203,10 +259,28 @@ describe('ProgressTracker updatePhase', () => {
     tracker.initFeature('feat-1');
   });
 
-  it.each(ALL_PHASES)('Phase %s로 갱신 → ok', (phase) => {
-    const result = tracker.updatePhase('feat-1', phase);
+  it('Phase DESIGN으로 갱신 → ok', () => {
+    const result = tracker.updatePhase('feat-1', 'DESIGN');
     expect(result.ok).toBe(true);
-    expect(tracker.getProgress('feat-1')?.currentPhase).toBe(phase);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('DESIGN');
+  });
+
+  it('Phase CODE으로 갱신 → ok', () => {
+    const result = tracker.updatePhase('feat-1', 'CODE');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('CODE');
+  });
+
+  it('Phase TEST으로 갱신 → ok', () => {
+    const result = tracker.updatePhase('feat-1', 'TEST');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('TEST');
+  });
+
+  it('Phase VERIFY으로 갱신 → ok', () => {
+    const result = tracker.updatePhase('feat-1', 'VERIFY');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('VERIFY');
   });
 
   it('DESIGN → CODE 전환 시 DESIGN이 completedPhases에 추가', () => {
@@ -282,11 +356,28 @@ describe('ProgressTracker addVerification', () => {
     expect(progress?.verificationResults).toHaveLength(1);
   });
 
-  it.each(ALL_VERIFICATION_PHASES)('검증 Phase %s 추가 → ok', (phase) => {
-    const result = tracker.addVerification('feat-1', makeVerification('feat-1', phase));
+  it('검증 Phase qa_qc 추가 → ok', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc'));
     expect(result.ok).toBe(true);
-    const progress = tracker.getProgress('feat-1');
-    expect(progress?.verificationResults.some((v) => v.phase === phase)).toBe(true);
+    expect(tracker.getProgress('feat-1')?.verificationResults.some((v) => v.phase === 'qa_qc')).toBe(true);
+  });
+
+  it('검증 Phase reviewer 추가 → ok', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'reviewer'));
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.verificationResults.some((v) => v.phase === 'reviewer')).toBe(true);
+  });
+
+  it('검증 Phase layer1 추가 → ok', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'layer1'));
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.verificationResults.some((v) => v.phase === 'layer1')).toBe(true);
+  });
+
+  it('검증 Phase adev 추가 → ok', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'adev'));
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.verificationResults.some((v) => v.phase === 'adev')).toBe(true);
   });
 
   it('4개 검증 Phase 모두 추가', () => {
@@ -345,10 +436,19 @@ describe('ProgressTracker getProgress', () => {
     expect(tracker.getProgress('')).toBeNull();
   });
 
-  it.each(['feat-a', 'feat-b', 'feat-c'])('기능 %s 조회', (featureId) => {
-    tracker.initFeature(featureId);
-    const progress = tracker.getProgress(featureId);
-    expect(progress?.featureId).toBe(featureId);
+  it('기능 feat-a 조회', () => {
+    tracker.initFeature('feat-a');
+    expect(tracker.getProgress('feat-a')?.featureId).toBe('feat-a');
+  });
+
+  it('기능 feat-b 조회', () => {
+    tracker.initFeature('feat-b');
+    expect(tracker.getProgress('feat-b')?.featureId).toBe('feat-b');
+  });
+
+  it('기능 feat-c 조회', () => {
+    tracker.initFeature('feat-c');
+    expect(tracker.getProgress('feat-c')?.featureId).toBe('feat-c');
   });
 });
 
@@ -444,16 +544,59 @@ describe('ProgressTracker getOverallCompletion', () => {
     expect(tracker.getOverallCompletion()).toBe(0.5);
   });
 
-  it.each([1, 2, 3, 4, 5, 10])('%i개 기능 모두 complete → getOverallCompletion = 1', (n) => {
-    for (let i = 0; i < n; i++) {
-      tracker.initFeature(`feat-${i}`);
-      tracker.updateStatus(`feat-${i}`, 'complete');
-    }
+  it('1개 기능 모두 complete → getOverallCompletion = 1', () => {
+    tracker.initFeature('feat-0');
+    tracker.updateStatus('feat-0', 'complete');
     expect(tracker.getOverallCompletion()).toBe(1);
   });
 
-  it.each([1, 2, 3, 4, 5])('%i개 기능 모두 pending → getOverallCompletion = 0', (n) => {
-    for (let i = 0; i < n; i++) tracker.initFeature(`feat-${i}`);
+  it('2개 기능 모두 complete → getOverallCompletion = 1', () => {
+    for (let i = 0; i < 2; i++) { tracker.initFeature(`feat-${i}`); tracker.updateStatus(`feat-${i}`, 'complete'); }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('3개 기능 모두 complete → getOverallCompletion = 1', () => {
+    for (let i = 0; i < 3; i++) { tracker.initFeature(`feat-${i}`); tracker.updateStatus(`feat-${i}`, 'complete'); }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('4개 기능 모두 complete → getOverallCompletion = 1', () => {
+    for (let i = 0; i < 4; i++) { tracker.initFeature(`feat-${i}`); tracker.updateStatus(`feat-${i}`, 'complete'); }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('5개 기능 모두 complete → getOverallCompletion = 1', () => {
+    for (let i = 0; i < 5; i++) { tracker.initFeature(`feat-${i}`); tracker.updateStatus(`feat-${i}`, 'complete'); }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('10개 기능 모두 complete → getOverallCompletion = 1', () => {
+    for (let i = 0; i < 10; i++) { tracker.initFeature(`feat-${i}`); tracker.updateStatus(`feat-${i}`, 'complete'); }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('1개 기능 모두 pending → getOverallCompletion = 0', () => {
+    tracker.initFeature('feat-0');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('2개 기능 모두 pending → getOverallCompletion = 0', () => {
+    for (let i = 0; i < 2; i++) tracker.initFeature(`feat-${i}`);
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('3개 기능 모두 pending → getOverallCompletion = 0', () => {
+    for (let i = 0; i < 3; i++) tracker.initFeature(`feat-${i}`);
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('4개 기능 모두 pending → getOverallCompletion = 0', () => {
+    for (let i = 0; i < 4; i++) tracker.initFeature(`feat-${i}`);
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('5개 기능 모두 pending → getOverallCompletion = 0', () => {
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-${i}`);
     expect(tracker.getOverallCompletion()).toBe(0);
   });
 });
@@ -855,5 +998,287 @@ describe('ProgressTracker addVerification 추가 경계값', () => {
     // any phase type - verify it was stored
     const results = tracker.getProgress('feat-1')?.verificationResults ?? [];
     expect(results.length).toBeGreaterThan(0);
+  });
+});
+
+// ── 추가 edge case: getProgress 경계값 ───────────────────────
+
+describe('ProgressTracker getProgress 추가 경계값', () => {
+  it('initFeature 없이 getProgress → null', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    expect(tracker.getProgress('nonexistent')).toBeNull();
+  });
+
+  it('UUID featureId → 초기화 후 조회', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    const uuid = '550e8400-e29b-41d4-a716-446655440001';
+    tracker.initFeature(uuid);
+    const progress = tracker.getProgress(uuid);
+    expect(progress?.featureId).toBe(uuid);
+  });
+
+  it('특수문자 featureId → 초기화 후 조회', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat!@#');
+    const progress = tracker.getProgress('feat!@#');
+    expect(progress?.featureId).toBe('feat!@#');
+  });
+
+  it('공백 포함 featureId → 초기화 후 조회', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat with spaces');
+    const progress = tracker.getProgress('feat with spaces');
+    expect(progress?.featureId).toBe('feat with spaces');
+  });
+
+  it('다른 featureId 조회 → null', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    expect(tracker.getProgress('feat-2')).toBeNull();
+  });
+
+  it('대소문자 구분 → 다른 featureId', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('FEAT-1');
+    expect(tracker.getProgress('feat-1')).toBeNull();
+    expect(tracker.getProgress('FEAT-1')).not.toBeNull();
+  });
+
+  it('숫자 featureId → 조회 ok', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('99999');
+    const progress = tracker.getProgress('99999');
+    expect(progress?.featureId).toBe('99999');
+  });
+
+  it('이모지 featureId → 초기화 후 조회', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-🚀');
+    const progress = tracker.getProgress('feat-🚀');
+    expect(progress?.featureId).toBe('feat-🚀');
+  });
+});
+
+// ── 추가 edge case: getOverallCompletion 경계값 ──────────────
+
+describe('ProgressTracker getOverallCompletion 추가 경계값', () => {
+  it('100개 기능 중 0개 complete → 0', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      tracker.initFeature(`feat-${i}`);
+    }
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('100개 기능 중 100개 complete → 1', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      tracker.initFeature(`feat-${i}`);
+      tracker.updateStatus(`feat-${i}`, 'complete');
+    }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('100개 기능 중 50개 complete → 0.5', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      tracker.initFeature(`feat-${i}`);
+    }
+    for (let i = 0; i < 50; i++) {
+      tracker.updateStatus(`feat-${i}`, 'complete');
+    }
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('1개 failed → 0', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.updateStatus('feat-1', 'failed');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('2개 중 1개 failed 1개 complete → 0.5', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.initFeature('feat-2');
+    tracker.updateStatus('feat-1', 'failed');
+    tracker.updateStatus('feat-2', 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('designing 상태는 완료율에 포함 안 됨', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.updateStatus('feat-1', 'designing');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('coding 상태는 완료율에 포함 안 됨', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.updateStatus('feat-1', 'coding');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('testing 상태는 완료율에 포함 안 됨', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.updateStatus('feat-1', 'testing');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('verifying 상태는 완료율에 포함 안 됨', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+    tracker.updateStatus('feat-1', 'verifying');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('getOverallCompletion 반환 범위 [0, 1]', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 10; i++) {
+      tracker.initFeature(`feat-${i}`);
+      if (i % 3 === 0) tracker.updateStatus(`feat-${i}`, 'complete');
+    }
+    const ratio = tracker.getOverallCompletion();
+    expect(ratio).toBeGreaterThanOrEqual(0);
+    expect(ratio).toBeLessThanOrEqual(1);
+  });
+});
+
+// ── 추가 edge case: getAllProgress 경계값 ─────────────────────
+
+describe('ProgressTracker getAllProgress 추가 경계값', () => {
+  it('50개 초기화 → 50개 반환', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 50; i++) {
+      tracker.initFeature(`feat-${i}`);
+    }
+    expect(tracker.getAllProgress()).toHaveLength(50);
+  });
+
+  it('initFeature 없이 getAllProgress → 빈 배열', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    const all = tracker.getAllProgress();
+    expect(all).toHaveLength(0);
+    expect(Array.isArray(all)).toBe(true);
+  });
+
+  it('getAllProgress 각 항목 featureId 고유', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    const ids = ['feat-a', 'feat-b', 'feat-c', 'feat-d', 'feat-e'];
+    for (const id of ids) tracker.initFeature(id);
+    const all = tracker.getAllProgress();
+    const uniqueIds = new Set(all.map((p) => p.featureId));
+    expect(uniqueIds.size).toBe(5);
+  });
+
+  it('getAllProgress 각 항목 status 초기값 pending', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-${i}`);
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(p.status).toBe('pending');
+    }
+  });
+
+  it('getAllProgress 각 항목 currentPhase 초기값 DESIGN', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-${i}`);
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(p.currentPhase).toBe('DESIGN');
+    }
+  });
+
+  it('getAllProgress 각 항목 verificationResults 초기 빈 배열', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-${i}`);
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(p.verificationResults).toHaveLength(0);
+    }
+  });
+});
+
+// ── 추가 edge case: 복합 시나리오 ─────────────────────────────
+
+describe('ProgressTracker 복합 시나리오 추가', () => {
+  it('5개 기능 각각 전체 라이프사이클 → 완료율 1', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) {
+      tracker.initFeature(`feat-lc-${i}`);
+      tracker.updatePhase(`feat-lc-${i}`, 'CODE');
+      tracker.updatePhase(`feat-lc-${i}`, 'TEST');
+      tracker.updatePhase(`feat-lc-${i}`, 'VERIFY');
+      for (const phase of ALL_VERIFICATION_PHASES) {
+        tracker.addVerification(`feat-lc-${i}`, makeVerification(`feat-lc-${i}`, phase, true));
+      }
+      tracker.updateStatus(`feat-lc-${i}`, 'complete');
+    }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('initFeature 연속 성공 후 중복 → err 코드 일치', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-dup2');
+    tracker.initFeature('feat-dup2');
+    const r = tracker.initFeature('feat-dup2');
+    if (!r.ok) expect(r.error.code).toBe('agent_feature_exists');
+  });
+
+  it('updateStatus + updatePhase 교차 → 상태 독립', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-cross');
+    tracker.updateStatus('feat-cross', 'designing');
+    tracker.updatePhase('feat-cross', 'CODE');
+    tracker.updateStatus('feat-cross', 'coding');
+    tracker.updatePhase('feat-cross', 'TEST');
+    const progress = tracker.getProgress('feat-cross');
+    expect(progress?.status).toBe('coding');
+    expect(progress?.currentPhase).toBe('TEST');
+  });
+
+  it('addVerification 후 getProgress → verificationResults 순서 보존', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-order');
+    tracker.addVerification('feat-order', makeVerification('feat-order', 'qa_qc', true));
+    tracker.addVerification('feat-order', makeVerification('feat-order', 'reviewer', false));
+    tracker.addVerification('feat-order', makeVerification('feat-order', 'layer1', true));
+    tracker.addVerification('feat-order', makeVerification('feat-order', 'adev', true));
+    const results = tracker.getProgress('feat-order')?.verificationResults ?? [];
+    expect(results[0]?.phase).toBe('qa_qc');
+    expect(results[1]?.phase).toBe('reviewer');
+    expect(results[2]?.phase).toBe('layer1');
+    expect(results[3]?.phase).toBe('adev');
+  });
+
+  it('updatePhase → updateStatus → addVerification 연속 → 정합성 확인', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-seq');
+    tracker.updatePhase('feat-seq', 'CODE');
+    tracker.updateStatus('feat-seq', 'coding');
+    tracker.addVerification('feat-seq', makeVerification('feat-seq', 'qa_qc', true));
+    const progress = tracker.getProgress('feat-seq');
+    expect(progress?.currentPhase).toBe('CODE');
+    expect(progress?.status).toBe('coding');
+    expect(progress?.verificationResults).toHaveLength(1);
+  });
+
+  it('getOverallCompletion 완료 후 상태 failed 전환 → 완료율 감소', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-revert');
+    tracker.updateStatus('feat-revert', 'complete');
+    expect(tracker.getOverallCompletion()).toBe(1);
+    tracker.updateStatus('feat-revert', 'failed');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('1000개 기능 초기화 → getAllProgress 1000개', () => {
+    const tracker = new ProgressTracker(new ConsoleLogger('error'));
+    for (let i = 0; i < 1000; i++) {
+      tracker.initFeature(`feat-bulk-${i}`);
+    }
+    expect(tracker.getAllProgress()).toHaveLength(1000);
   });
 });
