@@ -1077,3 +1077,676 @@ describe('DesignDecisionRepository 추가 edge — getByProject/getByFeature 다
     if (result.ok) expect(result.value).toBeNull();
   });
 });
+
+// ── 추가 edge: Result 타입 계약 ──────────────────────────────────
+
+describe('DesignDecisionRepository Result 타입 계약', () => {
+  it('insert() 결과에 ok 필드 존재', async () => {
+    const repo = makeRepo();
+    const result = await repo.insert(makeRecord(0));
+    expect('ok' in result).toBe(true);
+  });
+
+  it('update() 결과에 ok 필드 존재', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('dd-0', { decision: 'x' });
+    expect('ok' in result).toBe(true);
+  });
+
+  it('delete() 결과에 ok 필드 존재', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('dd-0');
+    expect('ok' in result).toBe(true);
+  });
+
+  it('search() 결과에 ok 필드 존재', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.1), 5);
+    expect('ok' in result).toBe(true);
+  });
+
+  it('getById() 결과에 ok 필드 존재', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('some-id');
+    expect('ok' in result).toBe(true);
+  });
+
+  it('insert() 미초기화 error.name은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.insert(makeRecord(0));
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+
+  it('update() 미초기화 error.name은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('dd-0', { decision: 'x' });
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+
+  it('delete() 미초기화 error.name은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('dd-0');
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+
+  it('search() ok=true이면 value는 배열', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.1), 5);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('getById() ok=true이면 value는 null 또는 object', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('id-x');
+    if (result.ok) {
+      expect(result.value === null || typeof result.value === 'object').toBe(true);
+    }
+  });
+});
+
+// ── 추가 edge: makeRecord 구조 검증 ──────────────────────────────
+
+describe('DesignDecisionRepository makeRecord 구조 검증', () => {
+  it('makeRecord(0).id는 dd-0', () => {
+    expect(makeRecord(0).id).toBe('dd-0');
+  });
+
+  it('makeRecord(5).id는 dd-5', () => {
+    expect(makeRecord(5).id).toBe('dd-5');
+  });
+
+  it('makeRecord(0).projectId는 proj-0', () => {
+    expect(makeRecord(0).projectId).toBe('proj-0');
+  });
+
+  it('makeRecord(3).projectId는 proj-0', () => {
+    expect(makeRecord(3).projectId).toBe('proj-0');
+  });
+
+  it('makeRecord(0).embedding은 Float32Array', () => {
+    expect(makeRecord(0).embedding).toBeInstanceOf(Float32Array);
+  });
+
+  it('makeRecord(0).embedding 길이 384', () => {
+    expect(makeRecord(0).embedding.length).toBe(384);
+  });
+
+  it('makeRecord(0).alternatives는 배열', () => {
+    expect(Array.isArray(makeRecord(0).alternatives)).toBe(true);
+  });
+
+  it('makeRecord(0).decidedBy는 배열', () => {
+    expect(Array.isArray(makeRecord(0).decidedBy)).toBe(true);
+  });
+
+  it('makeRecord(0).timestamp는 Date', () => {
+    expect(makeRecord(0).timestamp).toBeInstanceOf(Date);
+  });
+
+  it('makeRecord(0).decision 포함', () => {
+    expect(typeof makeRecord(0).decision).toBe('string');
+  });
+
+  it('makeRecord(0).rationale 포함', () => {
+    expect(typeof makeRecord(0).rationale).toBe('string');
+  });
+});
+
+// ── 추가 edge: insert 다양한 decision 필드 ─────────────────────────
+
+describe('DesignDecisionRepository insert decision 필드 경계값', () => {
+  it('decision 매우 긴 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), decision: 'x'.repeat(10000) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('decision 이모지 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), decision: '결정됨 🎉' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('rationale 이모지 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), rationale: '근거 🔥' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('alternatives 10개 요소 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const alts = Array.from({ length: 10 }, (_, i) => `alt-${i}`);
+    const r = await repo.insert({ ...makeRecord(0), alternatives: alts });
+    expect(r.ok).toBe(false);
+  });
+
+  it('decidedBy 5명 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), decidedBy: ['a', 'b', 'c', 'd', 'e'] });
+    expect(r.ok).toBe(false);
+  });
+
+  it('featureId UUID 형식 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), featureId: crypto.randomUUID() });
+    expect(r.ok).toBe(false);
+  });
+
+  it('embedding NaN fill → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), embedding: new Float32Array(384).fill(Number.NaN) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('embedding 0 fill → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), embedding: new Float32Array(384).fill(0) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('timestamp 미래 Date → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const r = await repo.insert({ ...makeRecord(0), timestamp: future });
+    expect(r.ok).toBe(false);
+  });
+
+  it('projectId SQL injection 시도 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), projectId: "'; DROP TABLE design_decisions; --" });
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge: update partial 경계값 ─────────────────────────────
+
+describe('DesignDecisionRepository update partial 경계값', () => {
+  it('update() decision 이모지 → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd-0', { decision: '🎉결정' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() rationale 이모지 → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd-0', { rationale: '🔥근거' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() decision + rationale 동시 → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd-0', { decision: 'new', rationale: 'because' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 공백만 있는 decision → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd-0', { decision: '   ' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 10회 반복 다른 ID → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.update(`dd-${i}`, { decision: `updated-${i}` });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('update() SQL injection id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update("'; DROP TABLE design_decisions; --", { decision: 'x' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 이모지 id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd-🔥-0', { decision: 'x' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 탭 포함 id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('dd\t0', { decision: 'x' });
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge: delete 반복 및 패턴 ───────────────────────────────
+
+describe('DesignDecisionRepository delete 반복 및 패턴', () => {
+  it('delete() 동일 ID 5회 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.delete('dd-0');
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() 5가지 다른 ID → 모두 err', async () => {
+    const repo = makeRepo();
+    const ids = ['del-a', 'del-b', 'del-c', 'del-d', 'del-e'];
+    for (const id of ids) {
+      const r = await repo.delete(id);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() UUID 5개 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.delete(crypto.randomUUID());
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() 이모지 포함 id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('dd-🔥-0');
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() 탭 포함 id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('dd\t0');
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() 개행 포함 id → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('dd\n0');
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() SQL injection 시도 → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete("'; DROP TABLE design_decisions; --");
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() 매우 긴 ID → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('dd-' + 'x'.repeat(500));
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge: search 벡터 패턴 추가 ─────────────────────────────
+
+describe('DesignDecisionRepository search 벡터 패턴 추가', () => {
+  it('search() fill 0.11 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.11), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.22 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.22), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.33 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.33), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.44 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.44), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.55 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.55), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.66 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.66), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.77 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.77), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.88 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.88), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill -0.5 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(-0.5), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill MAX_VALUE → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(Number.MAX_VALUE), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+});
+
+// ── 추가 edge: getByFeature 다양한 ID 패턴 ──────────────────────
+
+describe('DesignDecisionRepository getByFeature 다양한 ID 패턴', () => {
+  it('getByFeature() "feat-alpha" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('feat-alpha');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() "feat-beta" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('feat-beta');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() 이모지 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('feat-🚀');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() SQL injection → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature("'; DROP TABLE design_decisions; --");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() 개행 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('feat\n0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() 탭 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('feat\t0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() 10가지 ID → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.getByFeature(`feature-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('getByFeature() 공백만 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('   ');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() "." → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('.');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByFeature() JSON 형태 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByFeature('{"featureId":"feat-0"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+});
+
+// ── 추가 edge: getByProject 다양한 ID 패턴 ──────────────────────
+
+describe('DesignDecisionRepository getByProject 다양한 ID 패턴', () => {
+  it('getByProject() 이모지 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('proj-🔥');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() SQL injection → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject("'; DROP TABLE design_decisions; --");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() 개행 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('proj\n0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() 탭 포함 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('proj\t0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "." → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('.');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "0" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() JSON 형태 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('{"projectId":"proj-0"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() 10가지 ID → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.getByProject(`project-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+});
+
+// ── 추가 edge: close 후 연속 동작 ────────────────────────────────
+
+describe('DesignDecisionRepository close 후 연속 동작', () => {
+  it('close() 후 search() 3번 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.search(new Float32Array(384).fill(i * 0.1), 5);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 후 getById() 3번 → 모두 ok(null)', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.getById(`id-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toBeNull();
+    }
+  });
+
+  it('close() 후 insert() 3번 → 모두 err', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.insert(makeRecord(i));
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('close() 후 delete() 3번 → 모두 err', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.delete(`dd-${i}`);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('close() 후 getByProject() 3번 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.getByProject(`proj-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 후 getByFeature() 3번 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.getByFeature(`feat-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 5회 → 마지막도 오류 없음', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      await expect(repo.close()).resolves.toBeUndefined();
+    }
+  });
+
+  it('close() 후 update() 3번 → 모두 err', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.update(`dd-${i}`, { decision: `updated-${i}` });
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+// ── 추가 edge: 복합 시나리오 심화 ─────────────────────────────────
+
+describe('DesignDecisionRepository 복합 시나리오 심화', () => {
+  it('읽기→쓰기→읽기→쓰기 패턴 (미초기화)', async () => {
+    const repo = makeRepo();
+    const r1 = await repo.getById('id-1');
+    const r2 = await repo.insert(makeRecord(0));
+    const r3 = await repo.getByProject('proj-0');
+    const r4 = await repo.delete('dd-0');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(false);
+    expect(r3.ok).toBe(true);
+    expect(r4.ok).toBe(false);
+  });
+
+  it('5개 독립 인스턴스 × getByFeature → 모두 ok([])', async () => {
+    const repos = Array.from({ length: 5 }, (_, i) => makeRepo(`/tmp/dd-feat-${i}`));
+    for (const repo of repos) {
+      const r = await repo.getByFeature('feat-common');
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('100개 인스턴스 → 모두 DesignDecisionRepository', () => {
+    const repos = Array.from({ length: 100 }, (_, i) => makeRepo(`/tmp/dd-mass-${i}`));
+    for (const repo of repos) {
+      expect(repo).toBeInstanceOf(DesignDecisionRepository);
+    }
+  });
+
+  it('읽기 연산 모두 호출 후 쓰기 연산 모두 호출', async () => {
+    const repo = makeRepo();
+    const rs = await repo.search(new Float32Array(384).fill(0.1), 5);
+    const ri = await repo.getById('id-x');
+    const rp = await repo.getByProject('proj-x');
+    const rf = await repo.getByFeature('feat-x');
+    const wi = await repo.insert(makeRecord(0));
+    const wu = await repo.update('dd-0', { decision: 'x' });
+    const wd = await repo.delete('dd-0');
+
+    expect(rs.ok).toBe(true);
+    expect(ri.ok).toBe(true);
+    expect(rp.ok).toBe(true);
+    expect(rf.ok).toBe(true);
+    expect(wi.ok).toBe(false);
+    expect(wu.ok).toBe(false);
+    expect(wd.ok).toBe(false);
+  });
+
+  it('close 후 읽기 + 쓰기 전체 호출', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    const rs = await repo.search(new Float32Array(384).fill(0.2), 5);
+    const ri = await repo.getById('id-y');
+    const rp = await repo.getByProject('proj-y');
+    const rf = await repo.getByFeature('feat-y');
+    const wi = await repo.insert(makeRecord(1));
+    const wu = await repo.update('dd-1', { decision: 'y' });
+    const wd = await repo.delete('dd-1');
+
+    expect(rs.ok).toBe(true);
+    expect(ri.ok).toBe(true);
+    expect(rp.ok).toBe(true);
+    expect(rf.ok).toBe(true);
+    expect(wi.ok).toBe(false);
+    expect(wu.ok).toBe(false);
+    expect(wd.ok).toBe(false);
+  });
+
+  it('10개 인스턴스 × search 10회 → 모두 ok([])', async () => {
+    const repos = Array.from({ length: 10 }, (_, i) => makeRepo(`/tmp/dd-s10-${i}`));
+    for (const repo of repos) {
+      for (let j = 0; j < 10; j++) {
+        const r = await repo.search(new Float32Array(384).fill(j * 0.1), 3);
+        expect(r.ok).toBe(true);
+        if (r.ok) expect(r.value).toEqual([]);
+      }
+    }
+  });
+});

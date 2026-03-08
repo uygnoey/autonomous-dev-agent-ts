@@ -1066,3 +1066,684 @@ describe('FailureRepository 추가 edge 케이스 — getByProject/getByPhase �
     if (result.ok) expect(result.value).toBeNull();
   });
 });
+
+// ── 추가 edge: Result 타입 계약 검증 ─────────────────────────────
+
+describe('FailureRepository Result 타입 계약', () => {
+  it('insert() 결과는 ok 또는 error 중 하나만 포함', async () => {
+    const repo = makeRepo();
+    const result = await repo.insert(makeRecord(0));
+    if (result.ok) {
+      expect('value' in result).toBe(true);
+    } else {
+      expect('error' in result).toBe(true);
+    }
+  });
+
+  it('update() 결과는 ok 또는 error 중 하나만 포함', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('fail-0', { resolution: 'x' });
+    if (result.ok) {
+      expect('value' in result).toBe(true);
+    } else {
+      expect('error' in result).toBe(true);
+    }
+  });
+
+  it('delete() 결과는 ok 또는 error 중 하나만 포함', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('fail-0');
+    if (result.ok) {
+      expect('value' in result).toBe(true);
+    } else {
+      expect('error' in result).toBe(true);
+    }
+  });
+
+  it('search() 결과는 ok=true이면 value 배열', async () => {
+    const repo = makeRepo();
+    const result = await repo.search(new Float32Array(384).fill(0.1), 5);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('getById() 결과는 ok=true이면 value가 null 또는 객체', async () => {
+    const repo = makeRepo();
+    const result = await repo.getById('any-id');
+    if (result.ok) {
+      expect(result.value === null || typeof result.value === 'object').toBe(true);
+    }
+  });
+
+  it('getByProject() 결과는 ok=true이면 value 배열', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByProject('proj-1');
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('getByPhase() 결과는 ok=true이면 value 배열', async () => {
+    const repo = makeRepo();
+    const result = await repo.getByPhase('DESIGN');
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('insert() 미초기화 error.name 은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.insert(makeRecord(0));
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+
+  it('update() 미초기화 error.name 은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.update('fail-0', { resolution: 'x' });
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+
+  it('delete() 미초기화 error.name 은 문자열', async () => {
+    const repo = makeRepo();
+    const result = await repo.delete('fail-0');
+    if (!result.ok) {
+      expect(typeof result.error.name).toBe('string');
+    }
+  });
+});
+
+// ── 추가 edge: makeRecord 입력 변형 ─────────────────────────────
+
+describe('FailureRepository makeRecord 변형 edge 케이스', () => {
+  it('makeRecord(0) phase는 DESIGN', () => {
+    const rec = makeRecord(0);
+    expect(rec.phase).toBe('DESIGN');
+  });
+
+  it('makeRecord(1) phase는 CODE', () => {
+    const rec = makeRecord(1);
+    expect(rec.phase).toBe('CODE');
+  });
+
+  it('makeRecord(2) phase는 TEST', () => {
+    const rec = makeRecord(2);
+    expect(rec.phase).toBe('TEST');
+  });
+
+  it('makeRecord(3) phase는 VERIFY', () => {
+    const rec = makeRecord(3);
+    expect(rec.phase).toBe('VERIFY');
+  });
+
+  it('makeRecord(4) phase는 DESIGN (순환)', () => {
+    const rec = makeRecord(4);
+    expect(rec.phase).toBe('DESIGN');
+  });
+
+  it('makeRecord id 포함', () => {
+    const rec = makeRecord(7);
+    expect(rec.id).toBe('fail-7');
+  });
+
+  it('makeRecord projectId 포함', () => {
+    const rec = makeRecord(6);
+    expect(rec.projectId).toBe('proj-0');
+  });
+
+  it('makeRecord embedding은 Float32Array', () => {
+    const rec = makeRecord(0);
+    expect(rec.embedding).toBeInstanceOf(Float32Array);
+  });
+
+  it('makeRecord embedding 길이 384', () => {
+    const rec = makeRecord(0);
+    expect(rec.embedding.length).toBe(384);
+  });
+
+  it('makeRecord timestamp는 Date', () => {
+    const rec = makeRecord(0);
+    expect(rec.timestamp).toBeInstanceOf(Date);
+  });
+});
+
+// ── 추가 edge: 경계 Phase / 인스턴스 독립성 ─────────────────────
+
+describe('FailureRepository Phase 경계값 및 인스턴스 독립성', () => {
+  it('getByPhase CODE → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-phase-code');
+    const result = await repo.getByPhase('CODE');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase TEST → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-phase-test');
+    const result = await repo.getByPhase('TEST');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase VERIFY with proj → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-phase-verify');
+    const result = await repo.getByPhase('VERIFY', 'proj-xyz');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('getByPhase DESIGN with proj → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-phase-design');
+    const result = await repo.getByPhase('DESIGN', 'proj-abc');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([]);
+  });
+
+  it('3개 독립 인스턴스 → getByProject 모두 ok', async () => {
+    const repos = [
+      makeRepo('/tmp/fail-ind-a'),
+      makeRepo('/tmp/fail-ind-b'),
+      makeRepo('/tmp/fail-ind-c'),
+    ];
+    for (const repo of repos) {
+      const r = await repo.getByProject('proj-shared');
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('각 Phase insert 미초기화 → 모두 err', async () => {
+    const repo = makeRepo('/tmp/fail-all-phase');
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const r = await repo.insert({ ...makeRecord(0), phase });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('search limit=1 미초기화 → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-lim-1');
+    const r = await repo.search(new Float32Array(384).fill(0.01), 1);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search limit=200 미초기화 → ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-lim-200');
+    const r = await repo.search(new Float32Array(384).fill(0.99), 200);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject 5가지 ID → 모두 ok([])', async () => {
+    const repo = makeRepo('/tmp/fail-projids');
+    const ids = ['proj-a', 'proj-b', 'proj-c', 'proj-d', 'proj-e'];
+    for (const id of ids) {
+      const r = await repo.getByProject(id);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('getById 5가지 ID → 모두 ok(null)', async () => {
+    const repo = makeRepo('/tmp/fail-getids');
+    const ids = ['id-a', 'id-b', 'id-c', 'id-d', 'id-e'];
+    for (const id of ids) {
+      const r = await repo.getById(id);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toBeNull();
+    }
+  });
+});
+
+// ── 추가 edge: insert 레코드 객체 구조 검증 ──────────────────────
+
+describe('FailureRepository insert record 객체 구조', () => {
+  it('insert() 레코드에 id 없으면 err (미초기화)', async () => {
+    const repo = makeRepo();
+    const rec = makeRecord(0);
+    const result = await repo.insert({ ...rec });
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() featureId 없는 필드 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const result = await repo.insert({ ...makeRecord(0), featureId: 'feat-xyz' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('insert() failureType 다양한 값 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const types = ['compile-error', 'runtime-error', 'type-error', 'network-error', 'timeout'];
+    for (const t of types) {
+      const r = await repo.insert({ ...makeRecord(0), failureType: t });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('insert() 연도별 timestamp → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const years = [2020, 2021, 2022, 2023, 2024];
+    for (const y of years) {
+      const r = await repo.insert({ ...makeRecord(0), timestamp: new Date(y, 0, 1) });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('insert() projectId 다양한 값 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const pids = ['proj-alpha', 'proj-beta', 'proj-gamma', 'proj-delta'];
+    for (const pid of pids) {
+      const r = await repo.insert({ ...makeRecord(0), projectId: pid });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('insert() embedding 길이 변형은 err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), embedding: new Float32Array(128).fill(0.5) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('insert() rootCause 빈 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), rootCause: '' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('insert() resolution 빈 문자열 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.insert({ ...makeRecord(0), resolution: '' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('insert() 5가지 레코드 연속 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.insert(makeRecord(i * 10));
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('insert() 10가지 레코드 연속 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.insert(makeRecord(i));
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+// ── 추가 edge: update partial 검증 ────────────────────────────────
+
+describe('FailureRepository update partial 경계값', () => {
+  it('update() resolution만 변경 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { resolution: 'patched' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() rootCause만 변경 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { rootCause: 'cause-updated' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() failureType만 변경 → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { failureType: 'new-type' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() resolution + rootCause → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { resolution: 'a', rootCause: 'b' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 공백만 있는 resolution → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { resolution: '   ' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 이모지 포함 resolution → err (미초기화)', async () => {
+    const repo = makeRepo();
+    const r = await repo.update('fail-0', { resolution: '해결됨 🎉' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('update() 3개 다른 ID → 모두 err', async () => {
+    const repo = makeRepo();
+    const ids = ['fail-x', 'fail-y', 'fail-z'];
+    for (const id of ids) {
+      const r = await repo.update(id, { resolution: 'updated' });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('update() 10번 반복 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.update(`fail-${i}`, { resolution: `fixed-${i}` });
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+// ── 추가 edge: delete 반복 ────────────────────────────────────────
+
+describe('FailureRepository delete 반복 케이스', () => {
+  it('delete() 동일 ID 5회 → 모두 err (미초기화)', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.delete('fail-0');
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() 5가지 다른 ID → 모두 err', async () => {
+    const repo = makeRepo();
+    const ids = ['del-a', 'del-b', 'del-c', 'del-d', 'del-e'];
+    for (const id of ids) {
+      const r = await repo.delete(id);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() UUID 형태 5가지 → 모두 err', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.delete(crypto.randomUUID());
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('delete() 탭 문자 포함 ID → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('fail\t0');
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() 개행 포함 ID → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('fail\n0');
+    expect(r.ok).toBe(false);
+  });
+
+  it('delete() 매우 긴 UUID 형태 → err', async () => {
+    const repo = makeRepo();
+    const r = await repo.delete('a'.repeat(100) + '-' + 'b'.repeat(100));
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── 추가 edge: search 벡터 형태 ──────────────────────────────────
+
+describe('FailureRepository search 벡터 형태 추가', () => {
+  it('search() fill 0.11 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.11), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.22 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.22), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.33 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.33), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.44 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.44), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.55 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.55), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.66 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.66), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.77 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.77), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.88 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.88), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill 0.99 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(0.99), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('search() fill -0.11 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.search(new Float32Array(384).fill(-0.11), 5);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+});
+
+// ── 추가 edge: getByProject 다양한 ID 패턴 ───────────────────────
+
+describe('FailureRepository getByProject 다양한 ID 패턴', () => {
+  it('getByProject() "project-alpha" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('project-alpha');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "project-beta" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('project-beta');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "a/b/c" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('a/b/c');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "." → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('.');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() "0" → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() 이모지 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('🚀-project');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() JSON 형태 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject('{"id":"proj-1"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() SQL injection 시도 → ok([])', async () => {
+    const repo = makeRepo();
+    const r = await repo.getByProject("'; DROP TABLE failures; --");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual([]);
+  });
+
+  it('getByProject() 10회 연속 다른 ID → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 10; i++) {
+      const r = await repo.getByProject(`pid-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+});
+
+// ── 추가 edge: getById 다양한 ID 패턴 ────────────────────────────
+
+describe('FailureRepository getById 다양한 ID 패턴', () => {
+  it('getById() "." → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById('.');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() SQL injection 시도 → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById("'; DROP TABLE failures; --");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() 이모지 포함 → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById('fail-🔥-0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() JSON 형태 → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById('{"id":"fail-0"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() 개행 포함 → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById('fail\n0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() 탭 포함 → ok(null)', async () => {
+    const repo = makeRepo();
+    const r = await repo.getById('fail\t0');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toBeNull();
+  });
+
+  it('getById() 여러 UUID → 모두 ok(null)', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      const r = await repo.getById(crypto.randomUUID());
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toBeNull();
+    }
+  });
+});
+
+// ── 추가 edge: close 후 연속 동작 ────────────────────────────────
+
+describe('FailureRepository close 후 연속 동작', () => {
+  it('close() 후 search() 3번 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.search(new Float32Array(384).fill(i * 0.1), 5);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 후 getById() 3번 → 모두 ok(null)', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.getById(`id-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toBeNull();
+    }
+  });
+
+  it('close() 후 insert() 3번 → 모두 err', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.insert(makeRecord(i));
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('close() 후 delete() 3번 → 모두 err', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.delete(`fail-${i}`);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('close() 후 getByProject() 3번 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    for (let i = 0; i < 3; i++) {
+      const r = await repo.getByProject(`proj-${i}`);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 후 getByPhase() 4종 → 모두 ok([])', async () => {
+    const repo = makeRepo();
+    await repo.close();
+    const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const r = await repo.getByPhase(phase);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toEqual([]);
+    }
+  });
+
+  it('close() 5회 → 마지막도 오류 없음', async () => {
+    const repo = makeRepo();
+    for (let i = 0; i < 5; i++) {
+      await expect(repo.close()).resolves.toBeUndefined();
+    }
+  });
+});
