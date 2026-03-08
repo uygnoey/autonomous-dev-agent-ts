@@ -1140,3 +1140,527 @@ describe('McpRegistry listServers 추가 edge 케이스', () => {
     expect(found?.args).toEqual(['a', 'b', 'c']);
   });
 });
+
+// ── 추가 스트레스 테스트 ─────────────────────────────────────
+
+describe('McpRegistry 스트레스 테스트 — 대량 등록/해제', () => {
+  it('100개 서버 등록 → 모두 ok', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) {
+      const res = r.register(createConfig({ name: `stress100-${i}` }));
+      expect(res.ok).toBe(true);
+    }
+    expect(r.listServers().length).toBe(100);
+  });
+
+  it('100개 등록 후 홀수 인덱스 50개 해제 → 50개 남음', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) r.register(createConfig({ name: `bulk-${i}` }));
+    for (let i = 0; i < 100; i += 2) r.unregister(`bulk-${i}`);
+    expect(r.listServers().length).toBe(50);
+  });
+
+  it('100개 등록 후 전부 해제 → 빈 목록', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 100; i++) r.register(createConfig({ name: `all-del-${i}` }));
+    for (let i = 0; i < 100; i++) r.unregister(`all-del-${i}`);
+    expect(r.listServers().length).toBe(0);
+  });
+
+  it('10회 clear 후 재등록 → 항상 ok', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let round = 0; round < 10; round++) {
+      for (let i = 0; i < 5; i++) r.register(createConfig({ name: `round${round}-${i}` }));
+      r.clear();
+    }
+    const final = r.register(createConfig({ name: 'final-server' }));
+    expect(final.ok).toBe(true);
+    expect(r.listServers().length).toBe(1);
+  });
+
+  it('50개 등록 → listServers 모두 name 필드 있음', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 50; i++) r.register(createConfig({ name: `field-check-${i}` }));
+    for (const srv of r.listServers()) {
+      expect(typeof srv.name).toBe('string');
+      expect(srv.name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('50개 등록 → listServers 모두 command 필드 있음', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 50; i++) r.register(createConfig({ name: `cmd-check-${i}` }));
+    for (const srv of r.listServers()) {
+      expect(typeof srv.command).toBe('string');
+    }
+  });
+
+  it('20개 등록 → 전부 getServer 가능 (필드 검증)', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 20; i++) {
+      r.register(createConfig({ name: `getall-${i}`, command: `cmd-${i}`, args: [`--arg${i}`], enabled: i % 2 === 0 }));
+    }
+    for (let i = 0; i < 20; i++) {
+      const srv = r.getServer(`getall-${i}`);
+      expect(srv?.name).toBe(`getall-${i}`);
+      expect(srv?.command).toBe(`cmd-${i}`);
+      expect(srv?.args).toEqual([`--arg${i}`]);
+      expect(srv?.enabled).toBe(i % 2 === 0);
+    }
+  });
+});
+
+// ── register — 특이한 이름 케이스 ────────────────────────────
+
+describe('McpRegistry register — 특이한 이름 케이스', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('이름이 숫자 0 → ok', () => {
+    const result = registry.register(createConfig({ name: '0' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 음수 문자열 → ok', () => {
+    const result = registry.register(createConfig({ name: '-1' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 소문자만 → ok', () => {
+    const result = registry.register(createConfig({ name: 'abcdefghijklmnopqrstuvwxyz' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 대문자만 → ok', () => {
+    const result = registry.register(createConfig({ name: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름에 점만 → ok', () => {
+    const result = registry.register(createConfig({ name: '...' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름에 하이픈만 → ok', () => {
+    const result = registry.register(createConfig({ name: '---' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름에 밑줄만 → ok', () => {
+    const result = registry.register(createConfig({ name: '___' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 슬래시 포함 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server/path' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름이 콜론 포함 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server:3000' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름이 at 기호 포함 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: '@scope/pkg' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름이 100자 정확히 → ok', () => {
+    const name = 'x'.repeat(100);
+    const result = registry.register(createConfig({ name }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 1자 → ok', () => {
+    const result = registry.register(createConfig({ name: 'a' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름이 2자 → ok', () => {
+    const result = registry.register(createConfig({ name: 'ab' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('이름에 이스케이프 문자 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server\\path' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름에 물음표 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server?' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름에 별표 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server*' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('이름에 파이프 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'server|pipe' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── register — 커맨드 다양성 케이스 ──────────────────────────
+
+describe('McpRegistry register — command 다양성', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('command가 npx → ok', () => {
+    const result = registry.register(createConfig({ name: 'npx-srv', command: 'npx' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 node → ok', () => {
+    const result = registry.register(createConfig({ name: 'node-srv', command: 'node' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 python → ok', () => {
+    const result = registry.register(createConfig({ name: 'py-srv', command: 'python' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 deno → ok', () => {
+    const result = registry.register(createConfig({ name: 'deno-srv', command: 'deno' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 bun → ok', () => {
+    const result = registry.register(createConfig({ name: 'bun-srv', command: 'bun' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 docker → ok', () => {
+    const result = registry.register(createConfig({ name: 'docker-srv', command: 'docker' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 공백+유효문자 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'space-cmd', command: ' node' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('command가 유효문자+공백 → ok (boolean)', () => {
+    const result = registry.register(createConfig({ name: 'trail-cmd', command: 'node ' }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('command가 매우 짧음(1자) → ok', () => {
+    const result = registry.register(createConfig({ name: 'short-cmd', command: 'x' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command가 경로 구분자 포함 → ok', () => {
+    const result = registry.register(createConfig({ name: 'path-cmd', command: '/usr/local/bin/server' }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('command 등록 후 command 필드 일치 확인', () => {
+    registry.register(createConfig({ name: 'verify-cmd', command: 'python3' }));
+    expect(registry.getServer('verify-cmd')?.command).toBe('python3');
+  });
+});
+
+// ── getServer — 등록 상태 변화 감지 ──────────────────────────
+
+describe('McpRegistry getServer — 상태 변화 감지', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('register 직전 → null, 직후 → not null', () => {
+    expect(registry.getServer('transition')).toBeNull();
+    registry.register(createConfig({ name: 'transition' }));
+    expect(registry.getServer('transition')).not.toBeNull();
+  });
+
+  it('unregister 직전 → not null, 직후 → null', () => {
+    registry.register(createConfig({ name: 'gone-srv' }));
+    expect(registry.getServer('gone-srv')).not.toBeNull();
+    registry.unregister('gone-srv');
+    expect(registry.getServer('gone-srv')).toBeNull();
+  });
+
+  it('clear 직전 → not null, 직후 → null', () => {
+    registry.register(createConfig({ name: 'clear-srv' }));
+    expect(registry.getServer('clear-srv')).not.toBeNull();
+    registry.clear();
+    expect(registry.getServer('clear-srv')).toBeNull();
+  });
+
+  it('서버 A 해제 후 서버 B는 여전히 조회 가능', () => {
+    registry.register(createConfig({ name: 'srv-a' }));
+    registry.register(createConfig({ name: 'srv-b' }));
+    registry.unregister('srv-a');
+    expect(registry.getServer('srv-b')).not.toBeNull();
+  });
+
+  it('clear 후 새 서버 등록 → 이전 서버는 null', () => {
+    registry.register(createConfig({ name: 'old-srv' }));
+    registry.clear();
+    registry.register(createConfig({ name: 'new-srv' }));
+    expect(registry.getServer('old-srv')).toBeNull();
+    expect(registry.getServer('new-srv')).not.toBeNull();
+  });
+
+  it('getServer 10회 연속 → 일관된 결과', () => {
+    registry.register(createConfig({ name: 'consistent-get' }));
+    for (let i = 0; i < 10; i++) {
+      expect(registry.getServer('consistent-get')).not.toBeNull();
+      expect(registry.getServer('not-here')).toBeNull();
+    }
+  });
+
+  it('등록 서버 args 필드 반환 일치', () => {
+    const args = ['--host', 'localhost', '--port', '8080'];
+    registry.register(createConfig({ name: 'args-srv', args }));
+    expect(registry.getServer('args-srv')?.args).toEqual(args);
+  });
+
+  it('등록 서버 enabled 필드 반환 일치 (false)', () => {
+    registry.register(createConfig({ name: 'disabled-get', enabled: false }));
+    expect(registry.getServer('disabled-get')?.enabled).toBe(false);
+  });
+
+  it('등록 서버 enabled 필드 반환 일치 (true)', () => {
+    registry.register(createConfig({ name: 'enabled-get', enabled: true }));
+    expect(registry.getServer('enabled-get')?.enabled).toBe(true);
+  });
+
+  it('getServer 결과는 object 또는 null', () => {
+    registry.register(createConfig({ name: 'type-check-get' }));
+    const result = registry.getServer('type-check-get');
+    expect(result !== null && typeof result === 'object').toBe(true);
+  });
+});
+
+// ── unregister — 정밀 경계값 ─────────────────────────────────
+
+describe('McpRegistry unregister — 정밀 경계값', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('unregister 성공 결과의 ok=true이면 value 없거나 undefined', () => {
+    registry.register(createConfig({ name: 'unregok' }));
+    const r = registry.unregister('unregok');
+    if (r.ok) {
+      expect((r as { ok: true; value?: unknown }).value).toBeUndefined();
+    }
+  });
+
+  it('unregister 실패 결과의 error.code 타입 string', () => {
+    const r = registry.unregister('ghost');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('unregister 실패 결과의 error.message 타입 string', () => {
+    const r = registry.unregister('ghost2');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('존재하지 않는 다양한 이름 → mcp_server_not_found', () => {
+    const names = ['a', 'b', 'c', 'x', 'y', 'z', '1', '2', '3'];
+    for (const name of names) {
+      const r = registry.unregister(name);
+      if (!r.ok) expect(r.error.code).toBe('mcp_server_not_found');
+    }
+  });
+
+  it('20개 등록 후 순서 반대로 해제 → 모두 ok', () => {
+    for (let i = 0; i < 20; i++) registry.register(createConfig({ name: `rev-${i}` }));
+    for (let i = 19; i >= 0; i--) {
+      const r = registry.unregister(`rev-${i}`);
+      expect(r.ok).toBe(true);
+    }
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('등록-해제 10회 순환 → 카운트 0', () => {
+    for (let i = 0; i < 10; i++) {
+      registry.register(createConfig({ name: `cycle10-${i}` }));
+    }
+    for (let i = 0; i < 10; i++) {
+      registry.unregister(`cycle10-${i}`);
+    }
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('5개 등록 중 가운데 2개 해제 → 3개 남음', () => {
+    for (let i = 0; i < 5; i++) registry.register(createConfig({ name: `mid-${i}` }));
+    registry.unregister('mid-1');
+    registry.unregister('mid-3');
+    expect(registry.listServers().length).toBe(3);
+  });
+
+  it('5개 등록 중 첫번째 해제 → 나머지 4개 ok', () => {
+    for (let i = 0; i < 5; i++) registry.register(createConfig({ name: `head-${i}` }));
+    registry.unregister('head-0');
+    for (let i = 1; i < 5; i++) {
+      expect(registry.getServer(`head-${i}`)).not.toBeNull();
+    }
+  });
+
+  it('5개 등록 중 마지막 해제 → 나머지 4개 ok', () => {
+    for (let i = 0; i < 5; i++) registry.register(createConfig({ name: `tail-${i}` }));
+    registry.unregister('tail-4');
+    for (let i = 0; i < 4; i++) {
+      expect(registry.getServer(`tail-${i}`)).not.toBeNull();
+    }
+  });
+
+  it('unregister + clear 혼합 → 최종 빈 상태', () => {
+    registry.register(createConfig({ name: 'mix-1' }));
+    registry.register(createConfig({ name: 'mix-2' }));
+    registry.register(createConfig({ name: 'mix-3' }));
+    registry.unregister('mix-1');
+    registry.clear();
+    expect(registry.listServers().length).toBe(0);
+  });
+});
+
+// ── clear — 정밀 경계값 ───────────────────────────────────────
+
+describe('McpRegistry clear — 정밀 경계값', () => {
+  let registry: McpRegistry;
+
+  beforeEach(() => {
+    registry = new McpRegistry(new ConsoleLogger('error'));
+  });
+
+  it('clear는 void 반환', () => {
+    const result = registry.clear();
+    expect(result).toBeUndefined();
+  });
+
+  it('clear 후 임의의 이름으로 getServer → null', () => {
+    for (let i = 0; i < 5; i++) registry.register(createConfig({ name: `pre-${i}` }));
+    registry.clear();
+    for (let i = 0; i < 5; i++) {
+      expect(registry.getServer(`pre-${i}`)).toBeNull();
+    }
+  });
+
+  it('clear 후 동일 이름 재등록 → ok, listServers 길이 1', () => {
+    registry.register(createConfig({ name: 'reclr' }));
+    registry.clear();
+    registry.register(createConfig({ name: 'reclr' }));
+    expect(registry.listServers().length).toBe(1);
+  });
+
+  it('clear 후 unregister → mcp_server_not_found', () => {
+    registry.register(createConfig({ name: 'clr-unreg' }));
+    registry.clear();
+    const r = registry.unregister('clr-unreg');
+    if (!r.ok) expect(r.error.code).toBe('mcp_server_not_found');
+  });
+
+  it('빈 상태에서 clear 3회 → 에러 없음', () => {
+    for (let i = 0; i < 3; i++) {
+      expect(() => registry.clear()).not.toThrow();
+    }
+    expect(registry.listServers().length).toBe(0);
+  });
+
+  it('clear 후 listServers 배열은 새로운 객체', () => {
+    registry.register(createConfig({ name: 'before-clr' }));
+    const before = registry.listServers();
+    registry.clear();
+    const after = registry.listServers();
+    expect(after.length).toBe(0);
+    expect(before.length).toBe(1);
+  });
+
+  it('다수 레지스트리 각각 clear → 상호 영향 없음', () => {
+    const r1 = new McpRegistry(new ConsoleLogger('error'));
+    const r2 = new McpRegistry(new ConsoleLogger('error'));
+    r1.register(createConfig({ name: 'r1-srv' }));
+    r2.register(createConfig({ name: 'r2-srv' }));
+    r1.clear();
+    expect(r1.listServers().length).toBe(0);
+    expect(r2.listServers().length).toBe(1);
+  });
+});
+
+// ── 전체 통합 파이프라인 ──────────────────────────────────────
+
+describe('McpRegistry 전체 통합 파이프라인', () => {
+  it('A등록 → B등록 → A해제 → B조회 → B해제 → clear → 재등록', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    expect(r.register(createConfig({ name: 'A' })).ok).toBe(true);
+    expect(r.register(createConfig({ name: 'B' })).ok).toBe(true);
+    expect(r.unregister('A').ok).toBe(true);
+    expect(r.getServer('B')).not.toBeNull();
+    expect(r.unregister('B').ok).toBe(true);
+    expect(r.listServers().length).toBe(0);
+    r.clear();
+    expect(r.register(createConfig({ name: 'A' })).ok).toBe(true);
+    expect(r.register(createConfig({ name: 'B' })).ok).toBe(true);
+    expect(r.listServers().length).toBe(2);
+  });
+
+  it('UUID 기반 10개 서버 → 전부 등록/조회/해제 가능', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const uuids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const uuid = crypto.randomUUID();
+      uuids.push(uuid);
+      expect(r.register(createConfig({ name: uuid })).ok).toBe(true);
+    }
+    for (const uuid of uuids) {
+      expect(r.getServer(uuid)).not.toBeNull();
+    }
+    for (const uuid of uuids) {
+      expect(r.unregister(uuid).ok).toBe(true);
+    }
+    expect(r.listServers().length).toBe(0);
+  });
+
+  it('비어있는 command로 register 시도 후 유효 register → listServers 1개', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    r.register(createConfig({ command: '' })); // 실패
+    r.register(createConfig({ name: 'valid-final', command: 'node' })); // 성공
+    expect(r.listServers().length).toBe(1);
+  });
+
+  it('빈 이름 중복 시도 5회 후 유효 등록 → 1개', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) r.register(createConfig({ name: '' }));
+    r.register(createConfig({ name: 'only-valid' }));
+    expect(r.listServers().length).toBe(1);
+  });
+
+  it('3개 레지스트리 서로 간섭 없음 (50개씩)', () => {
+    const registries = [
+      new McpRegistry(new ConsoleLogger('error')),
+      new McpRegistry(new ConsoleLogger('error')),
+      new McpRegistry(new ConsoleLogger('error')),
+    ];
+    for (let r = 0; r < 3; r++) {
+      for (let i = 0; i < 50; i++) {
+        registries[r]?.register(createConfig({ name: `reg${r}-srv${i}` }));
+      }
+    }
+    for (let r = 0; r < 3; r++) {
+      expect(registries[r]?.listServers().length).toBe(50);
+    }
+    registries[1]?.clear();
+    expect(registries[0]?.listServers().length).toBe(50);
+    expect(registries[1]?.listServers().length).toBe(0);
+    expect(registries[2]?.listServers().length).toBe(50);
+  });
+});

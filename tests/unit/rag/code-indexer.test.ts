@@ -1153,3 +1153,470 @@ describe('CodeIndexer indexDirectory - 추가 경계값 케이스 #2', () => {
     }
   });
 });
+
+// ── 배치 64 — indexFile 추가 경계값 케이스 ───────────────────
+
+describe('CodeIndexer indexFile 배치64 — 추가 edge 케이스', () => {
+  it('JSX 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'app.jsx');
+    await writeFile(filePath, 'function App() { return <div>Hello</div>; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('TypeScript 인터페이스만 있는 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'interfaces.ts');
+    await writeFile(filePath, 'interface Foo { bar: string; baz: number; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('TypeScript 타입 alias만 있는 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'types.ts');
+    await writeFile(filePath, 'type Status = "active" | "inactive" | "pending";');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('enum 정의 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'enum.ts');
+    await writeFile(filePath, 'enum Color { Red = "red", Green = "green", Blue = "blue" }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('class with constructor → ok=true', async () => {
+    const filePath = join(tempDir, 'class.ts');
+    await writeFile(filePath, 'class Animal { constructor(readonly name: string) {} speak() { return this.name; } }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('abstract class 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'abstract.ts');
+    await writeFile(filePath, 'abstract class Shape { abstract area(): number; perimeter() { return 0; } }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('interface extends 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'extends-iface.ts');
+    await writeFile(filePath, 'interface Base { id: string; } interface Extended extends Base { name: string; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('class implements interface 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'impl.ts');
+    await writeFile(filePath, 'interface Runnable { run(): void; } class Task implements Runnable { run() { return; } }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('export default 함수 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'default-export.ts');
+    await writeFile(filePath, 'export default function main() { return "main"; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('named exports 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'named-exports.ts');
+    await writeFile(filePath, 'export function foo() {} export function bar() {} export const baz = 42;');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('import 구문 포함 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'with-imports.ts');
+    await writeFile(filePath, 'import { join } from "node:path";\nfunction buildPath(p: string) { return join("/root", p); }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('주석만 있는 파일 → ok (boolean)', async () => {
+    const filePath = join(tempDir, 'comments-only.ts');
+    await writeFile(filePath, '// This is a comment\n// Another comment\n/* block comment */');
+    const result = await indexer.indexFile(filePath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('공백만 있는 파일 → ok (boolean)', async () => {
+    const filePath = join(tempDir, 'whitespace.ts');
+    await writeFile(filePath, '   \n  \t  \n   ');
+    const result = await indexer.indexFile(filePath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('JSON 파일 → ok (boolean)', async () => {
+    const filePath = join(tempDir, 'data.json');
+    await writeFile(filePath, '{"key": "value", "num": 42}');
+    const result = await indexer.indexFile(filePath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('마크다운 파일 → ok (boolean)', async () => {
+    const filePath = join(tempDir, 'readme.md');
+    await writeFile(filePath, '# Title\n## Section\nThis is content.');
+    const result = await indexer.indexFile(filePath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('중첩 함수 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'nested.ts');
+    await writeFile(filePath, 'function outer() { function inner() { return 1; } return inner(); }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('화살표 함수만 있는 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'arrow.ts');
+    await writeFile(filePath, 'const add = (a: number, b: number) => a + b;\nconst square = (x: number) => x * x;');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('Promise.all 포함 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'promise-all.ts');
+    await writeFile(filePath, 'async function fetchAll(urls: string[]) { return Promise.all(urls.map(fetch)); }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('try-catch-finally 패턴 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'try-catch.ts');
+    await writeFile(filePath, 'function safe() { try { return 1; } catch (e) { return 0; } finally { /* cleanup */ } }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('여러 제네릭 타입 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'generics.ts');
+    await writeFile(filePath, 'function identity<T>(x: T): T { return x; }\nfunction pair<A, B>(a: A, b: B): [A, B] { return [a, b]; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('인덱스 파일(index.ts) → ok=true', async () => {
+    const filePath = join(tempDir, 'index.ts');
+    await writeFile(filePath, 'export { default as Foo } from "./foo.js";\nexport type { Bar } from "./bar.js";');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('이진 파일처럼 긴 무작위 내용 → ok (boolean)', async () => {
+    const filePath = join(tempDir, 'random.ts');
+    const randomContent = Array.from({ length: 500 }, () => String.fromCharCode(Math.floor(Math.random() * 94) + 32)).join('');
+    await writeFile(filePath, randomContent);
+    const result = await indexer.indexFile(filePath);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('파일 경로가 절대경로 → ok=true', async () => {
+    const filePath = join(tempDir, 'abs-path.ts');
+    await writeFile(filePath, 'function absPath() { return "absolute"; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('중첩 깊은 디렉토리의 파일 → ok=true', async () => {
+    const deep = join(tempDir, 'a', 'b', 'c', 'd', 'e');
+    await mkdir(deep, { recursive: true });
+    const filePath = join(deep, 'deep.ts');
+    await writeFile(filePath, 'function deep() { return "deep"; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('파일 크기 0에서 큰 사이즈 순차 → 모두 ok', async () => {
+    for (const size of [0, 10, 100, 1000, 10000]) {
+      const filePath = join(tempDir, `size-${size}.ts`);
+      await writeFile(filePath, 'x'.repeat(size));
+      const result = await indexer.indexFile(filePath);
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+
+  it('다양한 언어 주석 포함 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'multilang.ts');
+    await writeFile(filePath, '// English comment\n// 한국어 주석\n// 日本語コメント\nfunction multilang() {}');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+
+  it('JSDoc 주석 포함 파일 → ok=true', async () => {
+    const filePath = join(tempDir, 'jsdoc.ts');
+    await writeFile(filePath, '/**\n * @param name - The user name\n * @returns greeting string\n */\nfunction greet(name: string): string { return `Hello ${name}`; }');
+    const result = await indexer.indexFile(filePath);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── 배치 64 — indexDirectory 추가 edge 케이스 ────────────────
+
+describe('CodeIndexer indexDirectory 배치64 — 추가 edge', () => {
+  it('30개 파일 디렉토리 → ok=true, value >= 30', async () => {
+    const dir = join(tempDir, 'thirty-files');
+    await mkdir(dir, { recursive: true });
+    for (let i = 0; i < 30; i++) {
+      await writeFile(join(dir, `fn${i}.ts`), `function fn${i}() { return ${i}; }`);
+    }
+    const result = await indexer.indexDirectory(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(30);
+  });
+
+  it('빈 디렉토리 5회 연속 → 모두 ok, value=0', async () => {
+    for (let i = 0; i < 5; i++) {
+      const dir = join(tempDir, `empty-rep-${i}`);
+      await mkdir(dir, { recursive: true });
+      const result = await indexer.indexDirectory(dir);
+      if (result.ok) expect(result.value).toBe(0);
+    }
+  });
+
+  it('extensions=["ts","tsx"] → TS+TSX 파일만', async () => {
+    const dir = join(tempDir, 'ts-tsx');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'a.ts'), 'function a() {}');
+    await writeFile(join(dir, 'b.tsx'), 'function b() { return null; }');
+    await writeFile(join(dir, 'c.js'), 'function c() {}');
+    const result = await indexer.indexDirectory(dir, { extensions: ['ts', 'tsx'] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(2);
+  });
+
+  it('extensions=["js"] → JS 파일만', async () => {
+    const dir = join(tempDir, 'js-only');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'a.js'), 'function a() {}');
+    await writeFile(join(dir, 'b.ts'), 'function b() {}');
+    const result = await indexer.indexDirectory(dir, { extensions: ['js'] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(0);
+  });
+
+  it('모든 파일이 확장자 없음 → extensions 필터 시 value=0', async () => {
+    const dir = join(tempDir, 'no-ext-dir');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'fileA'), 'content A');
+    await writeFile(join(dir, 'fileB'), 'content B');
+    const result = await indexer.indexDirectory(dir, { extensions: ['ts'] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe(0);
+  });
+
+  it('중첩 3레벨 디렉토리 → ok=true', async () => {
+    const dir = join(tempDir, 'nested-3');
+    const subDir = join(dir, 'sub1', 'sub2');
+    await mkdir(subDir, { recursive: true });
+    await writeFile(join(dir, 'top.ts'), 'function top() {}');
+    await writeFile(join(subDir, 'deep.ts'), 'function deep() {}');
+    const result = await indexer.indexDirectory(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(2);
+  });
+
+  it('UUID 파일명 20개 → 모두 인덱싱', async () => {
+    const dir = join(tempDir, 'uuid-files');
+    await mkdir(dir, { recursive: true });
+    for (let i = 0; i < 20; i++) {
+      const uuid = crypto.randomUUID();
+      await writeFile(join(dir, `${uuid}.ts`), `function f${i}() { return "${uuid}"; }`);
+    }
+    const result = await indexer.indexDirectory(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(20);
+  });
+
+  it('같은 indexer로 다른 디렉토리 5회 → 모두 ok', async () => {
+    for (let i = 0; i < 5; i++) {
+      const dir = join(tempDir, `multi-dir-${i}`);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'fn.ts'), `function fn${i}() {}`);
+      const result = await indexer.indexDirectory(dir);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('파일 확장자 혼합 디렉토리 → ok=true', async () => {
+    const dir = join(tempDir, 'mixed-ext');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'a.ts'), 'function a() {}');
+    await writeFile(join(dir, 'b.js'), 'function b() {}');
+    await writeFile(join(dir, 'c.tsx'), 'function c() { return null; }');
+    await writeFile(join(dir, 'd.jsx'), 'function d() { return null; }');
+    await writeFile(join(dir, 'e.md'), '# Markdown');
+    const result = await indexer.indexDirectory(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(0);
+  });
+
+  it('이미 인덱싱된 디렉토리 재인덱싱 → ok=true', async () => {
+    const dir = join(tempDir, 'reindex');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'fn.ts'), 'function fn() {}');
+    const r1 = await indexer.indexDirectory(dir);
+    const r2 = await indexer.indexDirectory(dir);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+  });
+
+  it('큰 파일 3개 포함 디렉토리 → ok=true', async () => {
+    const dir = join(tempDir, 'large-files');
+    await mkdir(dir, { recursive: true });
+    for (let i = 0; i < 3; i++) {
+      const content = Array.from({ length: 200 }, (_, j) => `function fn${i}_${j}() { return ${j}; }`).join('\n');
+      await writeFile(join(dir, `large${i}.ts`), content);
+    }
+    const result = await indexer.indexDirectory(dir);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(3);
+  });
+
+  it('indexDirectory 결과 value는 항상 정수', async () => {
+    const dir = join(tempDir, 'int-check');
+    await mkdir(dir, { recursive: true });
+    for (let i = 0; i < 5; i++) {
+      await writeFile(join(dir, `int${i}.ts`), `function int${i}() {}`);
+    }
+    const result = await indexer.indexDirectory(dir);
+    if (result.ok) {
+      expect(Number.isInteger(result.value)).toBe(true);
+    }
+  });
+
+  it('indexDirectory 결과 Promise<Result> 타입', async () => {
+    const dir = join(tempDir, 'promise-type');
+    await mkdir(dir, { recursive: true });
+    const p = indexer.indexDirectory(dir);
+    expect(p).toBeInstanceOf(Promise);
+    const result = await p;
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('다중 확장자 필터 중 하나만 파일 존재 → ok=true', async () => {
+    const dir = join(tempDir, 'one-match');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'only.ts'), 'function only() {}');
+    const result = await indexer.indexDirectory(dir, { extensions: ['ts', 'tsx', 'js', 'jsx'] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ── 배치 64 — 동시 인덱싱 검증 ───────────────────────────────
+
+describe('CodeIndexer 배치64 — 동시 처리 및 반환값 검증', () => {
+  it('5개 파일 병렬 인덱싱 → 모두 ok', async () => {
+    const paths: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const fp = join(tempDir, `parallel-${i}.ts`);
+      await writeFile(fp, `function parallel${i}() { return ${i}; }`);
+      paths.push(fp);
+    }
+    const results = await Promise.all(paths.map(p => indexer.indexFile(p)));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('ok=true인 경우 value는 undefined 아님', async () => {
+    const filePath = join(tempDir, 'defined-val.ts');
+    await writeFile(filePath, 'function defined() { return "defined"; }');
+    const result = await indexer.indexFile(filePath);
+    if (result.ok) {
+      expect(result.value).toBeDefined();
+    }
+  });
+
+  it('ok=false인 경우 error 객체 존재', async () => {
+    const result = await indexer.indexFile(join(tempDir, 'nonexistent-err.ts'));
+    if (!result.ok) {
+      expect(result.error).toBeDefined();
+      expect(typeof result.error.code).toBe('string');
+      expect(typeof result.error.message).toBe('string');
+    }
+  });
+
+  it('indexFile ok=true → value >= 0', async () => {
+    const filePath = join(tempDir, 'min-chunks.ts');
+    await writeFile(filePath, 'function minChunks() {}');
+    const result = await indexer.indexFile(filePath);
+    if (result.ok) {
+      expect(result.value).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('indexDirectory ok=true → value >= 0', async () => {
+    const dir = join(tempDir, 'min-dir-val');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'f.ts'), 'function f() {}');
+    const result = await indexer.indexDirectory(dir);
+    if (result.ok) {
+      expect(result.value).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('결과 ok 타입 boolean — indexFile', async () => {
+    const fp = join(tempDir, 'bool-check.ts');
+    await writeFile(fp, 'function bool() {}');
+    const r = await indexer.indexFile(fp);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('결과 ok 타입 boolean — indexDirectory', async () => {
+    const dir = join(tempDir, 'bool-dir-check');
+    await mkdir(dir, { recursive: true });
+    const r = await indexer.indexDirectory(dir);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('같은 파일 병렬 10번 → 모두 ok', async () => {
+    const fp = join(tempDir, 'parallel-same.ts');
+    await writeFile(fp, 'function parallelSame() { return "same"; }');
+    const results = await Promise.all(Array.from({ length: 10 }, () => indexer.indexFile(fp)));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('indexFile 10번 연속 → value 항상 양수', async () => {
+    const fp = join(tempDir, 'positive-val.ts');
+    await writeFile(fp, 'function posVal() { return "positive"; }');
+    for (let i = 0; i < 10; i++) {
+      const r = await indexer.indexFile(fp);
+      if (r.ok) expect(r.value).toBeGreaterThan(0);
+    }
+  });
+
+  it('10개 서로 다른 파일 → 각각 독립적 value', async () => {
+    const results: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const fp = join(tempDir, `indep-${i}.ts`);
+      await writeFile(fp, `function indep${i}() { return ${i}; }`);
+      const r = await indexer.indexFile(fp);
+      if (r.ok) results.push(r.value);
+    }
+    expect(results.length).toBe(10);
+    for (const v of results) {
+      expect(typeof v).toBe('number');
+      expect(v).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('순차 10개 파일 인덱싱 후 store.search → 결과 있음', async () => {
+    for (let i = 0; i < 10; i++) {
+      const fp = join(tempDir, `searchable-seq-${i}.ts`);
+      await writeFile(fp, `function searchableSeq${i}(input: string) { return input.trim(); }`);
+      await indexer.indexFile(fp);
+    }
+    const queryResult = await provider.embedQuery('searchable sequence function');
+    if (queryResult.ok) {
+      const searchResult = await store.search(queryResult.value, 10);
+      if (searchResult.ok) {
+        expect(searchResult.value.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});

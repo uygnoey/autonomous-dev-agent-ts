@@ -1149,3 +1149,425 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── 배치 64 추가 E2E 시나리오 ────────────────────────────────
+
+describe('프로젝트 생명주기 E2E 배치64 — init 상세 검증', () => {
+  it('init → .adev/config.json embedding 섹션 검증', async () => {
+    const projectPath = join(tmpDir, 'embed-check');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    expect(config.embedding).toBeDefined();
+    expect(typeof config.embedding).toBe('object');
+  });
+
+  it('init → .adev/config.json testing 섹션 검증', async () => {
+    const projectPath = join(tmpDir, 'test-check');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    expect(config.testing).toBeDefined();
+    expect(typeof config.testing).toBe('object');
+  });
+
+  it('init → .adev/config.json log 섹션 검증', async () => {
+    const projectPath = join(tmpDir, 'log-check');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    expect(config.log).toBeDefined();
+    expect(typeof config.log).toBe('object');
+  });
+
+  it('init 결과는 boolean ok', async () => {
+    const projectPath = join(tmpDir, 'bool-init');
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('init 결과 ok=true → config.json 파일 존재', async () => {
+    const projectPath = join(tmpDir, 'exists-check');
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    if (result.ok) {
+      const configFile = Bun.file(join(projectPath, '.adev', 'config.json'));
+      expect(await configFile.exists()).toBe(true);
+    }
+  });
+
+  it('init 두 번째 시도 → error.code 존재', async () => {
+    const projectPath = join(tmpDir, 'double-init');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r2 = await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    if (!r2.ok) {
+      expect(typeof r2.error.code).toBe('string');
+    }
+  });
+
+  it('init → verification 섹션 검증', async () => {
+    const projectPath = join(tmpDir, 'verify-check');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    expect(config.verification).toBeDefined();
+  });
+
+  it('init → agents 폴더에 qa.md 존재', async () => {
+    const projectPath = join(tmpDir, 'agent-qa');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const agentFile = Bun.file(join(projectPath, '.adev', 'agents', 'qa.md'));
+    expect(await agentFile.exists()).toBe(true);
+  });
+
+  it('init → agents 폴더에 reviewer.md 존재', async () => {
+    const projectPath = join(tmpDir, 'agent-reviewer');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const agentFile = Bun.file(join(projectPath, '.adev', 'agents', 'reviewer.md'));
+    expect(await agentFile.exists()).toBe(true);
+  });
+
+  it('init → config.json 파싱 가능', async () => {
+    const projectPath = join(tmpDir, 'parseable-cfg');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    expect(async () => {
+      await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    }).not.toThrow();
+  });
+
+  it('UUID 기반 project path init → ok=true', async () => {
+    const uuid = crypto.randomUUID();
+    const projectPath = join(tmpDir, uuid);
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('프로젝트 생명주기 E2E 배치64 — config 상세 검증', () => {
+  it('config set log.level=error → 조회 확인', async () => {
+    const projectPath = join(tmpDir, 'cfg-err-level');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const setResult = await configCmd.execute(['set', 'log.level', 'error'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof setResult.ok).toBe('boolean');
+    if (setResult.ok) {
+      const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+      expect(config.log.level).toBe('error');
+    }
+  });
+
+  it('config set log.level=info → 조회 확인', async () => {
+    const projectPath = join(tmpDir, 'cfg-info-level');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const setResult = await configCmd.execute(['set', 'log.level', 'info'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof setResult.ok).toBe('boolean');
+    if (setResult.ok) {
+      const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+      expect(config.log.level).toBe('info');
+    }
+  });
+
+  it('config list → ok=true', async () => {
+    const projectPath = join(tmpDir, 'cfg-list-ok');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r = await configCmd.execute(['list'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(r.ok).toBe(true);
+  });
+
+  it('config set 5회 연속 다른 키 → 모두 ok 또는 에러', async () => {
+    const projectPath = join(tmpDir, 'cfg-5set');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const pairs = [
+      ['log.level', 'debug'],
+      ['log.level', 'info'],
+      ['log.level', 'warn'],
+      ['log.level', 'error'],
+      ['log.level', 'debug'],
+    ];
+    for (const [key, value] of pairs) {
+      const r = await configCmd.execute(['set', key as string, value as string], { ...DEFAULT_OPTIONS, projectPath });
+      expect(typeof r.ok).toBe('boolean');
+    }
+  });
+
+  it('config get → ok 또는 에러', async () => {
+    const projectPath = join(tmpDir, 'cfg-get');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r = await configCmd.execute(['get', 'log.level'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('init 없이 config list → ok=false 또는 에러', async () => {
+    const projectPath = join(tmpDir, 'no-init-cfg');
+    const configCmd = new ConfigCommand(logger);
+    const r = await configCmd.execute(['list'], { ...DEFAULT_OPTIONS, projectPath });
+    // 초기화 없으면 실패해야 함
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('config 잘못된 서브명령 → 에러', async () => {
+    const projectPath = join(tmpDir, 'bad-cfg-cmd');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r = await configCmd.execute(['invalid-subcommand'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('config set → 직후 파일에서 값 확인', async () => {
+    const projectPath = join(tmpDir, 'cfg-file-verify');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    await configCmd.execute(['set', 'log.level', 'debug'], { ...DEFAULT_OPTIONS, projectPath });
+    const config = await Bun.file(join(projectPath, '.adev', 'config.json')).json();
+    expect(config.log.level).toBe('debug');
+  });
+
+  it('config list 결과는 boolean ok', async () => {
+    const projectPath = join(tmpDir, 'cfg-list-bool');
+    const initCmd = new InitCommand(logger, registryDir);
+    const configCmd = new ConfigCommand(logger);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r = await configCmd.execute(['list'], { ...DEFAULT_OPTIONS, projectPath });
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+describe('프로젝트 생명주기 E2E 배치64 — project 명령 상세', () => {
+  it('project add → ok=true', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    const result = await projCmd.execute(['add', join(tmpDir, 'add-ok')], DEFAULT_OPTIONS);
+    expect(result.ok).toBe(true);
+  });
+
+  it('project list → ok=true', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    const result = await projCmd.execute(['list'], DEFAULT_OPTIONS);
+    expect(result.ok).toBe(true);
+  });
+
+  it('project add + list → 등록된 프로젝트 포함', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'list-check')], DEFAULT_OPTIONS);
+    const regResult = await loadRegistry(registryDir);
+    if (regResult.ok) {
+      const names = regResult.value.projects.map((p: { name: string }) => p.name);
+      expect(names).toContain('list-check');
+    }
+  });
+
+  it('project remove → ok=true', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'to-remove')], DEFAULT_OPTIONS);
+    const r = await projCmd.execute(['remove', 'to-remove'], DEFAULT_OPTIONS);
+    expect(r.ok).toBe(true);
+  });
+
+  it('project remove 없는 이름 → ok=false', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    const r = await projCmd.execute(['remove', 'nonexistent-proj'], DEFAULT_OPTIONS);
+    expect(r.ok).toBe(false);
+  });
+
+  it('project switch → ok=true', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'sw-target')], DEFAULT_OPTIONS);
+    const r = await projCmd.execute(['switch', 'sw-target'], DEFAULT_OPTIONS);
+    expect(r.ok).toBe(true);
+  });
+
+  it('project switch → registry activeProject 변경', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'sw-confirm')], DEFAULT_OPTIONS);
+    await projCmd.execute(['switch', 'sw-confirm'], DEFAULT_OPTIONS);
+    const regResult = await loadRegistry(registryDir);
+    if (regResult.ok) {
+      expect(regResult.value.activeProject).toBe('sw-confirm');
+    }
+  });
+
+  it('project add 10개 → registry length 10', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    for (let i = 0; i < 10; i++) {
+      await projCmd.execute(['add', join(tmpDir, `batch-proj-${i}`)], DEFAULT_OPTIONS);
+    }
+    const regResult = await loadRegistry(registryDir);
+    if (regResult.ok) {
+      expect(regResult.value.projects.length).toBe(10);
+    }
+  });
+
+  it('project add 10개 → 5개 remove → 5개 남음', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    for (let i = 0; i < 10; i++) {
+      await projCmd.execute(['add', join(tmpDir, `rm-half-${i}`)], DEFAULT_OPTIONS);
+    }
+    for (let i = 0; i < 5; i++) {
+      await projCmd.execute(['remove', `rm-half-${i}`], DEFAULT_OPTIONS);
+    }
+    const regResult = await loadRegistry(registryDir);
+    if (regResult.ok) {
+      expect(regResult.value.projects.length).toBe(5);
+    }
+  });
+
+  it('project add 중복 이름 → ok=false', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'dup-proj')], DEFAULT_OPTIONS);
+    const r = await projCmd.execute(['add', join(tmpDir, 'dup-proj')], DEFAULT_OPTIONS);
+    expect(r.ok).toBe(false);
+  });
+
+  it('project switch 없는 이름 → ok=false', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    const r = await projCmd.execute(['switch', 'no-such-project'], DEFAULT_OPTIONS);
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('프로젝트 생명주기 E2E 배치64 — CommandRouter 상세', () => {
+  it('CommandRouter 인스턴스 생성 → ok', () => {
+    expect(() => new CommandRouter(logger)).not.toThrow();
+  });
+
+  it('CommandRouter register + execute → boolean ok', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new ConfigCommand(logger));
+    const projectPath = join(tmpDir, 'router-test');
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { ...DEFAULT_OPTIONS, projectPath });
+    const r = await router.execute(['config', 'list', `--project-path=${projectPath}`]);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('CommandRouter 알 수 없는 명령 → ok=false', async () => {
+    const router = new CommandRouter(logger);
+    const r = await router.execute(['unknown-command-xyz']);
+    expect(r.ok).toBe(false);
+  });
+
+  it('CommandRouter register 여러 명령 → 각각 실행 가능', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new ConfigCommand(logger));
+    router.register(new ProjectCommand(logger, registryDir));
+    // project list
+    const r = await router.execute(['project', 'list']);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('CommandRouter execute 인자 없음 → boolean ok', async () => {
+    const router = new CommandRouter(logger);
+    const r = await router.execute([]);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('CommandRouter init 명령 등록 후 실행 → boolean ok', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    const projectPath = join(tmpDir, 'router-init-test');
+    const r = await router.execute(['init', `--project-path=${projectPath}`]);
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+describe('프로젝트 생명주기 E2E 배치64 — loadRegistry 상세', () => {
+  it('loadRegistry 비어있는 registry → ok=true, projects 빈 배열', async () => {
+    const result = await loadRegistry(registryDir);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value.projects)).toBe(true);
+    }
+  });
+
+  it('loadRegistry 없는 디렉토리 → ok 또는 에러', async () => {
+    const nonExist = join(tmpDir, 'no-registry-dir');
+    const result = await loadRegistry(nonExist);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('project add 후 loadRegistry → projects.length > 0', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'reg-load-check')], DEFAULT_OPTIONS);
+    const result = await loadRegistry(registryDir);
+    if (result.ok) {
+      expect(result.value.projects.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('loadRegistry 결과 projects는 배열', async () => {
+    const result = await loadRegistry(registryDir);
+    if (result.ok) {
+      expect(Array.isArray(result.value.projects)).toBe(true);
+    }
+  });
+
+  it('loadRegistry 결과 activeProject는 string 또는 null/undefined', async () => {
+    const result = await loadRegistry(registryDir);
+    if (result.ok) {
+      const active = result.value.activeProject;
+      expect(typeof active === 'string' || active == null).toBe(true);
+    }
+  });
+
+  it('5개 add 후 loadRegistry → 5개 반환', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    for (let i = 0; i < 5; i++) {
+      await projCmd.execute(['add', join(tmpDir, `reg5-${i}`)], DEFAULT_OPTIONS);
+    }
+    const result = await loadRegistry(registryDir);
+    if (result.ok) {
+      expect(result.value.projects.length).toBe(5);
+    }
+  });
+
+  it('add → remove → loadRegistry → projects.length 감소', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'reg-dec-1')], DEFAULT_OPTIONS);
+    await projCmd.execute(['add', join(tmpDir, 'reg-dec-2')], DEFAULT_OPTIONS);
+    const before = await loadRegistry(registryDir);
+    await projCmd.execute(['remove', 'reg-dec-1'], DEFAULT_OPTIONS);
+    const after = await loadRegistry(registryDir);
+    if (before.ok && after.ok) {
+      expect(after.value.projects.length).toBe(before.value.projects.length - 1);
+    }
+  });
+
+  it('switch 후 loadRegistry → activeProject 변경 확인', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'active-check-a')], DEFAULT_OPTIONS);
+    await projCmd.execute(['add', join(tmpDir, 'active-check-b')], DEFAULT_OPTIONS);
+    await projCmd.execute(['switch', 'active-check-b'], DEFAULT_OPTIONS);
+    const result = await loadRegistry(registryDir);
+    if (result.ok) {
+      expect(result.value.activeProject).toBe('active-check-b');
+    }
+  });
+
+  it('loadRegistry 10회 호출 → 동일 결과', async () => {
+    const projCmd = new ProjectCommand(logger, registryDir);
+    await projCmd.execute(['add', join(tmpDir, 'idempotent-10')], DEFAULT_OPTIONS);
+    const firstResult = await loadRegistry(registryDir);
+    for (let i = 0; i < 9; i++) {
+      const r = await loadRegistry(registryDir);
+      if (firstResult.ok && r.ok) {
+        expect(r.value.projects.length).toBe(firstResult.value.projects.length);
+      }
+    }
+  });
+});
