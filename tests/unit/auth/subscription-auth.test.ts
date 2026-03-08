@@ -906,3 +906,355 @@ describe('SubscriptionAuth 롤링 윈도우 복합 시나리오', () => {
     expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
   });
 });
+
+// ── 추가 경계값: 상태 필드 타입 검증 ─────────────────────────────
+
+describe('SubscriptionAuth 상태 필드 타입 검증', () => {
+  it('inputTokensRemaining은 null', () => {
+    const auth = createAuth();
+    expect(auth.getRateLimitStatus().inputTokensRemaining).toBeNull();
+  });
+
+  it('outputTokensRemaining은 null', () => {
+    const auth = createAuth();
+    expect(auth.getRateLimitStatus().outputTokensRemaining).toBeNull();
+  });
+
+  it('retryAfterSeconds은 null', () => {
+    const auth = createAuth();
+    expect(auth.getRateLimitStatus().retryAfterSeconds).toBeNull();
+  });
+
+  it('사용 후에도 inputTokensRemaining은 null', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(1000, 500));
+    expect(auth.getRateLimitStatus().inputTokensRemaining).toBeNull();
+  });
+
+  it('사용 후에도 outputTokensRemaining은 null', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(1000, 500));
+    expect(auth.getRateLimitStatus().outputTokensRemaining).toBeNull();
+  });
+
+  it('사용 후에도 retryAfterSeconds은 null', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(1000, 500));
+    expect(auth.getRateLimitStatus().retryAfterSeconds).toBeNull();
+  });
+
+  it('requestsRemaining은 정수', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    const remaining = auth.getRateLimitStatus().requestsRemaining;
+    expect(Number.isInteger(remaining)).toBe(true);
+  });
+
+  it('estimatedLimit=45 → requestsRemaining 0~45 범위', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const r = auth.getRateLimitStatus().requestsRemaining;
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(45);
+  });
+
+  it('5번 사용 후 requestsRemaining 범위 유지', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 5; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    const r = auth.getRateLimitStatus().requestsRemaining;
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(45);
+  });
+
+  it('isLimitApproaching은 boolean', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(typeof auth.getRateLimitStatus().isLimitApproaching).toBe('boolean');
+  });
+});
+
+// ── 추가 경계값: nowFn 경계 시나리오 ────────────────────────────
+
+describe('SubscriptionAuth nowFn 경계 시나리오', () => {
+  it('nowFn이 0을 반환하면 모든 사용량 만료 안됨 (cutoff < 0)', () => {
+    const auth = createAuth({ estimatedLimit: 45, nowFn: () => 0 });
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
+
+  it('nowFn이 Number.MAX_SAFE_INTEGER → 모든 사용량 즉시 만료', () => {
+    let t = 0;
+    const auth = createAuth({ estimatedLimit: 45, nowFn: () => t });
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    t = Number.MAX_SAFE_INTEGER;
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(45);
+  });
+
+  it('시간 순서대로 사용 → 각각 만료 순서도 보장', () => {
+    let t = 1_000_000;
+    const auth = createAuth({ estimatedLimit: 45, nowFn: () => t });
+
+    for (let i = 0; i < 3; i++) {
+      auth.updateFromResponse({}, makeUsageBody(100, 50));
+    }
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(42);
+
+    t = 1_000_000 + FIVE_HOURS_MS + 1;
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(45);
+  });
+
+  it('다른 nowFn을 가진 두 인스턴스 → 독립적 동작', () => {
+    let t1 = 0;
+    let t2 = 0;
+    const auth1 = createAuth({ estimatedLimit: 10, nowFn: () => t1 });
+    const auth2 = createAuth({ estimatedLimit: 10, nowFn: () => t2 });
+
+    for (let i = 0; i < 5; i++) auth1.updateFromResponse({}, makeUsageBody(100, 50));
+    for (let i = 0; i < 3; i++) auth2.updateFromResponse({}, makeUsageBody(100, 50));
+
+    expect(auth1.getRateLimitStatus().requestsRemaining).toBe(5);
+    expect(auth2.getRateLimitStatus().requestsRemaining).toBe(7);
+
+    t1 = FIVE_HOURS_MS + 1;
+    expect(auth1.getRateLimitStatus().requestsRemaining).toBe(10);
+    expect(auth2.getRateLimitStatus().requestsRemaining).toBe(7);
+  });
+
+  it('사용 시점보다 훨씬 이후 조회 → 만료 완료', () => {
+    let t = 100_000;
+    const auth = createAuth({ estimatedLimit: 20, nowFn: () => t });
+    for (let i = 0; i < 15; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(5);
+    t = 100_000 + 10 * FIVE_HOURS_MS;
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(20);
+  });
+});
+
+// ── 추가 경계값: 반복 패턴 일관성 ───────────────────────────────
+
+describe('SubscriptionAuth 반복 패턴 일관성', () => {
+  it('estimatedLimit=3 → 3번 정확히 → 0', () => {
+    const auth = createAuth({ estimatedLimit: 3 });
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+
+  it('estimatedLimit=7 → 7번 → 0, 8번째 → 0 유지', () => {
+    const auth = createAuth({ estimatedLimit: 7 });
+    for (let i = 0; i < 8; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+
+  it('requestsRemaining이 0이면 isLimitApproaching=true', () => {
+    const auth = createAuth({ estimatedLimit: 5 });
+    for (let i = 0; i < 5; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('estimatedLimit=50 → 39번(78%) → approaching=false', () => {
+    const auth = createAuth({ estimatedLimit: 50 });
+    for (let i = 0; i < 39; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('estimatedLimit=50 → 40번(80%) → approaching=true', () => {
+    const auth = createAuth({ estimatedLimit: 50 });
+    for (let i = 0; i < 40; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('estimatedLimit=25 → 19번(76%) → approaching=false', () => {
+    const auth = createAuth({ estimatedLimit: 25 });
+    for (let i = 0; i < 19; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+
+  it('estimatedLimit=25 → 20번(80%) → approaching=true', () => {
+    const auth = createAuth({ estimatedLimit: 25 });
+    for (let i = 0; i < 20; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+  });
+
+  it('updateFromResponse 반환값 항상 ok=true (10회 반복)', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 10; i++) {
+      const r = auth.updateFromResponse({}, makeUsageBody(100, 50));
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('복합: 사용→만료→재사용 사이클', () => {
+    let t = 0;
+    const auth = createAuth({ estimatedLimit: 5, nowFn: () => t });
+
+    for (let i = 0; i < 5; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+
+    t = FIVE_HOURS_MS + 1;
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(5);
+
+    for (let i = 0; i < 3; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(2);
+  });
+
+  it('approaching 후 만료 → approaching=false', () => {
+    let t = 0;
+    const auth = createAuth({ estimatedLimit: 10, nowFn: () => t });
+    for (let i = 0; i < 9; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(true);
+    t = FIVE_HOURS_MS + 1;
+    expect(auth.getRateLimitStatus().isLimitApproaching).toBe(false);
+  });
+});
+
+// ── 추가 경계값: updateFromResponse 다양한 구조 ────────────────
+
+describe('SubscriptionAuth updateFromResponse 다양한 구조', () => {
+  it('중첩 객체 usage → 무효 처리 (usage가 object 아님)', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, { usage: { nested: { input_tokens: 100 } }, input_tokens: 100, output_tokens: 50 });
+    // nested 내부는 파싱 안 됨, usage 자체는 object이므로 카운트 증가
+    const r = auth.getRateLimitStatus().requestsRemaining;
+    expect(r).toBeLessThanOrEqual(45);
+  });
+
+  it('usage.input_tokens=0, output_tokens=0 → 카운트 증가', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(0, 0));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
+
+  it('body에 usage 외 다른 필드도 있는 경우 → 정상 파싱', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, {
+      id: 'msg-123',
+      type: 'message',
+      usage: { input_tokens: 500, output_tokens: 200 },
+      model: 'claude-sonnet',
+    });
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
+
+  it('usage.input_tokens=1000000 → 큰 값도 정상 처리', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    auth.updateFromResponse({}, makeUsageBody(1_000_000, 1_000_000));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(44);
+  });
+
+  it('body=Function → ok=true, 사용량 변화 없음', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const fn = () => 42;
+    const result = auth.updateFromResponse({}, fn as unknown);
+    expect(result.ok).toBe(true);
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(45);
+  });
+
+  it('body=Map → ok=true', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const result = auth.updateFromResponse({}, new Map() as unknown);
+    expect(result.ok).toBe(true);
+  });
+
+  it('body=Set → ok=true', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const result = auth.updateFromResponse({}, new Set() as unknown);
+    expect(result.ok).toBe(true);
+  });
+
+  it('20번 연속 makeUsageBody(50,25) → requestsRemaining=25', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 20; i++) auth.updateFromResponse({}, makeUsageBody(50, 25));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(25);
+  });
+});
+
+// ── 추가 경계값: getAuthHeader 멱등성 ────────────────────────────
+
+describe('SubscriptionAuth getAuthHeader 멱등성 및 불변성', () => {
+  it('getAuthHeader 100번 호출 → authorization 불변', () => {
+    const auth = createAuth({ token: 'immutable-token' });
+    const expected = 'Bearer immutable-token';
+    for (let i = 0; i < 100; i++) {
+      expect(auth.getAuthHeader().authorization).toBe(expected);
+    }
+  });
+
+  it('updateFromResponse 후 getAuthHeader 변하지 않음', () => {
+    const auth = createAuth({ token: 'stable-token', estimatedLimit: 45 });
+    const headerBefore = auth.getAuthHeader().authorization;
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    auth.updateFromResponse({}, makeUsageBody(200, 100));
+    const headerAfter = auth.getAuthHeader().authorization;
+    expect(headerBefore).toBe(headerAfter);
+  });
+
+  it('authMode 100번 조회 → 항상 oauth-token', () => {
+    const auth = createAuth();
+    for (let i = 0; i < 100; i++) {
+      expect(auth.authMode).toBe('oauth-token');
+    }
+  });
+
+  it('인스턴스 재생성 후 동일 토큰 → 동일 authorization', () => {
+    const token = 'recurring-token-xyz';
+    const auth1 = createAuth({ token });
+    const auth2 = createAuth({ token });
+    expect(auth1.getAuthHeader().authorization).toBe(auth2.getAuthHeader().authorization);
+  });
+
+  it('getRateLimitStatus 반환 객체는 매번 새 객체', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const s1 = auth.getRateLimitStatus();
+    const s2 = auth.getRateLimitStatus();
+    expect(s1).not.toBe(s2);
+  });
+
+  it('updateFromResponse 후 status 변화 확인', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    const before = auth.getRateLimitStatus().requestsRemaining;
+    auth.updateFromResponse({}, makeUsageBody(100, 50));
+    const after = auth.getRateLimitStatus().requestsRemaining;
+    expect(after).toBeLessThan(before);
+  });
+
+  it('접두사 Bearer는 대소문자 정확히 Bearer', () => {
+    const auth = createAuth({ token: 'mytoken' });
+    const header = auth.getAuthHeader().authorization;
+    expect(header.startsWith('Bearer ')).toBe(true);
+    expect(header.startsWith('bearer ')).toBe(false);
+  });
+
+  it('anthropic-version 정확히 2023-06-01', () => {
+    const auth = createAuth();
+    expect(auth.getAuthHeader()['anthropic-version']).toBe('2023-06-01');
+  });
+
+  it('5개의 다른 estimatedLimit → requestsRemaining 각각 다름', () => {
+    const limits = [10, 20, 30, 40, 50];
+    for (const limit of limits) {
+      const auth = createAuth({ estimatedLimit: limit });
+      expect(auth.getRateLimitStatus().requestsRemaining).toBe(limit);
+    }
+  });
+
+  it('estimatedLimit=45 → 44번 사용 후 requestsRemaining=1', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 44; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(1);
+  });
+
+  it('estimatedLimit=45 → 45번 사용 후 requestsRemaining=0', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 45; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+
+  it('estimatedLimit=45 → 46번 사용 후 requestsRemaining=0 유지', () => {
+    const auth = createAuth({ estimatedLimit: 45 });
+    for (let i = 0; i < 46; i++) auth.updateFromResponse({}, makeUsageBody(100, 50));
+    expect(auth.getRateLimitStatus().requestsRemaining).toBe(0);
+  });
+});

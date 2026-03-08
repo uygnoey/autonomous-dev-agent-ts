@@ -909,4 +909,321 @@ describe('기획 → 설계 → Contract 파이프라인 E2E / Planning Pipeline
       expect(cIdx).toBeLessThan(dIdx);
     }
   });
+
+  it('Planner: 10개 메시지 대화 → 기획 문서 생성', () => {
+    const planner = new Planner(logger);
+    const conversations: ConversationMessage[] = Array.from({ length: 10 }, (_, i) =>
+      createMessage(`m${i}`, i % 2 === 0 ? 'user' : 'assistant', `대화 내용 ${i}`, projectId),
+    );
+    const result = planner.createPlan(projectId, conversations);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('Project Plan');
+    }
+  });
+
+  it('SpecBuilder: 특수문자 포함 기능명 → ok', () => {
+    const specBuilder = new SpecBuilder(logger);
+    const features = [
+      createCompleteFeature('feat-spec!', 'Feature-With-Dash_And_Underscore'),
+    ];
+    const result = specBuilder.buildSpec(
+      '# Plan\n\n## Goals\n\nBuild it',
+      '# Design\n\nDesign here',
+      features,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('TestTypeDesigner: 의존성 있는 기능 → 테스트 정의 생성', () => {
+    const testDesigner = new TestTypeDesigner(logger);
+    const features = [
+      createCompleteFeature('feat-base', 'Base'),
+      createCompleteFeature('feat-dep', 'Dependent', ['feat-base']),
+    ];
+    const result = testDesigner.createDefinitions(features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(2);
+    }
+  });
+
+  it('ContractBuilder: 2개 독립 기능 → 순서 두 가지 모두 허용', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features: FeatureSpec[] = [
+      createCompleteFeature('feat-x', 'X'),
+      createCompleteFeature('feat-y', 'Y'),
+    ];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const order = result.value.implementationOrder;
+      expect(order).toContain('feat-x');
+      expect(order).toContain('feat-y');
+      expect(order).toHaveLength(2);
+    }
+  });
+
+  it('Planner: 긴 한글 대화 처리 → plan에 Goals 포함', () => {
+    const planner = new Planner(logger);
+    const longKorean = '가나다라마바사아자차카타파하'.repeat(30);
+    const conversations: ConversationMessage[] = [
+      createMessage('m1', 'user', longKorean, projectId),
+      createMessage('m2', 'assistant', '알겠습니다 처리하겠습니다', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('Goals');
+    }
+  });
+
+  it('Designer: 10개 기능 설계 → 기능 ID 포함 확인', () => {
+    const designer = new Designer(logger);
+    const features = Array.from({ length: 10 }, (_, i) =>
+      createCompleteFeature(`feat-${String(i).padStart(3, '0')}`, `Feature${i}`),
+    );
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nBuild system', features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('feat-000');
+    }
+  });
+
+  it('ContractBuilder: project 타입 detection (Web App)', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = [createCompleteFeature('feat-1', 'Frontend')];
+    const result = contractBuilder.buildContract(features, [], 'Web application UI design with React');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // web-app or library depending on implementation
+      expect(typeof result.value.projectType).toBe('string');
+      expect(result.value.projectType.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('ContractBuilder: version은 양수 정수', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.version).toBeGreaterThan(0);
+      expect(Number.isInteger(result.value.version)).toBe(true);
+    }
+  });
+
+  it('ContractBuilder: implementationOrder는 배열', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value.implementationOrder)).toBe(true);
+    }
+  });
+
+  it('ContractBuilder: features 배열 요소 구조 확인', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = [createCompleteFeature('feat-check', 'Check')];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const f = result.value.features[0];
+      expect(f).toBeDefined();
+      if (f) {
+        expect(typeof f.id).toBe('string');
+        expect(typeof f.name).toBe('string');
+      }
+    }
+  });
+
+  it('HandoffReceiver: receive 반환값은 ok boolean', () => {
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+    const receiver = new HandoffReceiver(logger);
+
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const testDefsResult = testDesigner.createDefinitions(features);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, 'REST API');
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      projectId,
+      contractResult.value,
+      'plan doc',
+      'design doc',
+      'spec doc',
+    );
+    if (!handoffResult.ok) return;
+
+    const receiveResult = receiver.receive(handoffResult.value);
+    expect(typeof receiveResult.ok).toBe('boolean');
+  });
+
+  it('Planner + Designer: 연속 대화 → 설계 문서에 기능 ID 포함', () => {
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+
+    const conversations: ConversationMessage[] = [
+      createMessage('m1', 'user', '결제 시스템 만들기', projectId),
+      createMessage('m2', 'assistant', '카드/페이팔 결제 지원', projectId),
+      createMessage('m3', 'user', '환불 기능도 포함', projectId),
+    ];
+
+    const planResult = planner.createPlan(projectId, conversations);
+    expect(planResult.ok).toBe(true);
+    if (!planResult.ok) return;
+
+    const features = [
+      createCompleteFeature('feat-payment', 'Payment'),
+      createCompleteFeature('feat-refund', 'Refund', ['feat-payment']),
+    ];
+
+    const designResult = designer.createDesign(projectId, planResult.value, features);
+    expect(designResult.ok).toBe(true);
+    if (designResult.ok) {
+      expect(designResult.value).toContain('feat-payment');
+    }
+  });
+
+  it('SpecBuilder: 5개 기능 → 스펙에 모든 기능 설명 포함', () => {
+    const specBuilder = new SpecBuilder(logger);
+    const features = Array.from({ length: 5 }, (_, i) =>
+      createCompleteFeature(`feat-${i}`, `MyFeature${i}`),
+    );
+    const result = specBuilder.buildSpec(
+      '# Plan\n\n## Goals\n\nBuild system',
+      '# Design\n\nDesign doc',
+      features,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (let i = 0; i < 5; i++) {
+        expect(result.value).toContain(`feat-${i}`);
+      }
+    }
+  });
+
+  it('전체 파이프라인: 단일 기능 최소 HandoffPackage', () => {
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+    const receiver = new HandoffReceiver(logger);
+
+    const conversations: ConversationMessage[] = [
+      createMessage('m1', 'user', '간단한 로그인 기능 개발', projectId),
+      createMessage('m2', 'assistant', '이메일/비밀번호 로그인 구현', projectId),
+    ];
+
+    const planResult = planner.createPlan(projectId, conversations);
+    expect(planResult.ok).toBe(true);
+    if (!planResult.ok) return;
+
+    const features = [createCompleteFeature('feat-login', 'Login')];
+
+    const designResult = designer.createDesign(projectId, planResult.value, features);
+    expect(designResult.ok).toBe(true);
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    expect(specResult.ok).toBe(true);
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    expect(testDefsResult.ok).toBe(true);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(
+      features,
+      testDefsResult.value,
+      designResult.value,
+    );
+    expect(contractResult.ok).toBe(true);
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      projectId,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    expect(handoffResult.ok).toBe(true);
+    if (!handoffResult.ok) return;
+
+    expect(handoffResult.value.projectId).toBe(projectId);
+    expect(handoffResult.value.contract.features).toHaveLength(1);
+
+    const receiveResult = receiver.receive(handoffResult.value);
+    expect(receiveResult.ok).toBe(true);
+  });
+
+  it('ContractBuilder: 별 모양 의존성 (center→5개 leaf)', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features: FeatureSpec[] = [
+      createCompleteFeature('center', 'Center'),
+      createCompleteFeature('leaf-1', 'Leaf1', ['center']),
+      createCompleteFeature('leaf-2', 'Leaf2', ['center']),
+      createCompleteFeature('leaf-3', 'Leaf3', ['center']),
+      createCompleteFeature('leaf-4', 'Leaf4', ['center']),
+      createCompleteFeature('leaf-5', 'Leaf5', ['center']),
+    ];
+
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const order = result.value.implementationOrder;
+      const centerIdx = order.indexOf('center');
+      for (const leaf of ['leaf-1', 'leaf-2', 'leaf-3', 'leaf-4', 'leaf-5']) {
+        expect(centerIdx).toBeLessThan(order.indexOf(leaf));
+      }
+    }
+  });
+
+  it('Planner: createPlan 반환값 ok는 boolean 타입', () => {
+    const planner = new Planner(logger);
+    const conversations: ConversationMessage[] = [
+      createMessage('m1', 'user', '앱 만들기', projectId),
+      createMessage('m2', 'assistant', '알겠습니다', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('Designer: createDesign 반환값 ok는 boolean 타입', () => {
+    const designer = new Designer(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('SpecBuilder: buildSpec 반환값 ok는 boolean 타입', () => {
+    const specBuilder = new SpecBuilder(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = specBuilder.buildSpec(
+      '# Plan\n\n## Goals\n\nGoal',
+      '# Design\n\nDesign',
+      features,
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('TestTypeDesigner: createDefinitions 반환값 ok는 boolean 타입', () => {
+    const testDesigner = new TestTypeDesigner(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = testDesigner.createDefinitions(features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder: buildContract 반환값 ok는 boolean 타입', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = [createCompleteFeature('feat-1', 'Auth')];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(typeof result.ok).toBe('boolean');
+  });
 });

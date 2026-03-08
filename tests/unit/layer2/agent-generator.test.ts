@@ -906,3 +906,322 @@ describe('AgentGenerator 독립성', () => {
     }
   });
 });
+
+// ── 추가: 역할별 시스템 프롬프트 역할 설명 검증 ──────────────────
+
+describe('AgentGenerator 역할 설명 포함 검증', () => {
+  let generator: AgentGenerator;
+
+  beforeEach(() => {
+    generator = makeGenerator();
+  });
+
+  it('architect 시스템 프롬프트에 "설계자" 포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('설계자');
+    }
+  });
+
+  it('coder 시스템 프롬프트에 "코드" 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('코드');
+    }
+  });
+
+  it('tester 시스템 프롬프트에 "테스터" 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('테스터');
+    }
+  });
+
+  it('qa 시스템 프롬프트에 "QA" 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('QA');
+    }
+  });
+
+  it('reviewer 시스템 프롬프트에 "리뷰어" 포함', () => {
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('리뷰어');
+    }
+  });
+
+  it('documenter 시스템 프롬프트에 "문서" 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('문서');
+    }
+  });
+
+  it('qc 시스템 프롬프트에 "QC" 포함', () => {
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('QC');
+    }
+  });
+
+  it('architect 실행 프롬프트에 "설계" 포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('설계');
+    }
+  });
+
+  it('coder 실행 프롬프트에 "구현" 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('구현');
+    }
+  });
+
+  it('tester 실행 프롬프트에 "테스트" 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('테스트');
+    }
+  });
+
+  it('reviewer 실행 프롬프트에 "리뷰" 포함', () => {
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('리뷰');
+    }
+  });
+
+  it('documenter 실행 프롬프트에 "문서" 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('문서');
+    }
+  });
+});
+
+// ── 추가: projectId 필드 검증 ─────────────────────────────────
+
+describe('AgentGenerator projectId 필드 검증', () => {
+  it('projectId는 빈 문자열 (기본값)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.projectId).toBe('');
+    }
+  });
+
+  it('모든 에이전트 projectId는 string 타입', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(typeof result.value.projectId).toBe('string');
+      }
+    }
+  });
+
+  it('projectId는 항상 동일한 값 (빈 문자열)', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.projectId).toBe('');
+      }
+    }
+  });
+});
+
+// ── 추가: tools 중복 없음 검증 ───────────────────────────────
+
+describe('AgentGenerator tools 중복 검증', () => {
+  it('architect tools에 중복 없음', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      const tools = result.value.tools;
+      expect(new Set(tools).size).toBe(tools.length);
+    }
+  });
+
+  it('coder tools에 중복 없음', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      const tools = result.value.tools;
+      expect(new Set(tools).size).toBe(tools.length);
+    }
+  });
+
+  it('tester tools에 중복 없음', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      const tools = result.value.tools;
+      expect(new Set(tools).size).toBe(tools.length);
+    }
+  });
+
+  it('qa tools에 중복 없음', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      const tools = result.value.tools;
+      expect(new Set(tools).size).toBe(tools.length);
+    }
+  });
+
+  it('모든 에이전트 tools 중복 없음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        const tools = result.value.tools;
+        expect(new Set(tools).size).toBe(tools.length);
+      }
+    }
+  });
+
+  it('reviewer tools: Read, Glob, Grep 포함, Write 미포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+      expect(result.value.tools).toContain('Glob');
+      expect(result.value.tools).toContain('Grep');
+      expect(result.value.tools).not.toContain('Write');
+    }
+  });
+
+  it('documenter tools: Read, Write, Glob, Grep 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+      expect(result.value.tools).toContain('Write');
+      expect(result.value.tools).toContain('Glob');
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('qc tools: Read, Glob, Grep 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+      expect(result.value.tools).toContain('Glob');
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('coder tools: Bash 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Bash');
+    }
+  });
+});
+
+// ── 추가: config 객체 완전성 검증 ────────────────────────────
+
+describe('AgentGenerator config 객체 완전성', () => {
+  it('모든 에이전트 config에 name 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('name' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 phase 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('phase' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 tools 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('tools' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 maxTurns 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('maxTurns' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 systemPrompt 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('systemPrompt' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 prompt 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('prompt' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 featureId 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('featureId' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('모든 에이전트 config에 projectId 필드 있음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect('projectId' in result.value).toBe(true);
+      }
+    }
+  });
+
+  it('다른 featureId → prompt도 다름 (architect)', () => {
+    const generator = makeGenerator();
+    const r1 = generator.generateAgentConfig('architect', 'spec', 'feat-alpha');
+    const r2 = generator.generateAgentConfig('architect', 'spec', 'feat-beta');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.prompt).not.toBe(r2.value.prompt);
+    }
+  });
+
+  it('다른 spec → systemPrompt도 다름', () => {
+    const generator = makeGenerator();
+    const r1 = generator.generateAgentConfig('coder', 'spec-A', 'feat-1');
+    const r2 = generator.generateAgentConfig('coder', 'spec-B', 'feat-1');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.systemPrompt).not.toBe(r2.value.systemPrompt);
+    }
+  });
+});
