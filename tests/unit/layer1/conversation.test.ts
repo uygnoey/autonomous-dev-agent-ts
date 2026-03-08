@@ -543,3 +543,113 @@ describe('ConversationManager searchContext', () => {
     }
   });
 });
+
+// ── 추가 경계값: addMessage 반환값 구조 ──────────────────────
+
+describe('ConversationManager addMessage 반환값 구조', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-extra-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('ok=true는 boolean', async () => {
+    const result = await manager.addMessage(createTestMessage());
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('addMessage → getHistory → 메시지 확인', async () => {
+    const msg = createTestMessage({ content: '고유한 내용123' });
+    await manager.addMessage(msg);
+    const hist = await manager.getHistory('proj-test');
+    if (hist.ok) {
+      const found = hist.value.find(m => m.content === '고유한 내용123');
+      expect(found).toBeDefined();
+    }
+  });
+
+  it('addMessage → searchContext → 찾을 수 있음', async () => {
+    const msg = createTestMessage({ content: '검색가능한 고유한 내용xyz' });
+    await manager.addMessage(msg);
+    const result = await manager.searchContext('proj-test', '검색가능한');
+    if (result.ok) {
+      const found = result.value.some(m => m.content.includes('검색가능한'));
+      expect(found).toBe(true);
+    }
+  });
+
+  it('두 다른 content 저장 → 각각 조회 가능', async () => {
+    await manager.addMessage(createTestMessage({ content: '첫번째고유내용' }));
+    await manager.addMessage(createTestMessage({ content: '두번째고유내용' }));
+    const hist = await manager.getHistory('proj-test');
+    if (hist.ok) {
+      const contents = hist.value.map(m => m.content);
+      expect(contents).toContain('첫번째고유내용');
+      expect(contents).toContain('두번째고유내용');
+    }
+  });
+
+  it('삭제 없이 10개 저장 → getHistory ok', async () => {
+    for (let i = 0; i < 10; i++) {
+      await manager.addMessage(createTestMessage({ content: `bulk-${i}` }));
+    }
+    const hist = await manager.getHistory('proj-test');
+    expect(hist.ok).toBe(true);
+  });
+
+  it('searchContext result.value 배열 원소는 content 필드 가짐', async () => {
+    await manager.addMessage(createTestMessage({ content: 'field-check-content' }));
+    const result = await manager.searchContext('proj-test', 'field-check');
+    if (result.ok && result.value.length > 0) {
+      for (const m of result.value) {
+        expect(typeof m.content).toBe('string');
+      }
+    }
+  });
+
+  it('getHistory value 배열 원소는 role 필드 가짐', async () => {
+    await manager.addMessage(createTestMessage({ role: 'assistant', content: 'role-check' }));
+    const result = await manager.getHistory('proj-test');
+    if (result.ok && result.value.length > 0) {
+      for (const m of result.value) {
+        expect(typeof m.role).toBe('string');
+      }
+    }
+  });
+
+  it('getHistory limit=0 → ok 또는 err (구현 의존)', async () => {
+    await manager.addMessage(createTestMessage({ content: 'limit-zero' }));
+    const result = await manager.getHistory('proj-test', 0);
+    // limit=0은 구현에 따라 ok=false(입력 검증 실패) 또는 ok=true(빈 배열) 모두 허용
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('searchContext ok는 boolean', async () => {
+    const result = await manager.searchContext('proj-test', 'any');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('getHistory ok는 boolean', async () => {
+    const result = await manager.getHistory('proj-test');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('5번 반복 addMessage + getHistory → 일관성', async () => {
+    const msg = createTestMessage({ content: 'consistent-content' });
+    await manager.addMessage(msg);
+    for (let i = 0; i < 5; i++) {
+      const hist = await manager.getHistory('proj-test');
+      expect(hist.ok).toBe(true);
+      if (hist.ok) expect(hist.value.some(m => m.content === 'consistent-content')).toBe(true);
+    }
+  });
+});

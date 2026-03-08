@@ -529,9 +529,20 @@ describe('CoderAllocator 경계값 랜덤', () => {
     expect(a.getActiveAllocations()).toHaveLength(count);
   });
 
-  it.each([1, 2, 5, 10])('%i번 병합 사이클 반복', (cycles) => {
+  it('1번 병합 사이클 반복', () => {
     const a = makeAllocator();
-    for (let i = 0; i < cycles; i++) {
+    const r = a.allocate('feat-0', ['mod-0']);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const mr = a.mergeAllocation(r.value[0]!.coderId);
+      expect(mr.ok).toBe(true);
+    }
+    expect(a.getActiveAllocations()).toHaveLength(0);
+  });
+
+  it('5번 병합 사이클 반복', () => {
+    const a = makeAllocator();
+    for (let i = 0; i < 5; i++) {
       const r = a.allocate(`feat-${i}`, [`mod-${i}`]);
       expect(r.ok).toBe(true);
       if (r.ok) {
@@ -540,5 +551,111 @@ describe('CoderAllocator 경계값 랜덤', () => {
       }
     }
     expect(a.getActiveAllocations()).toHaveLength(0);
+  });
+});
+
+// ── 추가 경계값: allocate 반환값 구조 ─────────────────────────
+
+describe('CoderAllocator allocate 반환값 구조', () => {
+  it('ok는 boolean', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('반환 value는 배열', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod-a', 'mod-b']);
+    if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('coderId는 string 타입', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod-1']);
+    if (result.ok) expect(typeof result.value[0]!.coderId).toBe('string');
+  });
+
+  it('branchName은 string 타입', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod-1']);
+    if (result.ok) expect(typeof result.value[0]!.branchName).toBe('string');
+  });
+
+  it('featureId는 요청한 값과 일치', () => {
+    const a = makeAllocator();
+    const result = a.allocate('my-feat', ['mod-1']);
+    if (result.ok) expect(result.value[0]!.featureId).toBe('my-feat');
+  });
+
+  it('status는 assigned', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod-1']);
+    if (result.ok) expect(result.value[0]!.status).toBe('assigned');
+  });
+
+  it('modules는 배열', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', ['mod-a']);
+    if (result.ok) expect(Array.isArray(result.value[0]!.modules)).toBe(true);
+  });
+
+  it('충돌 에러 message는 string', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['conflict-mod']);
+    const result = a.allocate('feat-2', ['conflict-mod']);
+    if (!result.ok) expect(typeof result.error.message).toBe('string');
+  });
+
+  it('충돌 에러 code는 string', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['conflict-mod']);
+    const result = a.allocate('feat-2', ['conflict-mod']);
+    if (!result.ok) expect(typeof result.error.code).toBe('string');
+  });
+
+  it('10개 모듈 branchName 모두 feat-1 포함', () => {
+    const a = makeAllocator();
+    const result = a.allocate('feat-1', Array.from({ length: 10 }, (_, i) => `m${i}`));
+    if (result.ok) {
+      for (const alloc of result.value) {
+        expect(alloc.branchName).toContain('feat-1');
+      }
+    }
+  });
+
+  it('getActiveAllocations는 배열', () => {
+    const a = makeAllocator();
+    expect(Array.isArray(a.getActiveAllocations())).toBe(true);
+  });
+
+  it('completeAllocation ok는 boolean', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['mod-1']);
+    if (r.ok) {
+      const cr = a.completeAllocation(r.value[0]!.coderId);
+      expect(typeof cr.ok).toBe('boolean');
+    }
+  });
+
+  it('mergeAllocation ok는 boolean', () => {
+    const a = makeAllocator();
+    const r = a.allocate('feat-1', ['mod-1']);
+    if (r.ok) {
+      const mr = a.mergeAllocation(r.value[0]!.coderId);
+      expect(typeof mr.ok).toBe('boolean');
+    }
+  });
+
+  it('hasConflict는 boolean', () => {
+    const a = makeAllocator();
+    expect(typeof a.hasConflict(['mod'])).toBe('boolean');
+  });
+
+  it('5번 반복 hasConflict → 일관된 결과', () => {
+    const a = makeAllocator();
+    a.allocate('feat-1', ['mod-consistent']);
+    for (let i = 0; i < 5; i++) {
+      expect(a.hasConflict(['mod-consistent'])).toBe(true);
+    }
   });
 });

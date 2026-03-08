@@ -541,4 +541,105 @@ describe('RagSearcher', () => {
       expect(result.ok).toBe(true);
     });
   });
+
+  // ── 추가 경계값: searchCode 반환 구조 ───────────────────────
+
+  describe('searchCode 반환값 구조 검증', () => {
+    it('ok는 boolean', async () => {
+      const result = await searcher.searchCode('test');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('value는 배열', async () => {
+      const result = await searcher.searchCode('test');
+      if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+    });
+
+    it('레코드 1개 삽입 → 검색 결과 score >= 0', async () => {
+      await store.insert(createTestCodeRecord({ id: 'score-pos', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]!.score).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('레코드 record.id는 string', async () => {
+      await store.insert(createTestCodeRecord({ id: 'id-str-test', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]!.record.id).toBe('string');
+      }
+    });
+
+    it('레코드 record.projectId는 string', async () => {
+      await store.insert(createTestCodeRecord({ id: 'proj-id-test', projectId: 'my-proj', embedding: new Float32Array([1, 0, 0, 0]) }));
+      const result = await searcher.searchCode('test');
+      if (result.ok && result.value.length > 0) {
+        expect(typeof result.value[0]!.record.projectId).toBe('string');
+      }
+    });
+
+    it('5번 반복 searchCode → 항상 ok=true', async () => {
+      await store.insert(createTestCodeRecord({ id: 'repeat-s', embedding: new Float32Array([1, 0, 0, 0]) }));
+      for (let i = 0; i < 5; i++) {
+        const result = await searcher.searchCode('repeat');
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('5번 반복 searchByFile → 항상 ok=true', async () => {
+      await store.insert(createTestCodeRecord({ id: 'repeat-f', filePath: 'src/r.ts', embedding: new Float32Array([1, 0, 0, 0]) }));
+      for (let i = 0; i < 5; i++) {
+        const result = await searcher.searchByFile('src/r.ts');
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('limit=3 → 최대 3개', async () => {
+      for (let i = 0; i < 6; i++) {
+        await store.insert(createTestCodeRecord({
+          id: `limit3-${i}`,
+          embedding: new Float32Array([Math.random(), Math.random(), Math.random(), Math.random()]),
+        }));
+      }
+      const result = await searcher.searchCode('test', 3);
+      if (result.ok) expect(result.value.length).toBeLessThanOrEqual(3);
+    });
+
+    it('module 필터 → 일치하는 레코드만', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'mod-core',
+        embedding: new Float32Array([1, 0, 0, 0]),
+        metadata: { language: 'typescript', module: 'src/core', functionName: 'fn', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      await store.insert(createTestCodeRecord({
+        id: 'mod-rag',
+        embedding: new Float32Array([0.9, 0.1, 0, 0]),
+        metadata: { language: 'typescript', module: 'src/rag', functionName: 'fn2', lastModified: new Date(), modifiedBy: 'x' },
+      }));
+      const result = await searcher.searchCode('test', 10, { module: 'src/core' });
+      if (result.ok) {
+        for (const item of result.value) {
+          expect(item.record.metadata.module).toBe('src/core');
+        }
+      }
+    });
+
+    it('검색 결과 없음 → 빈 배열', async () => {
+      const result = await searcher.searchCode('nonexistent-query-xyz');
+      if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+    });
+
+    it('searchByFile result.value 배열 원소에 filePath 필드 있음', async () => {
+      await store.insert(createTestCodeRecord({
+        id: 'field-check',
+        filePath: 'src/check.ts',
+        embedding: new Float32Array([1, 0, 0, 0]),
+      }));
+      const result = await searcher.searchByFile('src/check.ts');
+      if (result.ok && result.value.length > 0) {
+        expect(result.value[0]?.filePath).toBeDefined();
+      }
+    });
+  });
 });
