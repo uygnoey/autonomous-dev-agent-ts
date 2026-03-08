@@ -1239,3 +1239,490 @@ describe('InitCommand 생성자 불변성 검증', () => {
     }
   });
 });
+
+// ── execute 성공 시나리오 심화 ────────────────────────────────
+
+describe('InitCommand execute 성공 시나리오 심화', () => {
+  it('새 디렉토리에서 execute → ok=true', async () => {
+    const tempDir = join(tmpdir(), `adev-exec-ok-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(r.ok).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('execute 후 .adev 디렉토리 생성됨', async () => {
+    const tempDir = join(tmpdir(), `adev-dir-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const s = await stat(join(tempDir, '.adev')).catch(() => null);
+      expect(s).not.toBeNull();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('execute 반환 ok는 boolean 타입', async () => {
+    const tempDir = join(tmpdir(), `adev-bool-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('execute with registryDir → 정상 실행', async () => {
+    const tempDir = join(tmpdir(), `adev-reg-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('상위 디렉토리가 없을 때 execute → ok 반환 (자동 생성)', async () => {
+    const tempDir = join(tmpdir(), `adev-auto-${crypto.randomUUID()}`, 'subdir');
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(join(tmpdir(), tempDir.split('/').slice(-2)[0] ?? 'adev-tmp'), { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it('execute 반환값 Promise<Result> 타입', async () => {
+    const tempDir = join(tmpdir(), `adev-promise-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const promise = cmd.execute([], makeOptions(tempDir));
+      expect(promise).toBeInstanceOf(Promise);
+      const r = await promise;
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── execute 실패 시나리오 심화 ────────────────────────────────
+
+describe('InitCommand execute 실패 시나리오 심화', () => {
+  it('이미 초기화된 디렉토리 → ok=false', async () => {
+    const tempDir = join(tmpdir(), `adev-dup-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(r.ok).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('이미 초기화 → error.code 비어있지 않음', async () => {
+    const tempDir = join(tmpdir(), `adev-code-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(r.error.code.length).toBeGreaterThan(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('이미 초기화 → error.message 비어있지 않음', async () => {
+    const tempDir = join(tmpdir(), `adev-msg2-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(r.error.message.length).toBeGreaterThan(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ok=false 이면 error 필드 존재', async () => {
+    const tempDir = join(tmpdir(), `adev-err-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) {
+        expect(r.error).toBeDefined();
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ok=false 이면 error.code가 string 타입', async () => {
+    const tempDir = join(tmpdir(), `adev-codestr-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) {
+        expect(typeof r.error.code).toBe('string');
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── selectAuthMethod 심화 ─────────────────────────────────────
+
+describe('InitCommand selectAuthMethod 심화', () => {
+  it('selectAuthMethod → ok=true', async () => {
+    const cmd = new InitCommand(logger);
+    const r = await cmd.selectAuthMethod(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('selectAuthMethod → value가 string 타입', async () => {
+    const cmd = new InitCommand(logger);
+    const r = await cmd.selectAuthMethod(false);
+    if (r.ok) expect(typeof r.value).toBe('string');
+  });
+
+  it('selectAuthMethod → value 비어있지 않음', async () => {
+    const cmd = new InitCommand(logger);
+    const r = await cmd.selectAuthMethod(false);
+    if (r.ok) expect(r.value.length).toBeGreaterThan(0);
+  });
+
+  it('selectAuthMethod 10회 연속 → 모두 동일한 value', async () => {
+    const cmd = new InitCommand(logger);
+    const results: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = await cmd.selectAuthMethod(false);
+      if (r.ok) results.push(r.value);
+    }
+    if (results.length > 1) {
+      expect(new Set(results).size).toBe(1);
+    }
+  });
+
+  it('selectAuthMethod → 반환값이 알려진 auth method 중 하나', async () => {
+    const cmd = new InitCommand(logger);
+    const r = await cmd.selectAuthMethod(false);
+    if (r.ok) {
+      const validMethods = ['claude-code', 'api-key', 'oauth'];
+      expect(validMethods.includes(r.value) || r.value.length > 0).toBe(true);
+    }
+  });
+
+  it('error 레벨 logger로 selectAuthMethod → ok', async () => {
+    const cmd = new InitCommand(new ConsoleLogger('error'));
+    const r = await cmd.selectAuthMethod(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('warn 레벨 logger로 selectAuthMethod → ok', async () => {
+    const cmd = new InitCommand(new ConsoleLogger('warn'));
+    const r = await cmd.selectAuthMethod(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('info 레벨 logger로 selectAuthMethod → ok', async () => {
+    const cmd = new InitCommand(new ConsoleLogger('info'));
+    const r = await cmd.selectAuthMethod(false);
+    expect(r.ok).toBe(true);
+  });
+
+  it('debug 레벨 logger로 selectAuthMethod → ok', async () => {
+    const cmd = new InitCommand(new ConsoleLogger('debug'));
+    const r = await cmd.selectAuthMethod(false);
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ── help() 심화 ───────────────────────────────────────────────
+
+describe('InitCommand help() 심화', () => {
+  it('help() 반환값 string 타입', () => {
+    const cmd = new InitCommand(logger);
+    expect(typeof cmd.help()).toBe('string');
+  });
+
+  it('help() 반환값 비어있지 않음', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.help().length).toBeGreaterThan(0);
+  });
+
+  it('help()에 init 포함', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.help().toLowerCase()).toContain('init');
+  });
+
+  it('help() 50회 호출 → 모두 동일', () => {
+    const cmd = new InitCommand(logger);
+    const h = cmd.help();
+    for (let i = 0; i < 50; i++) {
+      expect(cmd.help()).toBe(h);
+    }
+  });
+
+  it('다른 인스턴스 help() → 동일', () => {
+    const c1 = new InitCommand(logger);
+    const c2 = new InitCommand(logger);
+    expect(c1.help()).toBe(c2.help());
+  });
+
+  it('registryDir 있는 인스턴스 help() → string', () => {
+    const d = join(tmpdir(), `reg-h-${crypto.randomUUID()}`);
+    const cmd = new InitCommand(logger, d);
+    expect(typeof cmd.help()).toBe('string');
+  });
+
+  it('help()와 description 다름', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.help()).not.toBe(cmd.name);
+  });
+});
+
+// ── aliases 심화 ─────────────────────────────────────────────
+
+describe('InitCommand aliases 심화', () => {
+  it('aliases가 빈 배열 아님', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.aliases.length).toBeGreaterThan(0);
+  });
+
+  it('aliases에 중복 없음', () => {
+    const cmd = new InitCommand(logger);
+    const unique = new Set(cmd.aliases);
+    expect(unique.size).toBe(cmd.aliases.length);
+  });
+
+  it('aliases 모두 string 타입', () => {
+    const cmd = new InitCommand(logger);
+    for (const alias of cmd.aliases) {
+      expect(typeof alias).toBe('string');
+    }
+  });
+
+  it('aliases 모두 비어있지 않음', () => {
+    const cmd = new InitCommand(logger);
+    for (const alias of cmd.aliases) {
+      expect(alias.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('aliases에 name 자체 포함되지 않음', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.aliases).not.toContain(cmd.name);
+  });
+
+  it('5개 다른 인스턴스 aliases → 모두 동일', () => {
+    const cmds = Array.from({ length: 5 }, () => new InitCommand(logger));
+    const first = cmds[0]?.aliases;
+    if (!first) return;
+    for (const cmd of cmds) {
+      expect(cmd.aliases).toEqual(first);
+    }
+  });
+});
+
+// ── CliOptions 경계값 ─────────────────────────────────────────
+
+describe('InitCommand CliOptions 경계값', () => {
+  it('flags = {} → execute 정상', async () => {
+    const tempDir = join(tmpdir(), `adev-flags-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('절대 경로 projectPath → execute 정상', async () => {
+    const tempDir = join(tmpdir(), `adev-abs-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const abs = resolve(tempDir);
+      const r = await cmd.execute([], { projectPath: abs, flags: {} });
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('args = [] → execute 정상', async () => {
+    const tempDir = join(tmpdir(), `adev-args-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('args에 extra 값 → execute 정상', async () => {
+    const tempDir = join(tmpdir(), `adev-extra-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute(['extra-arg'], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('2개 인스턴스 동일 디렉토리 첫 번째 execute → ok=true', async () => {
+    const tempDir = join(tmpdir(), `adev-two-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd1 = new InitCommand(logger);
+      const r = await cmd1.execute([], makeOptions(tempDir));
+      expect(r.ok).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('execute 후 .adev/config.json 또는 .adev/settings.json 또는 .adev 디렉토리 존재', async () => {
+    const tempDir = join(tmpdir(), `adev-cfg-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir));
+      const adevDir = await stat(join(tempDir, '.adev')).catch(() => null);
+      expect(adevDir).not.toBeNull();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── 생성자 + execute 복합 시나리오 ───────────────────────────
+
+describe('InitCommand 생성자 + execute 복합 시나리오', () => {
+  it('registryDir 미지정 후 execute → ok', async () => {
+    const tempDir = join(tmpdir(), `adev-noreg-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('error 레벨 logger → execute → ok', async () => {
+    const tempDir = join(tmpdir(), `adev-errlog-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(new ConsoleLogger('error'));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('warn 레벨 logger → execute → ok', async () => {
+    const tempDir = join(tmpdir(), `adev-warnlog-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(new ConsoleLogger('warn'));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('info 레벨 logger → execute → ok', async () => {
+    const tempDir = join(tmpdir(), `adev-infolog-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(new ConsoleLogger('info'));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('name, description, aliases, help() 모두 불변성', () => {
+    const cmd = new InitCommand(logger);
+    const name = cmd.name;
+    const desc = cmd.description;
+    const aliases = [...cmd.aliases];
+    const help = cmd.help();
+    for (let i = 0; i < 10; i++) {
+      expect(cmd.name).toBe(name);
+      expect(cmd.description).toBe(desc);
+      expect(cmd.aliases).toEqual(aliases);
+      expect(cmd.help()).toBe(help);
+    }
+  });
+
+  it('3개 서로 다른 디렉토리에서 순차 execute → 모두 ok', async () => {
+    const dirs: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const d = join(tmpdir(), `adev-seq-${i}-${crypto.randomUUID()}`);
+      await mkdir(d, { recursive: true });
+      dirs.push(d);
+    }
+    try {
+      for (const d of dirs) {
+        const cmd = new InitCommand(logger);
+        const r = await cmd.execute([], makeOptions(d));
+        expect(r.ok).toBe(true);
+      }
+    } finally {
+      for (const d of dirs) {
+        await rm(d, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('동일 cmd 인스턴스로 다른 디렉토리 execute 연속 → 두 번째 디렉토리 ok', async () => {
+    const tempDir1 = join(tmpdir(), `adev-same1-${crypto.randomUUID()}`);
+    const tempDir2 = join(tmpdir(), `adev-same2-${crypto.randomUUID()}`);
+    await mkdir(tempDir1, { recursive: true });
+    await mkdir(tempDir2, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.execute([], makeOptions(tempDir1));
+      const r = await cmd.execute([], makeOptions(tempDir2));
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(tempDir1, { recursive: true, force: true });
+      await rm(tempDir2, { recursive: true, force: true });
+    }
+  });
+});

@@ -1225,3 +1225,625 @@ describe('AgentSpawner spawn/resumeSession 행동 일관성', () => {
     }
   });
 });
+
+// ── 이벤트 타입 다양성 검증 ──────────────────────────────────
+
+describe('AgentSpawner 이벤트 타입 다양성', () => {
+  it('message 타입 이벤트 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ type: 'message' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.type).toBe('message');
+  });
+
+  it('done 타입 이벤트 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ type: 'done' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.type).toBe('done');
+  });
+
+  it('error 타입 이벤트 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ type: 'error' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.type).toBe('error');
+  });
+
+  it('message→done 순서 이벤트 → 순서 보존', async () => {
+    const events: AgentEvent[] = [
+      makeAgentEvent({ type: 'message', content: 'a' }),
+      makeAgentEvent({ type: 'done', content: 'b' }),
+    ];
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.type).toBe('message');
+    expect(received[1]?.type).toBe('done');
+  });
+
+  it('error→message→done 순서 → 순서 보존', async () => {
+    const events: AgentEvent[] = [
+      makeAgentEvent({ type: 'error', content: 'err' }),
+      makeAgentEvent({ type: 'message', content: 'msg' }),
+      makeAgentEvent({ type: 'done', content: 'done' }),
+    ];
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(3);
+    expect(received[0]?.type).toBe('error');
+    expect(received[1]?.type).toBe('message');
+    expect(received[2]?.type).toBe('done');
+  });
+
+  it('이벤트 content가 undefined → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: undefined })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('이벤트 content가 빈 문자열 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: '' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe('');
+  });
+
+  it('이벤트 content가 JSON 문자열 → 수신됨', async () => {
+    const json = JSON.stringify({ key: 'value', num: 42 });
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: json })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(json);
+  });
+
+  it('이벤트 content가 멀티라인 → 수신됨', async () => {
+    const multiline = 'line1\nline2\nline3';
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: multiline })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(multiline);
+  });
+
+  it('이벤트 content가 유니코드 → 수신됨', async () => {
+    const unicode = '안녕하세요 世界 🌍';
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: unicode })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(unicode);
+  });
+
+  it('이벤트 content가 특수문자 → 수신됨', async () => {
+    const special = '<script>alert("xss")</script>';
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: special })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe(special);
+  });
+
+  it('20개 혼합 타입 이벤트 → 모두 수신', async () => {
+    const types: Array<AgentEvent['type']> = ['message', 'done', 'error'];
+    const events: AgentEvent[] = Array.from({ length: 20 }, (_, i) =>
+      makeAgentEvent({ type: types[i % 3] as AgentEvent['type'], content: `event-${i}` }),
+    );
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(20);
+  });
+});
+
+// ── AgentConfig 필드 경계값 상세 ────────────────────────────
+
+describe('AgentSpawner AgentConfig 필드 경계값', () => {
+  it('maxTurns = 0 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ maxTurns: 0 }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('maxTurns = 1 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ maxTurns: 1 }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('maxTurns = Number.MAX_SAFE_INTEGER → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ maxTurns: Number.MAX_SAFE_INTEGER }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('tools = [] → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ tools: [] }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('tools = 50개 도구 → 정상 실행', async () => {
+    const tools = Array.from({ length: 50 }, (_, i) => `Tool${i}`);
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ tools }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('systemPrompt 빈 문자열 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ systemPrompt: '' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('prompt 빈 문자열 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ prompt: '' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('prompt = 10000자 → 정상 실행', async () => {
+    const prompt = 'x'.repeat(10000);
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ prompt }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('name = architect → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ name: 'architect' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('name = tester → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ name: 'tester' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('name = reviewer → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ name: 'reviewer' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('phase = DESIGN → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ phase: 'DESIGN' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('phase = TEST → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ phase: 'TEST' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('phase = VERIFY → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ phase: 'VERIFY' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('projectId = UUID 형식 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ projectId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('featureId = 긴 문자열 → 정상 실행', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig({ featureId: 'f'.repeat(200) }))) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+});
+
+// ── 복합 시나리오 ─────────────────────────────────────────────
+
+describe('AgentSpawner 복합 시나리오', () => {
+  it('spawn 실행 후 resumeSession 실행 → 모두 이벤트 수신', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: 'ok' })]);
+    const spawner = new AgentSpawner(executor, logger);
+
+    const spawnEvents: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) spawnEvents.push(e);
+
+    const resumeEvents: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('sess-1')) resumeEvents.push(e);
+
+    expect(spawnEvents).toHaveLength(1);
+    expect(resumeEvents).toHaveLength(1);
+  });
+
+  it('서로 다른 에이전트 이름으로 순차 spawn → 각각 성공', async () => {
+    const names = ['coder', 'tester', 'reviewer', 'architect', 'qa', 'qc', 'documenter'] as const;
+    for (const name of names) {
+      const executor = makeSuccessExecutor([makeAgentEvent({ content: name })]);
+      const spawner = new AgentSpawner(executor, logger);
+      const received: AgentEvent[] = [];
+      for await (const e of spawner.spawn(makeAgentConfig({ name }))) received.push(e);
+      expect(received[0]?.content).toBe(name);
+    }
+  });
+
+  it('모든 phase로 spawn → 각각 성공', async () => {
+    const phases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'] as const;
+    for (const phase of phases) {
+      const executor = makeSuccessExecutor([makeAgentEvent({ content: phase })]);
+      const spawner = new AgentSpawner(executor, logger);
+      const received: AgentEvent[] = [];
+      for await (const e of spawner.spawn(makeAgentConfig({ phase }))) received.push(e);
+      expect(received[0]?.content).toBe(phase);
+    }
+  });
+
+  it('이벤트 100개 → 모두 순서대로 수신', async () => {
+    const events: AgentEvent[] = Array.from({ length: 100 }, (_, i) =>
+      makeAgentEvent({ content: `event-${i}` }),
+    );
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(100);
+    for (let i = 0; i < 100; i++) {
+      expect(received[i]?.content).toBe(`event-${i}`);
+    }
+  });
+
+  it('에러 executor로 spawn → error instanceof Error', async () => {
+    const spawner = new AgentSpawner(makeErrorExecutor('test error'), logger);
+    let caught: unknown = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught instanceof Error).toBe(true);
+  });
+
+  it('에러 executor로 resumeSession → error instanceof Error', async () => {
+    const spawner = new AgentSpawner(makeErrorExecutor('resume error'), logger);
+    let caught: unknown = null;
+    try {
+      for await (const _ of spawner.resumeSession('bad')) {}
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught instanceof Error).toBe(true);
+  });
+
+  it('spawn과 resumeSession 교대로 5회 → 모두 성공', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: 'ok' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    for (let i = 0; i < 5; i++) {
+      const s: AgentEvent[] = [];
+      const r: AgentEvent[] = [];
+      for await (const e of spawner.spawn(makeAgentConfig())) s.push(e);
+      for await (const e of spawner.resumeSession(`sess-${i}`)) r.push(e);
+      expect(s).toHaveLength(1);
+      expect(r).toHaveLength(1);
+    }
+  });
+
+  it('서로 다른 에러 메시지 → 각각 독립 에러', async () => {
+    const messages = ['err1', 'err2', 'err3', 'err4', 'err5'];
+    for (const msg of messages) {
+      const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+      let caught: Error | null = null;
+      try {
+        for await (const _ of spawner.spawn(makeAgentConfig())) {}
+      } catch (e) {
+        caught = e as Error;
+      }
+      expect(caught?.message).toBe(msg);
+    }
+  });
+
+  it('이벤트가 1개만 있을 때 done 이벤트 → 배열 마지막 요소', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ type: 'done', content: 'finished' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[received.length - 1]?.type).toBe('done');
+  });
+
+  it('content가 숫자 문자열인 이벤트 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: '12345' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe('12345');
+  });
+
+  it('content가 boolean 문자열인 이벤트 → 수신됨', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: 'true' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received[0]?.content).toBe('true');
+  });
+});
+
+// ── spawn 신뢰성 추가 검증 ────────────────────────────────────
+
+describe('AgentSpawner spawn 신뢰성 추가', () => {
+  it('spawn 후 두 번째 spawn → 여전히 동작', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent({ content: 'first' })]);
+    const spawner = new AgentSpawner(executor, logger);
+    const first: AgentEvent[] = [];
+    const second: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) first.push(e);
+    for await (const e of spawner.spawn(makeAgentConfig())) second.push(e);
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+  });
+
+  it('빈 이벤트 목록 → 배열 길이 0', async () => {
+    const executor = makeSuccessExecutor([]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(0);
+  });
+
+  it('이벤트 1개만 → 배열 길이 1', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('이벤트 2개 → 배열 길이 2', async () => {
+    const executor = makeSuccessExecutor([makeAgentEvent(), makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(2);
+  });
+
+  it('이벤트 50개 → 배열 길이 50', async () => {
+    const events = Array.from({ length: 50 }, () => makeAgentEvent());
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(50);
+  });
+
+  it('이벤트 content 배열로 수집 → 순서 일치', async () => {
+    const contents = ['alpha', 'beta', 'gamma', 'delta', 'epsilon'];
+    const events = contents.map((c) => makeAgentEvent({ content: c }));
+    const executor = makeSuccessExecutor(events);
+    const spawner = new AgentSpawner(executor, logger);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received.map((e) => e.content)).toEqual(contents);
+  });
+
+  it('새 인스턴스마다 독립적인 executor → 각각 다른 이벤트', async () => {
+    const spawn1 = new AgentSpawner(makeSuccessExecutor([makeAgentEvent({ content: 'A' })]), logger);
+    const spawn2 = new AgentSpawner(makeSuccessExecutor([makeAgentEvent({ content: 'B' })]), logger);
+    const r1: AgentEvent[] = [];
+    const r2: AgentEvent[] = [];
+    for await (const e of spawn1.spawn(makeAgentConfig())) r1.push(e);
+    for await (const e of spawn2.spawn(makeAgentConfig())) r2.push(e);
+    expect(r1[0]?.content).toBe('A');
+    expect(r2[0]?.content).toBe('B');
+  });
+
+  it('AgentSpawner 인스턴스가 AgentSpawner 타입', () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    expect(spawner).toBeInstanceOf(AgentSpawner);
+  });
+
+  it('AgentSpawner spawn 메서드 존재', () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    expect(typeof spawner.spawn).toBe('function');
+  });
+
+  it('AgentSpawner resumeSession 메서드 존재', () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    expect(typeof spawner.resumeSession).toBe('function');
+  });
+
+  it('spawn 결과 Symbol.asyncIterator 존재', () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const result = spawner.spawn(makeAgentConfig());
+    expect(typeof (result as AsyncIterable<AgentEvent>)[Symbol.asyncIterator]).toBe('function');
+  });
+
+  it('resumeSession 결과 Symbol.asyncIterator 존재', () => {
+    const spawner = new AgentSpawner(makeSuccessExecutor([]), logger);
+    const result = spawner.resumeSession('sess');
+    expect(typeof (result as AsyncIterable<AgentEvent>)[Symbol.asyncIterator]).toBe('function');
+  });
+});
+
+// ── 에러 메시지 형식 검증 ─────────────────────────────────────
+
+describe('AgentSpawner 에러 메시지 형식', () => {
+  it('에러 메시지 = 빈 문자열 → 그대로 전파', async () => {
+    const spawner = new AgentSpawner(makeErrorExecutor(''), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).not.toBeNull();
+  });
+
+  it('에러 메시지 = 특수문자 → 그대로 전파', async () => {
+    const msg = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+    const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message).toBe(msg);
+  });
+
+  it('에러 메시지 = 한국어 → 그대로 전파', async () => {
+    const msg = '에이전트 실행 실패: 타임아웃 발생';
+    const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message).toBe(msg);
+  });
+
+  it('에러 메시지 = JSON → 그대로 전파', async () => {
+    const msg = '{"code": "TIMEOUT", "detail": "exceeded 30s"}';
+    const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message).toBe(msg);
+  });
+
+  it('에러 메시지 = 매우 긴 문자열 → 전파됨', async () => {
+    const msg = 'e'.repeat(5000);
+    const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.spawn(makeAgentConfig())) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message.length).toBe(5000);
+  });
+
+  it('resume 에러 메시지 = 빈 문자열 → 전파됨', async () => {
+    const spawner = new AgentSpawner(makeErrorExecutor(''), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.resumeSession('s')) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).not.toBeNull();
+  });
+
+  it('resume 에러 메시지 특수문자 → 그대로', async () => {
+    const msg = '§±£€¥₩';
+    const spawner = new AgentSpawner(makeErrorExecutor(msg), logger);
+    let caught: Error | null = null;
+    try {
+      for await (const _ of spawner.resumeSession('sess')) {}
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught?.message).toBe(msg);
+  });
+});
+
+// ── ConsoleLogger 레벨별 동작 ─────────────────────────────────
+
+describe('AgentSpawner ConsoleLogger 레벨별', () => {
+  it('error 레벨 logger → spawn 정상', async () => {
+    const lg = new ConsoleLogger('error');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('warn 레벨 logger → spawn 정상', async () => {
+    const lg = new ConsoleLogger('warn');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('info 레벨 logger → spawn 정상', async () => {
+    const lg = new ConsoleLogger('info');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('debug 레벨 logger → spawn 정상', async () => {
+    const lg = new ConsoleLogger('debug');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.spawn(makeAgentConfig())) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('error 레벨 logger → resumeSession 정상', async () => {
+    const lg = new ConsoleLogger('error');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('s')) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+
+  it('info 레벨 logger → resumeSession 정상', async () => {
+    const lg = new ConsoleLogger('info');
+    const executor = makeSuccessExecutor([makeAgentEvent()]);
+    const spawner = new AgentSpawner(executor, lg);
+    const received: AgentEvent[] = [];
+    for await (const e of spawner.resumeSession('s')) received.push(e);
+    expect(received).toHaveLength(1);
+  });
+});

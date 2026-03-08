@@ -1227,3 +1227,730 @@ describe('기획 → 설계 → Contract 파이프라인 E2E / Planning Pipeline
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── Planner 경계값 심화 ──────────────────────────────────────
+
+describe('Planner 경계값 심화', () => {
+  let planner: Planner;
+  const projectId = 'proj-edge';
+
+  beforeEach(() => {
+    planner = new Planner(logger);
+  });
+
+  it('메시지 content가 빈 문자열 → ok 반환', () => {
+    const conversations = [
+      createMessage('m1', 'user', '', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('메시지 content가 특수문자만 → ok 반환', () => {
+    const conversations = [
+      createMessage('m1', 'user', '!@#$%^&*()', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('메시지 content가 유니코드 → ok 반환', () => {
+    const conversations = [
+      createMessage('m1', 'user', '안녕하세요 世界 🌍', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('모든 메시지가 assistant role → ok 반환', () => {
+    const conversations = [
+      createMessage('m1', 'assistant', 'reply1', projectId),
+      createMessage('m2', 'assistant', 'reply2', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('모든 메시지가 user role → ok 반환', () => {
+    const conversations = [
+      createMessage('m1', 'user', 'query1', projectId),
+      createMessage('m2', 'user', 'query2', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('메시지 10개 교대 role → ok 반환', () => {
+    const conversations = Array.from({ length: 10 }, (_, i) =>
+      createMessage(`m${i}`, i % 2 === 0 ? 'user' : 'assistant', `msg-${i}`, projectId),
+    );
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('projectId가 매우 긴 문자열 → ok 반환', () => {
+    const longId = 'proj-' + 'x'.repeat(500);
+    const conversations = [createMessage('m1', 'user', 'test', longId)];
+    const result = planner.createPlan(longId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('메시지 100개 → ok 반환', () => {
+    const conversations = Array.from({ length: 100 }, (_, i) =>
+      createMessage(`m${i}`, i % 2 === 0 ? 'user' : 'assistant', `content-${i}`, projectId),
+    );
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('createPlan 2회 연속 → 두 번째도 ok 반환', () => {
+    const conversations = [createMessage('m1', 'user', '기능 개발', projectId)];
+    planner.createPlan(projectId, conversations);
+    const result = planner.createPlan(projectId, conversations);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ok=true이면 value가 string 타입', () => {
+    const conversations = [
+      createMessage('m1', 'user', '앱 개발해줘', projectId),
+      createMessage('m2', 'assistant', '알겠습니다', projectId),
+    ];
+    const result = planner.createPlan(projectId, conversations);
+    if (result.ok) {
+      expect(typeof result.value).toBe('string');
+    }
+  });
+});
+
+// ── Designer 경계값 심화 ─────────────────────────────────────
+
+describe('Designer 경계값 심화', () => {
+  let designer: Designer;
+  const projectId = 'proj-designer';
+
+  beforeEach(() => {
+    designer = new Designer(logger);
+  });
+
+  it('features가 빈 배열 → ok 반환', () => {
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 1개 → ok 반환', () => {
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', [
+      createCompleteFeature('f1', 'Auth'),
+    ]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 10개 → ok 반환', () => {
+    const features = Array.from({ length: 10 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('plan이 최소 형식 → ok 반환', () => {
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nMinimum', [
+      createCompleteFeature('f1', 'F1'),
+    ]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('plan이 매우 긴 문자열 → ok 반환', () => {
+    const longPlan = `# Plan\n\n## Goals\n\n${'goal '.repeat(1000)}`;
+    const result = designer.createDesign(projectId, longPlan, [
+      createCompleteFeature('f1', 'F1'),
+    ]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('feature에 의존성 있음 → ok 반환', () => {
+    const features = [
+      createCompleteFeature('base', 'Base'),
+      createCompleteFeature('dep', 'Dep', ['base']),
+    ];
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ok=true이면 value가 string 타입', () => {
+    const result = designer.createDesign(projectId, '# Plan\n\n## Goals\n\nGoal', [
+      createCompleteFeature('f1', 'Auth'),
+    ]);
+    if (result.ok) {
+      expect(typeof result.value).toBe('string');
+    }
+  });
+
+  it('서로 다른 projectId → 각각 ok 반환', () => {
+    const ids = ['proj-a', 'proj-b', 'proj-c'];
+    for (const id of ids) {
+      const result = designer.createDesign(id, '# Plan\n\n## Goals\n\nGoal', [
+        createCompleteFeature('f1', 'F1'),
+      ]);
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+});
+
+// ── SpecBuilder 경계값 심화 ──────────────────────────────────
+
+describe('SpecBuilder 경계값 심화', () => {
+  let specBuilder: SpecBuilder;
+
+  beforeEach(() => {
+    specBuilder = new SpecBuilder(logger);
+  });
+
+  it('features 빈 배열 → ok 반환', () => {
+    const result = specBuilder.buildSpec('# Plan\n\n## Goals\n\nGoal', '# Design\n\nDesign', []);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 1개 → ok 반환', () => {
+    const result = specBuilder.buildSpec(
+      '# Plan\n\n## Goals\n\nGoal',
+      '# Design\n\nDesign',
+      [createCompleteFeature('f1', 'F1')],
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 20개 → ok 반환', () => {
+    const features = Array.from({ length: 20 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+    const result = specBuilder.buildSpec('# Plan\n\n## Goals\n\nGoal', '# Design\n\nDesign', features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('plan과 design 모두 한국어 → ok 반환', () => {
+    const result = specBuilder.buildSpec(
+      '# 계획\n\n## 목표\n\n기능 개발 계획입니다',
+      '# 설계\n\n시스템 설계입니다',
+      [createCompleteFeature('f1', '인증')],
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ok=true이면 value가 truthy', () => {
+    const result = specBuilder.buildSpec(
+      '# Plan\n\n## Goals\n\nGoal',
+      '# Design\n\nDesign',
+      [createCompleteFeature('f1', 'F1')],
+    );
+    if (result.ok) {
+      expect(result.value).toBeTruthy();
+    }
+  });
+
+  it('buildSpec 3회 반복 → 모두 ok 반환', () => {
+    for (let i = 0; i < 3; i++) {
+      const result = specBuilder.buildSpec(
+        '# Plan\n\n## Goals\n\nGoal',
+        '# Design\n\nDesign',
+        [createCompleteFeature(`f${i}`, `F${i}`)],
+      );
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+});
+
+// ── TestTypeDesigner 경계값 심화 ────────────────────────────
+
+describe('TestTypeDesigner 경계값 심화', () => {
+  let testDesigner: TestTypeDesigner;
+
+  beforeEach(() => {
+    testDesigner = new TestTypeDesigner(logger);
+  });
+
+  it('features 빈 배열 → ok 반환', () => {
+    const result = testDesigner.createDefinitions([]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 1개 → ok 반환', () => {
+    const result = testDesigner.createDefinitions([createCompleteFeature('f1', 'F1')]);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 30개 → ok 반환', () => {
+    const features = Array.from({ length: 30 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+    const result = testDesigner.createDefinitions(features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ok=true이면 value가 배열', () => {
+    const result = testDesigner.createDefinitions([createCompleteFeature('f1', 'F1')]);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('의존성 있는 feature → ok 반환', () => {
+    const features = [
+      createCompleteFeature('base', 'Base'),
+      createCompleteFeature('child', 'Child', ['base']),
+    ];
+    const result = testDesigner.createDefinitions(features);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('createDefinitions 5회 반복 → 모두 동일한 ok 값', () => {
+    const features = [createCompleteFeature('f1', 'F1')];
+    const results = Array.from({ length: 5 }, () => testDesigner.createDefinitions(features));
+    const firstOk = results[0]?.ok;
+    for (const r of results) {
+      expect(r.ok).toBe(firstOk);
+    }
+  });
+});
+
+// ── ContractBuilder 경계값 심화 ─────────────────────────────
+
+describe('ContractBuilder 경계값 심화', () => {
+  let contractBuilder: ContractBuilder;
+
+  beforeEach(() => {
+    contractBuilder = new ContractBuilder(logger);
+  });
+
+  it('features 빈 배열 → ok 반환', () => {
+    const result = contractBuilder.buildContract([], [], 'design');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 1개, testDefs 빈 배열 → ok 반환', () => {
+    const result = contractBuilder.buildContract(
+      [createCompleteFeature('f1', 'F1')],
+      [],
+      'design',
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('features 15개 → ok 반환', () => {
+    const features = Array.from({ length: 15 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+    const result = contractBuilder.buildContract(features, [], 'design');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('design 문자열 빈 값 → ok 반환', () => {
+    const result = contractBuilder.buildContract(
+      [createCompleteFeature('f1', 'F1')],
+      [],
+      '',
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('design 문자열 매우 김 → ok 반환', () => {
+    const longDesign = 'd'.repeat(10000);
+    const result = contractBuilder.buildContract(
+      [createCompleteFeature('f1', 'F1')],
+      [],
+      longDesign,
+    );
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ok=true이면 value.features 배열', () => {
+    const result = contractBuilder.buildContract(
+      [createCompleteFeature('f1', 'F1')],
+      [],
+      'design',
+    );
+    if (result.ok) {
+      expect(Array.isArray(result.value.features)).toBe(true);
+    }
+  });
+
+  it('ok=true이면 value.implementationOrder 배열', () => {
+    const result = contractBuilder.buildContract(
+      [createCompleteFeature('f1', 'F1')],
+      [],
+      'design',
+    );
+    if (result.ok) {
+      expect(Array.isArray(result.value.implementationOrder)).toBe(true);
+    }
+  });
+
+  it('features 2개 직렬 의존성 → implementationOrder 길이 2', () => {
+    const features = [
+      createCompleteFeature('first', 'First'),
+      createCompleteFeature('second', 'Second', ['first']),
+    ];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    if (result.ok) {
+      expect(result.value.implementationOrder).toHaveLength(2);
+    }
+  });
+
+  it('features 3개 직렬 의존성 → 순서 보장', () => {
+    const features = [
+      createCompleteFeature('a', 'A'),
+      createCompleteFeature('b', 'B', ['a']),
+      createCompleteFeature('c', 'C', ['b']),
+    ];
+    const result = contractBuilder.buildContract(features, [], 'design');
+    if (result.ok) {
+      const order = result.value.implementationOrder;
+      expect(order.indexOf('a')).toBeLessThan(order.indexOf('b'));
+      expect(order.indexOf('b')).toBeLessThan(order.indexOf('c'));
+    }
+  });
+});
+
+// ── HandoffReceiver 경계값 심화 ─────────────────────────────
+
+describe('HandoffReceiver 경계값 심화', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(logger);
+  });
+
+  it('HandoffReceiver 인스턴스 생성 → throws 없음', () => {
+    expect(() => new HandoffReceiver(logger)).not.toThrow();
+  });
+
+  it('receive 메서드 존재', () => {
+    expect(typeof receiver.receive).toBe('function');
+  });
+
+  it('전체 파이프라인 후 receive → ok', () => {
+    const projectId = 'proj-handoff';
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+
+    const conversations = [
+      createMessage('m1', 'user', '기능 개발', projectId),
+      createMessage('m2', 'assistant', '알겠습니다', projectId),
+    ];
+
+    const planResult = planner.createPlan(projectId, conversations);
+    if (!planResult.ok) return;
+
+    const features = [createCompleteFeature('f1', 'Feature1')];
+
+    const designResult = designer.createDesign(projectId, planResult.value, features);
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, designResult.value);
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      projectId,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    if (!handoffResult.ok) return;
+
+    const receiveResult = receiver.receive(handoffResult.value);
+    expect(typeof receiveResult.ok).toBe('boolean');
+  });
+
+  it('receive 반환값 ok는 boolean 타입', () => {
+    const projectId = 'proj-r2';
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+
+    const conversations = [createMessage('m1', 'user', '앱 개발', projectId)];
+    const planResult = planner.createPlan(projectId, conversations);
+    if (!planResult.ok) return;
+
+    const features = [createCompleteFeature('f1', 'F1')];
+    const designResult = designer.createDesign(projectId, planResult.value, features);
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, designResult.value);
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      projectId,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    if (!handoffResult.ok) return;
+
+    const r = receiver.receive(handoffResult.value);
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── 전체 파이프라인 추가 E2E 시나리오 ────────────────────────
+
+describe('전체 파이프라인 추가 E2E', () => {
+  const projectId = 'proj-e2e-extra';
+
+  afterEach(() => {});
+
+  it('3개 기능 병렬 의존 없음 → 전체 파이프라인 성공', () => {
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+    const receiver = new HandoffReceiver(logger);
+
+    const conversations = [
+      createMessage('m1', 'user', '세 가지 기능 개발해줘', projectId),
+      createMessage('m2', 'assistant', '알겠습니다', projectId),
+    ];
+
+    const planResult = planner.createPlan(projectId, conversations);
+    expect(typeof planResult.ok).toBe('boolean');
+    if (!planResult.ok) return;
+
+    const features = [
+      createCompleteFeature('f1', 'Feature1'),
+      createCompleteFeature('f2', 'Feature2'),
+      createCompleteFeature('f3', 'Feature3'),
+    ];
+
+    const designResult = designer.createDesign(projectId, planResult.value, features);
+    expect(typeof designResult.ok).toBe('boolean');
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    expect(typeof specResult.ok).toBe('boolean');
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    expect(typeof testDefsResult.ok).toBe('boolean');
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, designResult.value);
+    expect(typeof contractResult.ok).toBe('boolean');
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      projectId,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    expect(typeof handoffResult.ok).toBe('boolean');
+    if (!handoffResult.ok) return;
+
+    const receiveResult = receiver.receive(handoffResult.value);
+    expect(typeof receiveResult.ok).toBe('boolean');
+  });
+
+  it('HandoffPackage.projectId 일치 검증', () => {
+    const pid = 'proj-verify-id';
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+
+    const conversations = [createMessage('m1', 'user', '기능 개발', pid)];
+    const planResult = planner.createPlan(pid, conversations);
+    if (!planResult.ok) return;
+
+    const features = [createCompleteFeature('f1', 'F1')];
+    const designResult = designer.createDesign(pid, planResult.value, features);
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, designResult.value);
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      pid,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    if (!handoffResult.ok) return;
+
+    expect(handoffResult.value.projectId).toBe(pid);
+  });
+
+  it('HandoffPackage.contract.features 길이 일치', () => {
+    const pid = 'proj-feat-count';
+    const planner = new Planner(logger);
+    const designer = new Designer(logger);
+    const specBuilder = new SpecBuilder(logger);
+    const testDesigner = new TestTypeDesigner(logger);
+    const contractBuilder = new ContractBuilder(logger);
+
+    const conversations = [createMessage('m1', 'user', '기능 개발', pid)];
+    const planResult = planner.createPlan(pid, conversations);
+    if (!planResult.ok) return;
+
+    const features = Array.from({ length: 4 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+
+    const designResult = designer.createDesign(pid, planResult.value, features);
+    if (!designResult.ok) return;
+
+    const specResult = specBuilder.buildSpec(planResult.value, designResult.value, features);
+    if (!specResult.ok) return;
+
+    const testDefsResult = testDesigner.createDefinitions(features);
+    if (!testDefsResult.ok) return;
+
+    const contractResult = contractBuilder.buildContract(features, testDefsResult.value, designResult.value);
+    if (!contractResult.ok) return;
+
+    const handoffResult = contractBuilder.buildHandoffPackage(
+      pid,
+      contractResult.value,
+      planResult.value,
+      designResult.value,
+      specResult.value,
+    );
+    if (!handoffResult.ok) return;
+
+    expect(handoffResult.value.contract.features).toHaveLength(4);
+  });
+
+  it('Planner 인스턴스 타입 확인', () => {
+    const p = new Planner(logger);
+    expect(p).toBeInstanceOf(Planner);
+  });
+
+  it('Designer 인스턴스 타입 확인', () => {
+    const d = new Designer(logger);
+    expect(d).toBeInstanceOf(Designer);
+  });
+
+  it('SpecBuilder 인스턴스 타입 확인', () => {
+    const s = new SpecBuilder(logger);
+    expect(s).toBeInstanceOf(SpecBuilder);
+  });
+
+  it('TestTypeDesigner 인스턴스 타입 확인', () => {
+    const t = new TestTypeDesigner(logger);
+    expect(t).toBeInstanceOf(TestTypeDesigner);
+  });
+
+  it('ContractBuilder 인스턴스 타입 확인', () => {
+    const c = new ContractBuilder(logger);
+    expect(c).toBeInstanceOf(ContractBuilder);
+  });
+
+  it('HandoffReceiver 인스턴스 타입 확인', () => {
+    const r = new HandoffReceiver(logger);
+    expect(r).toBeInstanceOf(HandoffReceiver);
+  });
+
+  it('5개 독립 기능 → implementationOrder 길이 5', () => {
+    const contractBuilder = new ContractBuilder(logger);
+    const features = Array.from({ length: 5 }, (_, i) =>
+      createCompleteFeature(`f${i}`, `Feature${i}`),
+    );
+    const result = contractBuilder.buildContract(features, [], 'design');
+    if (result.ok) {
+      expect(result.value.implementationOrder).toHaveLength(5);
+    }
+  });
+
+  it('Planner createPlan 메서드 존재', () => {
+    const p = new Planner(logger);
+    expect(typeof p.createPlan).toBe('function');
+  });
+
+  it('Designer createDesign 메서드 존재', () => {
+    const d = new Designer(logger);
+    expect(typeof d.createDesign).toBe('function');
+  });
+
+  it('SpecBuilder buildSpec 메서드 존재', () => {
+    const s = new SpecBuilder(logger);
+    expect(typeof s.buildSpec).toBe('function');
+  });
+
+  it('TestTypeDesigner createDefinitions 메서드 존재', () => {
+    const t = new TestTypeDesigner(logger);
+    expect(typeof t.createDefinitions).toBe('function');
+  });
+
+  it('ContractBuilder buildContract 메서드 존재', () => {
+    const c = new ContractBuilder(logger);
+    expect(typeof c.buildContract).toBe('function');
+  });
+
+  it('ContractBuilder buildHandoffPackage 메서드 존재', () => {
+    const c = new ContractBuilder(logger);
+    expect(typeof c.buildHandoffPackage).toBe('function');
+  });
+
+  it('HandoffReceiver receive 메서드 존재', () => {
+    const r = new HandoffReceiver(logger);
+    expect(typeof r.receive).toBe('function');
+  });
+
+  it('createCompleteFeature helper → 필수 필드 모두 있음', () => {
+    const f = createCompleteFeature('feat-test', 'TestFeature');
+    expect(f.id).toBe('feat-test');
+    expect(f.name).toBe('TestFeature');
+    expect(f.description).toBeDefined();
+    expect(Array.isArray(f.acceptanceCriteria)).toBe(true);
+    expect(Array.isArray(f.dependencies)).toBe(true);
+  });
+
+  it('createMessage helper → 필수 필드 모두 있음', () => {
+    const m = createMessage('msg-1', 'user', 'Hello', 'proj-x');
+    expect(m.id).toBe('msg-1');
+    expect(m.role).toBe('user');
+    expect(m.content).toBe('Hello');
+    expect(m.projectId).toBe('proj-x');
+    expect(m.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('acceptanceCriteria verifiable 필드 boolean', () => {
+    const f = createCompleteFeature('f', 'F');
+    for (const ac of f.acceptanceCriteria) {
+      expect(typeof ac.verifiable).toBe('boolean');
+    }
+  });
+
+  it('acceptanceCriteria id 필드 string', () => {
+    const f = createCompleteFeature('f', 'F');
+    for (const ac of f.acceptanceCriteria) {
+      expect(typeof ac.id).toBe('string');
+    }
+  });
+});

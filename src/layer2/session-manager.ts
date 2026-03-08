@@ -129,6 +129,9 @@ export class SessionManager {
     if (filter?.featureId) {
       results = results.filter((s) => s.featureId === filter.featureId);
     }
+    if (filter?.agentName) {
+      results = results.filter((s) => s.agentName === filter.agentName);
+    }
     if (filter?.phase) {
       results = results.filter((s) => s.phase === filter.phase);
     }

@@ -1237,3 +1237,377 @@ describe('SessionManager 상태 전환 경계값 3', () => {
     }
   });
 });
+
+// ── listSessions 필터 심화 ────────────────────────────────────
+
+describe('SessionManager listSessions 필터 심화', () => {
+  let manager: SessionManager;
+
+  beforeEach(() => {
+    manager = new SessionManager(new ConsoleLogger('error'));
+  });
+
+  it('phase=DESIGN 필터 → DESIGN만 반환', () => {
+    manager.createSession('coder', 'p', 'f1', 'DESIGN');
+    manager.createSession('tester', 'p', 'f2', 'CODE');
+    manager.createSession('qa', 'p', 'f3', 'TEST');
+    const results = manager.listSessions({ phase: 'DESIGN' });
+    expect(results.every((s) => s.phase === 'DESIGN')).toBe(true);
+  });
+
+  it('phase=CODE 필터 → CODE만 반환', () => {
+    manager.createSession('coder', 'p', 'f1', 'CODE');
+    manager.createSession('tester', 'p', 'f2', 'DESIGN');
+    const results = manager.listSessions({ phase: 'CODE' });
+    expect(results.every((s) => s.phase === 'CODE')).toBe(true);
+  });
+
+  it('phase=TEST 필터 → TEST만 반환', () => {
+    manager.createSession('tester', 'p', 'f1', 'TEST');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const results = manager.listSessions({ phase: 'TEST' });
+    expect(results.every((s) => s.phase === 'TEST')).toBe(true);
+  });
+
+  it('phase=VERIFY 필터 → VERIFY만 반환', () => {
+    manager.createSession('reviewer', 'p', 'f1', 'VERIFY');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const results = manager.listSessions({ phase: 'VERIFY' });
+    expect(results.every((s) => s.phase === 'VERIFY')).toBe(true);
+  });
+
+  it('state=paused 필터 → 일시정지 세션만', () => {
+    manager.createSession('coder', 'p', 'f1', 'CODE');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const all = manager.listSessions();
+    if (all[0]) manager.pauseSession(all[0].sessionId);
+    const paused = manager.listSessions({ state: 'paused' });
+    expect(paused.every((s) => s.state === 'paused')).toBe(true);
+  });
+
+  it('state=completed 필터 → 완료 세션만', () => {
+    manager.createSession('coder', 'p', 'f1', 'CODE');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const all = manager.listSessions();
+    if (all[0]) manager.completeSession(all[0].sessionId);
+    const completed = manager.listSessions({ state: 'completed' });
+    expect(completed.every((s) => s.state === 'completed')).toBe(true);
+  });
+
+  it('state=failed 필터 → 실패 세션만', () => {
+    manager.createSession('coder', 'p', 'f1', 'CODE');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const all = manager.listSessions();
+    if (all[0]) manager.failSession(all[0].sessionId, 'error');
+    const failed = manager.listSessions({ state: 'failed' });
+    expect(failed.every((s) => s.state === 'failed')).toBe(true);
+  });
+
+  it('agentName=architect 필터 → architect만', () => {
+    manager.createSession('architect', 'p', 'f1', 'DESIGN');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const results = manager.listSessions({ agentName: 'architect' });
+    expect(results.every((s) => s.agentName === 'architect')).toBe(true);
+  });
+
+  it('agentName=qa 필터 → qa만', () => {
+    manager.createSession('qa', 'p', 'f1', 'DESIGN');
+    manager.createSession('coder', 'p', 'f2', 'CODE');
+    const results = manager.listSessions({ agentName: 'qa' });
+    expect(results.every((s) => s.agentName === 'qa')).toBe(true);
+  });
+
+  it('agentName=documenter 필터 → documenter만', () => {
+    manager.createSession('documenter', 'p', 'f1', 'VERIFY');
+    manager.createSession('tester', 'p', 'f2', 'TEST');
+    const results = manager.listSessions({ agentName: 'documenter' });
+    expect(results.every((s) => s.agentName === 'documenter')).toBe(true);
+  });
+
+  it('필터 없음 → 전체 반환', () => {
+    for (let i = 0; i < 7; i++) {
+      manager.createSession('coder', 'p', `f${i}`, 'CODE');
+    }
+    expect(manager.listSessions()).toHaveLength(7);
+  });
+
+  it('projectId 필터 → 해당 project만', () => {
+    manager.createSession('coder', 'proj-a', 'f1', 'CODE');
+    manager.createSession('coder', 'proj-b', 'f2', 'CODE');
+    const results = manager.listSessions({ projectId: 'proj-a' });
+    expect(results.every((s) => s.projectId === 'proj-a')).toBe(true);
+  });
+
+  it('featureId 필터 → 해당 feature만', () => {
+    manager.createSession('coder', 'p', 'feat-x', 'CODE');
+    manager.createSession('coder', 'p', 'feat-y', 'CODE');
+    const results = manager.listSessions({ featureId: 'feat-x' });
+    expect(results.every((s) => s.featureId === 'feat-x')).toBe(true);
+  });
+});
+
+// ── createSession 필드 검증 심화 ─────────────────────────────
+
+describe('SessionManager createSession 필드 검증 심화', () => {
+  let manager: SessionManager;
+
+  beforeEach(() => {
+    manager = new SessionManager(new ConsoleLogger('error'));
+  });
+
+  it('생성된 세션 phase=DESIGN', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'DESIGN');
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('생성된 세션 phase=CODE', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('생성된 세션 phase=TEST', () => {
+    const r = manager.createSession('tester', 'p', 'f', 'TEST');
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('생성된 세션 phase=VERIFY', () => {
+    const r = manager.createSession('reviewer', 'p', 'f', 'VERIFY');
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('생성된 세션 sessionId가 string 타입', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(typeof r.value.sessionId).toBe('string');
+  });
+
+  it('생성된 세션 sessionId가 빈 문자열이 아님', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.sessionId.length).toBeGreaterThan(0);
+  });
+
+  it('생성된 세션 state=active', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.state).toBe('active');
+  });
+
+  it('생성된 세션 agentName=reviewer', () => {
+    const r = manager.createSession('reviewer', 'p', 'f', 'VERIFY');
+    if (r.ok) expect(r.value.agentName).toBe('reviewer');
+  });
+
+  it('생성된 세션 agentName=documenter', () => {
+    const r = manager.createSession('documenter', 'p', 'f', 'VERIFY');
+    if (r.ok) expect(r.value.agentName).toBe('documenter');
+  });
+
+  it('생성된 세션 agentName=qc', () => {
+    const r = manager.createSession('qc', 'p', 'f', 'TEST');
+    if (r.ok) expect(r.value.agentName).toBe('qc');
+  });
+
+  it('생성된 세션 projectId 길이 > 0', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.projectId.length).toBeGreaterThan(0);
+  });
+
+  it('생성된 세션 featureId 길이 > 0', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.featureId.length).toBeGreaterThan(0);
+  });
+
+  it('생성된 세션 createdAt이 Date 인스턴스', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) expect(r.value.createdAt).toBeInstanceOf(Date);
+  });
+
+  it('두 세션의 sessionId가 다름', () => {
+    const r1 = manager.createSession('coder', 'p', 'f1', 'CODE');
+    const r2 = manager.createSession('coder', 'p', 'f2', 'CODE');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.sessionId).not.toBe(r2.value.sessionId);
+    }
+  });
+
+  it('100개 세션 생성 → 모두 고유한 sessionId', () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      const r = manager.createSession('coder', 'p', `f${i}`, 'CODE');
+      if (r.ok) ids.add(r.value.sessionId);
+    }
+    expect(ids.size).toBe(100);
+  });
+});
+
+// ── 상태 전환 흐름 심화 ───────────────────────────────────────
+
+describe('SessionManager 상태 전환 흐름 심화', () => {
+  let manager: SessionManager;
+
+  beforeEach(() => {
+    manager = new SessionManager(new ConsoleLogger('error'));
+  });
+
+  it('active → pause → resume → complete 순서', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    expect(manager.getSession(id)?.state).toBe('active');
+    manager.pauseSession(id);
+    expect(manager.getSession(id)?.state).toBe('paused');
+    manager.resumeSession(id);
+    expect(manager.getSession(id)?.state).toBe('active');
+    manager.completeSession(id);
+    expect(manager.getSession(id)?.state).toBe('completed');
+  });
+
+  it('active → fail → state=failed', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    manager.failSession(id, 'failure reason');
+    expect(manager.getSession(id)?.state).toBe('failed');
+  });
+
+  it('복수 세션 각각 독립 상태 전환', () => {
+    const r1 = manager.createSession('coder', 'p', 'f1', 'CODE');
+    const r2 = manager.createSession('tester', 'p', 'f2', 'TEST');
+    if (!r1.ok || !r2.ok) return;
+    manager.pauseSession(r1.value.sessionId);
+    manager.completeSession(r2.value.sessionId);
+    expect(manager.getSession(r1.value.sessionId)?.state).toBe('paused');
+    expect(manager.getSession(r2.value.sessionId)?.state).toBe('completed');
+  });
+
+  it('pause → fail 순서 → 최종 state 확인 가능', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    manager.pauseSession(id);
+    manager.failSession(id, 'reason');
+    const session = manager.getSession(id);
+    expect(session).not.toBeNull();
+    expect(['paused', 'failed']).toContain(session?.state);
+  });
+
+  it('모든 에이전트 타입으로 세션 생성 → state=active', () => {
+    const agents: Array<'architect' | 'qa' | 'coder' | 'tester' | 'qc' | 'reviewer' | 'documenter'> =
+      ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const agent of agents) {
+      const r = manager.createSession(agent, 'p', `f-${agent}`, 'CODE');
+      if (r.ok) {
+        expect(r.value.state).toBe('active');
+      }
+    }
+  });
+
+  it('pause 후 getSession → state=paused', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    manager.pauseSession(id);
+    expect(manager.getSession(id)?.state).toBe('paused');
+  });
+
+  it('complete 후 listSessions state=active → 해당 세션 없음', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    manager.completeSession(id);
+    const actives = manager.listSessions({ state: 'active' });
+    expect(actives.find((s) => s.sessionId === id)).toBeUndefined();
+  });
+
+  it('fail 후 listSessions state=failed → 해당 세션 포함', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    manager.failSession(id, 'oops');
+    const failed = manager.listSessions({ state: 'failed' });
+    expect(failed.find((s) => s.sessionId === id)).toBeDefined();
+  });
+
+  it('5개 세션 중 3개 완료 → listSessions completed 길이 3', () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = manager.createSession('coder', 'p', `f${i}`, 'CODE');
+      if (r.ok) ids.push(r.value.sessionId);
+    }
+    for (const id of ids.slice(0, 3)) {
+      manager.completeSession(id);
+    }
+    expect(manager.listSessions({ state: 'completed' })).toHaveLength(3);
+  });
+
+  it('updateSession으로 metadata 설정 후 getSession → 반영됨', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (!r.ok) return;
+    const id = r.value.sessionId;
+    const updated = manager.updateSession(id, { metadata: { key: 'value' } });
+    if (updated.ok) {
+      const session = manager.getSession(id);
+      expect(session?.metadata).toBeDefined();
+    }
+  });
+});
+
+// ── getSession 경계값 심화 ────────────────────────────────────
+
+describe('SessionManager getSession 경계값 심화', () => {
+  let manager: SessionManager;
+
+  beforeEach(() => {
+    manager = new SessionManager(new ConsoleLogger('error'));
+  });
+
+  it('존재하는 세션 → not null', () => {
+    const r = manager.createSession('coder', 'p', 'f', 'CODE');
+    if (r.ok) {
+      expect(manager.getSession(r.value.sessionId)).not.toBeNull();
+    }
+  });
+
+  it('없는 세션 → null', () => {
+    expect(manager.getSession('non-existent-id')).toBeNull();
+  });
+
+  it('UUID 형식 없는 세션 → null', () => {
+    expect(manager.getSession('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).toBeNull();
+  });
+
+  it('빈 문자열 세션 → null', () => {
+    expect(manager.getSession('')).toBeNull();
+  });
+
+  it('매우 긴 ID → null', () => {
+    expect(manager.getSession('x'.repeat(1000))).toBeNull();
+  });
+
+  it('특수문자 ID → null', () => {
+    expect(manager.getSession('!@#$%^&*()')).toBeNull();
+  });
+
+  it('한국어 ID → null', () => {
+    expect(manager.getSession('세션아이디')).toBeNull();
+  });
+
+  it('생성 후 getSession → agentName 일치', () => {
+    const r = manager.createSession('architect', 'p', 'f', 'DESIGN');
+    if (r.ok) {
+      expect(manager.getSession(r.value.sessionId)?.agentName).toBe('architect');
+    }
+  });
+
+  it('생성 후 getSession → projectId 일치', () => {
+    const r = manager.createSession('coder', 'project-xyz', 'f', 'CODE');
+    if (r.ok) {
+      expect(manager.getSession(r.value.sessionId)?.projectId).toBe('project-xyz');
+    }
+  });
+
+  it('생성 후 getSession → featureId 일치', () => {
+    const r = manager.createSession('coder', 'p', 'feature-abc', 'CODE');
+    if (r.ok) {
+      expect(manager.getSession(r.value.sessionId)?.featureId).toBe('feature-abc');
+    }
+  });
+});

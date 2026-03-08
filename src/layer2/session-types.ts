@@ -111,6 +111,8 @@ export interface SessionFilter {
   readonly projectId?: string;
   /** 기능 ID 필터 / Feature ID filter */
   readonly featureId?: string;
+  /** 에이전트 이름 필터 / Agent name filter */
+  readonly agentName?: AgentName;
   /** Phase 필터 / Phase filter */
   readonly phase?: Phase;
   /** 상태 필터 / State filter */
