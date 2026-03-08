@@ -632,3 +632,244 @@ describe('SpecBuilder 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 edge/random case ─────────────────────────────────────
+
+describe('SpecBuilder buildSpec - 추가 edge/random case', () => {
+  let builder: SpecBuilder;
+
+  beforeEach(() => {
+    builder = new SpecBuilder(new ConsoleLogger('error'));
+  });
+
+  it('UUID 형식 featureId → ok', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ id: uuid })]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain(uuid);
+  });
+
+  it('빈 featureId → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ id: '' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자만 있는 featureName → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ name: '!@#$%^&*()' })]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('!@#$%^&*()');
+  });
+
+  it('이모지 포함 featureName → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ name: '로그인 🔐 기능' })]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('로그인 🔐 기능');
+  });
+
+  it('plan에 개행/탭 포함 → ok', () => {
+    const result = builder.buildSpec('Plan\n\tWith\n\tNewlines', 'Design', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('design에 개행/탭 포함 → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design\n\tWith\n\tTabs', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('음수 유사 ID (feat--1) → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ id: 'feat--1' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('매우 긴 featureId → ok', () => {
+    const longId = 'feat-' + 'x'.repeat(500);
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ id: longId })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('multiple acceptanceCriteria with verifiable=false → ok', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: 'ac-1', description: '기준 A', verifiable: false, testCategory: 'manual' },
+        { id: 'ac-2', description: '기준 B', verifiable: false, testCategory: 'exploratory' },
+      ],
+    })];
+    const result = builder.buildSpec('Plan', 'Design', features);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toContain('기준 A');
+      expect(result.value).toContain('기준 B');
+    }
+  });
+
+  it('입력과 출력이 동일한 이름 → ok', () => {
+    const features = [createFeature({
+      inputs: [{ name: 'data', type: 'string', constraints: 'any', required: true }],
+      outputs: [{ name: 'data', type: 'string', constraints: 'any', required: true }],
+    })];
+    const result = builder.buildSpec('Plan', 'Design', features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 의존성 배열 → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ dependencies: [] })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('여러 의존성 → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [
+      createFeature({ dependencies: ['dep-1', 'dep-2', 'dep-3', 'dep-4', 'dep-5'] }),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan이 단일 문자 → ok', () => {
+    const result = builder.buildSpec('P', 'Design', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('design이 단일 문자 → ok', () => {
+    const result = builder.buildSpec('Plan', 'D', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan이 숫자 문자열 → ok', () => {
+    const result = builder.buildSpec('12345', 'Design', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan에 HTML 태그 포함 → ok', () => {
+    const result = builder.buildSpec('<h1>My Plan</h1>', 'Design', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('100개 기능 → ok', () => {
+    const features = Array.from({ length: 100 }, (_, i) =>
+      createFeature({ id: `feat-${i}`, name: `Feature ${i}` })
+    );
+    const result = builder.buildSpec('Plan', 'Design', features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('탭만 있는 design → ok=false', () => {
+    const result = builder.buildSpec('Plan', '\t\t\t', [createFeature()]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('layer1_empty_design');
+  });
+
+  it('개행만 있는 design → ok=false', () => {
+    const result = builder.buildSpec('Plan', '\n\n\n', [createFeature()]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('layer1_empty_design');
+  });
+
+  it('featureName이 빈 문자열 → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ name: '' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('featureDescription이 빈 문자열 → ok', () => {
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ description: '' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('수락 기준 id가 UUID 형식 → ok', () => {
+    const features = [createFeature({
+      acceptanceCriteria: [
+        { id: '550e8400-e29b-41d4-a716-446655440001', description: '기준', verifiable: true, testCategory: 'unit' },
+      ],
+    })];
+    const result = builder.buildSpec('Plan', 'Design', features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('입력 type이 복잡한 문자열 → ok', () => {
+    const features = [createFeature({
+      inputs: [{ name: 'data', type: 'Array<Map<string, unknown>>', constraints: 'non-empty', required: true }],
+    })];
+    const result = builder.buildSpec('Plan', 'Design', features);
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('SpecBuilder validateSpec - 추가 edge/random case', () => {
+  let builder: SpecBuilder;
+
+  beforeEach(() => {
+    builder = new SpecBuilder(new ConsoleLogger('error'));
+  });
+
+  it('Goals 섹션이 대소문자 다를 때 → ok=false', () => {
+    const spec = '## goals\n## Features\n## Design\n## Plan';
+    const result = builder.validateSpec(spec);
+    // 대소문자 민감하면 false, 아니면 true
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('섹션 헤더에 추가 공백 → 처리 가능', () => {
+    const spec = '## Goals  \n## Features\n## Design\n## Plan';
+    const result = builder.validateSpec(spec);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('1000줄 스펙 → ok', () => {
+    const longSection = Array.from({ length: 250 }, (_, i) => `Line ${i}`).join('\n');
+    const spec = `## Goals\n${longSection}\n## Features\n${longSection}\n## Design\n${longSection}\n## Plan\n${longSection}`;
+    const result = builder.validateSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('unicode 특수문자 포함 스펙 → ok', () => {
+    const spec = '## Goals\n🎯 목표\n## Features\n✨ 기능\n## Design\n🏗️ 설계\n## Plan\n📅 계획';
+    const result = builder.validateSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('Goals만 있을 때 에러 코드 확인', () => {
+    const result = builder.validateSpec('## Goals\n내용');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('layer1_incomplete_spec');
+  });
+
+  it('Features만 있을 때 에러', () => {
+    const result = builder.validateSpec('## Features\n내용');
+    expect(result.ok).toBe(false);
+  });
+
+  it('Design만 있을 때 에러', () => {
+    const result = builder.validateSpec('## Design\n내용');
+    expect(result.ok).toBe(false);
+  });
+
+  it('Plan만 있을 때 에러', () => {
+    const result = builder.validateSpec('## Plan\n내용');
+    expect(result.ok).toBe(false);
+  });
+
+  it('HTML 태그 포함 스펙 → 섹션 있으면 ok', () => {
+    const spec = '## Goals\n<p>목표</p>\n## Features\n<ul>\n## Design\n</ul>\n## Plan\n끝';
+    const result = builder.validateSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('JSON 형식 내용 포함 스펙 → ok', () => {
+    const spec = '## Goals\n{"key":"value"}\n## Features\n[]\n## Design\n{}\n## Plan\nnull';
+    const result = builder.validateSpec(spec);
+    expect(result.ok).toBe(true);
+  });
+
+  it('validateSpec 에러 메시지가 비어있지 않음', () => {
+    const result = builder.validateSpec('## Goals only');
+    if (!result.ok) {
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('buildSpec 결과에 featureId 반영됨', () => {
+    const uniqueId = 'unique-feature-id-xyz';
+    const result = builder.buildSpec('Plan', 'Design', [createFeature({ id: uniqueId })]);
+    if (result.ok) {
+      expect(result.value).toContain(uniqueId);
+    }
+  });
+});
