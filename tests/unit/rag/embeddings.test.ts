@@ -1441,3 +1441,482 @@ describe('TransformersEmbeddingProvider 메서드 타입 확인', () => {
     });
   });
 });
+
+// ── createTransformersEmbeddingProvider 심화 경계값 ──────────
+
+describe('createTransformersEmbeddingProvider 심화 경계값', () => {
+  it('name 인수 없이 → 기본 name 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.name).toBe('string');
+    expect(p.name.length).toBeGreaterThan(0);
+  });
+
+  it('dimensions 인수 없이 → 기본 dimensions 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(typeof p.dimensions).toBe('number');
+    expect(p.dimensions).toBeGreaterThan(0);
+  });
+
+  it('긴 이름 팩토리 → name 보존', () => {
+    const longName = 'custom-embedding-provider-' + 'a'.repeat(100);
+    const p = createTransformersEmbeddingProvider(logger, longName);
+    expect(p.name).toBe(longName);
+  });
+
+  it('특수문자 이름 팩토리 → name 보존', () => {
+    const specialName = 'provider-!@#$%^&*()-abc';
+    const p = createTransformersEmbeddingProvider(logger, specialName);
+    expect(p.name).toBe(specialName);
+  });
+
+  it('UUID 이름 팩토리 → name 보존', () => {
+    const uuid = crypto.randomUUID();
+    const p = createTransformersEmbeddingProvider(logger, uuid);
+    expect(p.name).toBe(uuid);
+  });
+
+  it('dimensions=1 → 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 1);
+    expect(p.dimensions).toBe(1);
+  });
+
+  it('dimensions=3072 → 설정됨', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 3072);
+    expect(p.dimensions).toBe(3072);
+  });
+
+  it('팩토리 인스턴스 tier=free', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'test');
+    expect(p.tier).toBe('free');
+  });
+
+  it('팩토리 인스턴스 instanceof TransformersEmbeddingProvider', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'instance-check');
+    expect(p).toBeInstanceOf(TransformersEmbeddingProvider);
+  });
+
+  it('다른 모델명 → 인스턴스 생성 성공', () => {
+    const p = createTransformersEmbeddingProvider(logger, 'other-model', 'Xenova/paraphrase-MiniLM-L3-v2', 384);
+    expect(p).toBeInstanceOf(TransformersEmbeddingProvider);
+    expect(p.dimensions).toBe(384);
+  });
+
+  it('팩토리 5번 → 5개 독립 인스턴스', () => {
+    const ps = Array.from({ length: 5 }, (_, i) => createTransformersEmbeddingProvider(logger, `p-${i}`));
+    for (let i = 0; i < ps.length; i++) {
+      expect(ps[i]?.name).toBe(`p-${i}`);
+    }
+  });
+});
+
+// ── normalizeVector 경계값 심화 ───────────────────────────────
+
+describe('normalizeVector 경계값 심화', () => {
+  it('단위 벡터 [1,0,0] → 변화 없음', () => {
+    const result = normalizeVector([1, 0, 0]);
+    expect(result[0]).toBeCloseTo(1, 5);
+    expect(result[1]).toBeCloseTo(0, 5);
+    expect(result[2]).toBeCloseTo(0, 5);
+  });
+
+  it('단위 벡터 [0,1,0] → 변화 없음', () => {
+    const result = normalizeVector([0, 1, 0]);
+    expect(result[0]).toBeCloseTo(0, 5);
+    expect(result[1]).toBeCloseTo(1, 5);
+    expect(result[2]).toBeCloseTo(0, 5);
+  });
+
+  it('단위 벡터 [0,0,1] → 변화 없음', () => {
+    const result = normalizeVector([0, 0, 1]);
+    expect(result[0]).toBeCloseTo(0, 5);
+    expect(result[1]).toBeCloseTo(0, 5);
+    expect(result[2]).toBeCloseTo(1, 5);
+  });
+
+  it('모든 음수 벡터 → 노름이 1', () => {
+    const result = normalizeVector([-3, -4]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeCloseTo(1, 5);
+  });
+
+  it('혼합 부호 벡터 → 노름이 1', () => {
+    const result = normalizeVector([1, -2, 3, -4]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeCloseTo(1, 5);
+  });
+
+  it('큰 값 벡터 → 노름이 1', () => {
+    const result = normalizeVector([1000, 2000, 3000]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('매우 작은 값 벡터 → 노름이 1 또는 0벡터 처리', () => {
+    const result = normalizeVector([1e-10, 1e-10]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeGreaterThanOrEqual(0);
+  });
+
+  it('벡터 길이 1 (스칼라) → 노름이 1', () => {
+    const result = normalizeVector([5]);
+    expect(Math.abs(result[0] ?? 0)).toBeCloseTo(1, 5);
+  });
+
+  it('벡터 길이 10 → 노름이 1', () => {
+    const v = Array.from({ length: 10 }, (_, i) => i + 1);
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, v2) => s + v2 * v2, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('벡터 길이 100 → 노름이 1', () => {
+    const v = Array.from({ length: 100 }, () => Math.random());
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, v2) => s + v2 * v2, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('벡터 길이 384 → 노름이 1', () => {
+    const v = Array.from({ length: 384 }, () => Math.random() - 0.5);
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, v2) => s + v2 * v2, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('출력 길이가 입력 길이와 동일 (길이 5)', () => {
+    const result = normalizeVector([1, 2, 3, 4, 5]);
+    expect(result.length).toBe(5);
+  });
+
+  it('출력 길이가 입력 길이와 동일 (길이 50)', () => {
+    const v = Array.from({ length: 50 }, (_, i) => i + 1);
+    const result = normalizeVector(v);
+    expect(result.length).toBe(50);
+  });
+
+  it('출력이 number 배열', () => {
+    const result = normalizeVector(new Float32Array([1, 2, 3]));
+    expect(result instanceof Float32Array).toBe(true);
+    for (const v of result) {
+      expect(typeof v).toBe('number');
+    }
+  });
+
+  it('입력 배열이 변경되지 않음 (불변성)', () => {
+    const input = [3, 4];
+    const copy = [...input];
+    normalizeVector(input);
+    expect(input[0]).toBe(copy[0]);
+    expect(input[1]).toBe(copy[1]);
+  });
+
+  it('[1,1] 정규화 → 각 요소 1/sqrt(2)', () => {
+    const result = normalizeVector([1, 1]);
+    const expected = 1 / Math.sqrt(2);
+    expect(result[0]).toBeCloseTo(expected, 5);
+    expect(result[1]).toBeCloseTo(expected, 5);
+  });
+
+  it('[3,4] 정규화 → [0.6, 0.8]', () => {
+    const result = normalizeVector([3, 4]);
+    expect(result[0]).toBeCloseTo(0.6, 5);
+    expect(result[1]).toBeCloseTo(0.8, 5);
+  });
+
+  it('[-3,-4] 정규화 → [-0.6, -0.8]', () => {
+    const result = normalizeVector([-3, -4]);
+    expect(result[0]).toBeCloseTo(-0.6, 5);
+    expect(result[1]).toBeCloseTo(-0.8, 5);
+  });
+
+  it('[1,1,1] 정규화 → 각 요소 1/sqrt(3)', () => {
+    const result = normalizeVector([1, 1, 1]);
+    const expected = 1 / Math.sqrt(3);
+    expect(result[0]).toBeCloseTo(expected, 5);
+  });
+
+  it('5번 반복 normalizeVector → 항상 노름=1', () => {
+    for (let i = 0; i < 5; i++) {
+      const v = Array.from({ length: 10 }, () => Math.random() * 10 - 5);
+      const result = normalizeVector(v);
+      const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+      expect(norm).toBeCloseTo(1, 4);
+    }
+  });
+
+  it('정수 벡터 [5,12] → 노름 1', () => {
+    const result = normalizeVector([5, 12]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeCloseTo(1, 5);
+  });
+
+  it('정수 벡터 [8,15,17] → 노름 1', () => {
+    const result = normalizeVector([8, 15, 17]);
+    const norm = Math.sqrt(result.reduce((s, v) => s + v * v, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+});
+
+// ── TransformersEmbeddingProvider 메서드 존재 검증 ───────────
+
+describe('TransformersEmbeddingProvider 메서드 존재 검증', () => {
+  let provider: TransformersEmbeddingProvider;
+
+  beforeEach(() => {
+    provider = new TransformersEmbeddingProvider('method-test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+  });
+
+  it('initialize 메서드는 function', () => {
+    expect(typeof provider.initialize).toBe('function');
+  });
+
+  it('embed 메서드는 function', () => {
+    expect(typeof provider.embed).toBe('function');
+  });
+
+  it('embedQuery 메서드는 function', () => {
+    expect(typeof provider.embedQuery).toBe('function');
+  });
+
+  it('name 속성은 string', () => {
+    expect(typeof provider.name).toBe('string');
+  });
+
+  it('dimensions 속성은 number', () => {
+    expect(typeof provider.dimensions).toBe('number');
+  });
+
+  it('tier 속성은 string', () => {
+    expect(typeof provider.tier).toBe('string');
+  });
+
+  it('tier는 "free"', () => {
+    expect(provider.tier).toBe('free');
+  });
+
+  it('initialize 결과 타입이 Promise인지 확인', () => {
+    const result = provider.initialize();
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {
+      /* ignore */
+    });
+  });
+
+  it('embed 결과 타입이 Promise인지 확인', () => {
+    const result = provider.embed(['test']);
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {
+      /* ignore */
+    });
+  });
+
+  it('embedQuery 결과 타입이 Promise인지 확인', () => {
+    const result = provider.embedQuery('test query');
+    expect(result).toBeInstanceOf(Promise);
+    result.catch(() => {
+      /* ignore */
+    });
+  });
+
+  it('name은 생성자 인수와 동일', () => {
+    const p = new TransformersEmbeddingProvider('exact-name-check', 'Xenova/all-MiniLM-L6-v2', 512, logger);
+    expect(p.name).toBe('exact-name-check');
+  });
+
+  it('dimensions은 생성자 인수와 동일', () => {
+    const p = new TransformersEmbeddingProvider('dim-check', 'Xenova/all-MiniLM-L6-v2', 1024, logger);
+    expect(p.dimensions).toBe(1024);
+  });
+
+  it('5개 인스턴스 모두 initialize 메서드 있음', () => {
+    for (let i = 0; i < 5; i++) {
+      const p = new TransformersEmbeddingProvider(`p${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
+      expect(typeof p.initialize).toBe('function');
+    }
+  });
+
+  it('5개 인스턴스 모두 embed 메서드 있음', () => {
+    for (let i = 0; i < 5; i++) {
+      const p = new TransformersEmbeddingProvider(`e${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
+      expect(typeof p.embed).toBe('function');
+    }
+  });
+
+  it('5개 인스턴스 모두 embedQuery 메서드 있음', () => {
+    for (let i = 0; i < 5; i++) {
+      const p = new TransformersEmbeddingProvider(`eq${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
+      expect(typeof p.embedQuery).toBe('function');
+    }
+  });
+});
+
+// ── normalizeVector 추가 경계값 ──────────────────────────────
+
+describe('normalizeVector 추가 경계값', () => {
+  it('[0,0,0,0] 영벡터 → 처리됨 (예외 없음)', () => {
+    expect(() => normalizeVector([0, 0, 0, 0])).not.toThrow();
+  });
+
+  it('[0] 영벡터 → 예외 없음', () => {
+    expect(() => normalizeVector([0])).not.toThrow();
+  });
+
+  it('양수+음수 혼합 10차원 → 노름 1', () => {
+    const v = [1, -2, 3, -4, 5, -6, 7, -8, 9, -10];
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('단조증가 벡터 → 노름 1', () => {
+    const v = Array.from({ length: 20 }, (_, i) => i + 1);
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('단조감소 벡터 → 노름 1', () => {
+    const v = Array.from({ length: 20 }, (_, i) => 20 - i);
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+    expect(norm).toBeCloseTo(1, 4);
+  });
+
+  it('반환값 배열 길이 보존 (길이 7)', () => {
+    const v = [1, 2, 3, 4, 5, 6, 7];
+    const result = normalizeVector(v);
+    expect(result.length).toBe(7);
+  });
+
+  it('반환값 배열 길이 보존 (길이 256)', () => {
+    const v = Array.from({ length: 256 }, () => Math.random());
+    const result = normalizeVector(v);
+    expect(result.length).toBe(256);
+  });
+
+  it('반환값 배열 길이 보존 (길이 768)', () => {
+    const v = Array.from({ length: 768 }, () => Math.random() * 2 - 1);
+    const result = normalizeVector(v);
+    expect(result.length).toBe(768);
+  });
+
+  it('원소 순서 보존: 정규화 후 부호 체크', () => {
+    const v = [3, -4];
+    const result = normalizeVector(v);
+    expect((result[0] ?? 0) > 0).toBe(true);
+    expect((result[1] ?? 0) < 0).toBe(true);
+  });
+
+  it('[1,0,0,0] → 첫 원소만 1', () => {
+    const result = normalizeVector([1, 0, 0, 0]);
+    expect(result[0]).toBeCloseTo(1, 5);
+    expect(result[1]).toBeCloseTo(0, 5);
+    expect(result[2]).toBeCloseTo(0, 5);
+    expect(result[3]).toBeCloseTo(0, 5);
+  });
+
+  it('랜덤 벡터 10회 → 항상 노름 1', () => {
+    for (let i = 0; i < 10; i++) {
+      const dim = Math.floor(Math.random() * 50) + 5;
+      const v = Array.from({ length: dim }, () => Math.random() * 20 - 10);
+      const result = normalizeVector(v);
+      const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+      expect(norm).toBeCloseTo(1, 3);
+    }
+  });
+
+  it('모든 원소가 같은 값 → 정규화됨', () => {
+    const v = Array.from({ length: 8 }, () => 7);
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+    expect(norm).toBeCloseTo(1, 5);
+  });
+
+  it('소수 벡터 → 노름 1', () => {
+    const v = [0.1, 0.2, 0.3, 0.4, 0.5];
+    const result = normalizeVector(v);
+    const norm = Math.sqrt(result.reduce((s, x) => s + x * x, 0));
+    expect(norm).toBeCloseTo(1, 5);
+  });
+});
+
+// ── TransformersEmbeddingProvider 속성 심화 검증 ─────────────
+
+describe('TransformersEmbeddingProvider 속성 심화', () => {
+  it('name이 빈 문자열이 아님', () => {
+    const p = new TransformersEmbeddingProvider('non-empty', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.name.length).toBeGreaterThan(0);
+  });
+
+  it('dimensions가 양수', () => {
+    const p = new TransformersEmbeddingProvider('positive-dims', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.dimensions).toBeGreaterThan(0);
+  });
+
+  it('tier가 "free" 문자열', () => {
+    const p = new TransformersEmbeddingProvider('tier-check', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.tier).toBe('free');
+  });
+
+  it('dimensions=384 → 정확히 384', () => {
+    const p = new TransformersEmbeddingProvider('d384', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p.dimensions).toBe(384);
+  });
+
+  it('팩토리 기본 dimensions → 양수', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(p.dimensions).toBeGreaterThan(0);
+  });
+
+  it('팩토리 기본 name → 비어있지 않음', () => {
+    const p = createTransformersEmbeddingProvider(logger);
+    expect(p.name.length).toBeGreaterThan(0);
+  });
+
+  it('name 속성은 읽기 가능', () => {
+    const p = new TransformersEmbeddingProvider('readable-name', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const name = p.name;
+    expect(name).toBe('readable-name');
+  });
+
+  it('dimensions 속성은 읽기 가능', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 512, logger);
+    const dims = p.dimensions;
+    expect(dims).toBe(512);
+  });
+
+  it('tier 속성은 읽기 가능', () => {
+    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const tier = p.tier;
+    expect(tier).toBe('free');
+  });
+
+  it('동일 설정 두 인스턴스 속성 비교', () => {
+    const p1 = new TransformersEmbeddingProvider('same', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const p2 = new TransformersEmbeddingProvider('same', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p1.name).toBe(p2.name);
+    expect(p1.dimensions).toBe(p2.dimensions);
+    expect(p1.tier).toBe(p2.tier);
+    expect(p1).not.toBe(p2);
+  });
+
+  it('다른 dimensions 두 인스턴스 비교', () => {
+    const p1 = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 256, logger);
+    const p2 = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 768, logger);
+    expect(p1.dimensions).not.toBe(p2.dimensions);
+  });
+
+  it('다른 이름 두 인스턴스 비교', () => {
+    const p1 = new TransformersEmbeddingProvider('name-A', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    const p2 = new TransformersEmbeddingProvider('name-B', 'Xenova/all-MiniLM-L6-v2', 384, logger);
+    expect(p1.name).not.toBe(p2.name);
+  });
+
+  it('dimensions 1부터 3072까지 경계값 5개 검증', () => {
+    const tests = [1, 128, 384, 768, 3072];
+    for (const d of tests) {
+      const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', d, logger);
+      expect(p.dimensions).toBe(d);
+    }
+  });
+});

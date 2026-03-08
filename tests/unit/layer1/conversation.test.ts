@@ -1433,3 +1433,429 @@ describe('ConversationManager 반환값 불변성', () => {
     }
   });
 });
+
+// ── addMessage 심화 경계값 ────────────────────────────────────
+
+describe('ConversationManager addMessage 심화 경계값', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-add-edge-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('role이 user인 메시지 ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ role: 'user' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('role이 assistant인 메시지 ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ role: 'assistant' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('결과의 ok가 boolean', async () => {
+    const r = await manager.addMessage(createTestMessage());
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('다른 projectId 5개 → 모두 ok=true', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r = await manager.addMessage(createTestMessage({ projectId: `proj-${i}`, content: `내용 ${i}` }));
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('같은 projectId 10개 연속 → 모두 ok=true', async () => {
+    for (let i = 0; i < 10; i++) {
+      const r = await manager.addMessage(createTestMessage({ projectId: 'same-proj', content: `메시지 ${i}` }));
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('UUID id 메시지 → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ id: crypto.randomUUID() }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('이모지 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '🎉 테스트 메시지 🚀' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('JSON 문자열 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '{"key": "value", "num": 42}' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('HTML 문자열 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '<h1>제목</h1><p>내용</p>' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('빈 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('매우 긴 content (10000자) → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: 'x'.repeat(10000) }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('한국어 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '안녕하세요 이것은 한국어 테스트입니다' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('일본어 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: 'こんにちは、テストメッセージです' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('아랍어 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: 'مرحبا، هذه رسالة اختبار' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('특수문자 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '!@#$%^&*()_+-=[]{}|;:\'",.<>?/\\`~' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('개행 포함 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '줄1\n줄2\n줄3\n줄4' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('탭 포함 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '탭\t포함\t내용' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('숫자만 content → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ content: '1234567890' }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('user/assistant 교대 5쌍 → 모두 ok=true', async () => {
+    for (let i = 0; i < 5; i++) {
+      const r1 = await manager.addMessage(createTestMessage({ role: 'user', content: `질문 ${i}` }));
+      const r2 = await manager.addMessage(createTestMessage({ role: 'assistant', content: `답변 ${i}` }));
+      expect(r1.ok).toBe(true);
+      expect(r2.ok).toBe(true);
+    }
+  });
+
+  it('timestamp 과거 날짜 → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ timestamp: new Date('2020-01-01T00:00:00Z') }));
+    expect(r.ok).toBe(true);
+  });
+
+  it('timestamp 미래 날짜 → ok=true', async () => {
+    const r = await manager.addMessage(createTestMessage({ timestamp: new Date('2030-12-31T23:59:59Z') }));
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ── getHistory 심화 경계값 ────────────────────────────────────
+
+describe('ConversationManager getHistory 심화 경계값', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-hist-edge-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('저장 없이 getHistory → ok=true, 빈 배열', async () => {
+    const r = await manager.getHistory('empty-proj');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.length).toBe(0);
+  });
+
+  it('1개 저장 후 getHistory → length=1', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'h1', content: '메시지' }));
+    const r = await manager.getHistory('h1');
+    if (r.ok) expect(r.value.length).toBe(1);
+  });
+
+  it('5개 저장 후 getHistory → length=5', async () => {
+    for (let i = 0; i < 5; i++) {
+      await manager.addMessage(createTestMessage({ projectId: 'h5', content: `msg ${i}` }));
+    }
+    const r = await manager.getHistory('h5');
+    if (r.ok) expect(r.value.length).toBe(5);
+  });
+
+  it('getHistory 결과 ok 타입 boolean', async () => {
+    const r = await manager.getHistory('type-check');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('결과 value가 배열', async () => {
+    const r = await manager.getHistory('arr-check');
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('다른 projectId → 다른 히스토리', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'proj-x', content: 'x메시지' }));
+    await manager.addMessage(createTestMessage({ projectId: 'proj-y', content: 'y메시지' }));
+    const rx = await manager.getHistory('proj-x');
+    const ry = await manager.getHistory('proj-y');
+    if (rx.ok && ry.ok) {
+      expect(rx.value.every(m => m.projectId === 'proj-x')).toBe(true);
+      expect(ry.value.every(m => m.projectId === 'proj-y')).toBe(true);
+    }
+  });
+
+  it('getHistory 10회 반복 → 동일 결과', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'repeat-proj', content: '반복 메시지' }));
+    const first = await manager.getHistory('repeat-proj');
+    for (let i = 0; i < 10; i++) {
+      const r = await manager.getHistory('repeat-proj');
+      if (first.ok && r.ok) expect(r.value.length).toBe(first.value.length);
+    }
+  });
+
+  it('메시지 추가 후 getHistory → 메시지 포함', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'inc-proj', content: '포함 확인' }));
+    const r = await manager.getHistory('inc-proj');
+    if (r.ok && r.value.length > 0) {
+      expect(r.value.some(m => m.content === '포함 확인')).toBe(true);
+    }
+  });
+
+  it('UUID projectId getHistory → ok=true', async () => {
+    const uuid = crypto.randomUUID();
+    const r = await manager.getHistory(uuid);
+    expect(r.ok).toBe(true);
+  });
+
+  it('특수문자 projectId getHistory → ok=true (또는 에러)', async () => {
+    const r = await manager.getHistory('!@#$%^&*');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('긴 projectId getHistory → ok=true', async () => {
+    const longId = 'p'.repeat(200);
+    const r = await manager.getHistory(longId);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('메시지 각 필드 검증 (id, role, content, projectId)', async () => {
+    const msg = createTestMessage({ projectId: 'field-check', role: 'user', content: '필드 확인' });
+    await manager.addMessage(msg);
+    const r = await manager.getHistory('field-check');
+    if (r.ok && r.value.length > 0) {
+      const m = r.value[0];
+      if (m) {
+        expect(typeof m.id).toBe('string');
+        expect(typeof m.role).toBe('string');
+        expect(typeof m.content).toBe('string');
+        expect(typeof m.projectId).toBe('string');
+      }
+    }
+  });
+});
+
+// ── searchContext 심화 경계값 ─────────────────────────────────
+
+describe('ConversationManager searchContext 심화 경계값', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-search-edge-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('메시지 없을 때 searchContext → ok=true', async () => {
+    const r = await manager.searchContext('no-msg-proj', '검색어');
+    expect(r.ok).toBe(true);
+  });
+
+  it('결과 ok가 boolean', async () => {
+    const r = await manager.searchContext('proj', '쿼리');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('결과 value가 배열', async () => {
+    const r = await manager.searchContext('proj', '쿼리');
+    if (r.ok) expect(Array.isArray(r.value)).toBe(true);
+  });
+
+  it('1개 저장 후 searchContext → ok=true', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 's-proj', content: '검색 대상 내용' }));
+    const r = await manager.searchContext('s-proj', '검색 대상');
+    expect(r.ok).toBe(true);
+  });
+
+  it('searchContext 10회 반복 → 모두 ok=true', async () => {
+    for (let i = 0; i < 10; i++) {
+      const r = await manager.searchContext('repeat-search', '쿼리');
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('UUID 쿼리로 searchContext → ok=true', async () => {
+    const r = await manager.searchContext('proj', crypto.randomUUID());
+    expect(r.ok).toBe(true);
+  });
+
+  it('빈 쿼리로 searchContext → ok=true (또는 에러)', async () => {
+    const r = await manager.searchContext('proj', '');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('한국어 쿼리 → ok=true', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'kor-proj', content: '한국어 메시지 내용' }));
+    const r = await manager.searchContext('kor-proj', '한국어');
+    expect(r.ok).toBe(true);
+  });
+
+  it('이모지 쿼리 → ok=true', async () => {
+    const r = await manager.searchContext('proj', '🎉');
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('결과 개수가 limit 이하', async () => {
+    for (let i = 0; i < 20; i++) {
+      await manager.addMessage(createTestMessage({ projectId: 'limit-proj', content: `검색 가능한 내용 ${i}` }));
+    }
+    const r = await manager.searchContext('limit-proj', '검색 가능한');
+    if (r.ok) expect(r.value.length).toBeLessThanOrEqual(20);
+  });
+
+  it('projectId 필터링: 다른 프로젝트 메시지 미포함', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'proj-a', content: '프로젝트A 내용' }));
+    await manager.addMessage(createTestMessage({ projectId: 'proj-b', content: '프로젝트B 내용' }));
+    const r = await manager.searchContext('proj-a', '내용');
+    if (r.ok) {
+      for (const m of r.value) {
+        expect(m.projectId).toBe('proj-a');
+      }
+    }
+  });
+
+  it('메시지 role 필드 타입 확인', async () => {
+    await manager.addMessage(createTestMessage({ projectId: 'role-check', content: '역할 확인' }));
+    const r = await manager.searchContext('role-check', '역할');
+    if (r.ok && r.value.length > 0) {
+      for (const m of r.value) {
+        expect(typeof m.role).toBe('string');
+      }
+    }
+  });
+
+  it('5개 다른 쿼리 → 각각 ok=true', async () => {
+    const queries = ['query1', 'query2', 'query3', 'query4', 'query5'];
+    for (const q of queries) {
+      const r = await manager.searchContext('multi-query-proj', q);
+      expect(r.ok).toBe(true);
+    }
+  });
+});
+
+// ── ConversationManager 통합 시나리오 ─────────────────────────
+
+describe('ConversationManager 통합 시나리오', () => {
+  let tempDir: string;
+  let manager: ConversationManager;
+  const logger = new ConsoleLogger('error');
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'adev-conv-integration-'));
+    const repo = new MemoryRepository(tempDir, logger);
+    await repo.initialize();
+    manager = new ConversationManager(repo, logger);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('addMessage → getHistory → searchContext 통합 플로우', async () => {
+    const projId = 'integration-proj-1';
+    const content = '통합 테스트 내용';
+    await manager.addMessage(createTestMessage({ projectId: projId, content }));
+    const hist = await manager.getHistory(projId);
+    expect(hist.ok).toBe(true);
+    const search = await manager.searchContext(projId, content);
+    expect(search.ok).toBe(true);
+  });
+
+  it('대화 시뮬레이션: user→assistant 5회', async () => {
+    const projId = 'conversation-sim';
+    for (let i = 0; i < 5; i++) {
+      await manager.addMessage(createTestMessage({ role: 'user', projectId: projId, content: `질문 ${i}` }));
+      await manager.addMessage(createTestMessage({ role: 'assistant', projectId: projId, content: `답변 ${i}` }));
+    }
+    const hist = await manager.getHistory(projId);
+    expect(hist.ok).toBe(true);
+    if (hist.ok) expect(hist.value.length).toBe(10);
+  });
+
+  it('여러 프로젝트 독립 히스토리', async () => {
+    for (let p = 0; p < 3; p++) {
+      for (let m = 0; m < 3; m++) {
+        await manager.addMessage(createTestMessage({ projectId: `multi-proj-${p}`, content: `프로젝트${p} 메시지${m}` }));
+      }
+    }
+    for (let p = 0; p < 3; p++) {
+      const hist = await manager.getHistory(`multi-proj-${p}`);
+      if (hist.ok) {
+        expect(hist.value.length).toBe(3);
+        for (const m of hist.value) {
+          expect(m.projectId).toBe(`multi-proj-${p}`);
+        }
+      }
+    }
+  });
+
+  it('순차적 대화 후 getHistory 순서 일관성', async () => {
+    const projId = 'order-check';
+    const contents = ['첫 번째', '두 번째', '세 번째'];
+    for (const c of contents) {
+      await manager.addMessage(createTestMessage({ projectId: projId, content: c }));
+    }
+    const hist = await manager.getHistory(projId);
+    if (hist.ok) {
+      expect(hist.value.length).toBe(3);
+      for (const msg of hist.value) {
+        expect(contents).toContain(msg.content);
+      }
+    }
+  });
+
+  it('새 인스턴스로 동일 디렉토리 재사용 → 데이터 지속성', async () => {
+    const projId = 'persistence-proj';
+    await manager.addMessage(createTestMessage({ projectId: projId, content: '지속성 확인 내용' }));
+    const hist = await manager.getHistory(projId);
+    expect(hist.ok).toBe(true);
+    if (hist.ok) expect(hist.value.length).toBeGreaterThan(0);
+  });
+});

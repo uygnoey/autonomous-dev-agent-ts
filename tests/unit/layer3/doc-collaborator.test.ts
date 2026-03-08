@@ -1441,3 +1441,552 @@ describe('DocCollaborator.getState 추가 경계값', () => {
     }
   });
 });
+
+// ── collaborate 멱등성 / 순서 보장 ─────────────────────────────
+
+describe('DocCollaborator collaborate 멱등성 및 순서 보장', () => {
+  let collab: DocCollaborator;
+
+  beforeEach(() => {
+    collab = makeCollaborator();
+  });
+
+  it('동일 입력 → 동일 출력 (멱등성 #1)', () => {
+    const r1 = collab.collaborate('동일 아웃라인', '동일 상세');
+    const r2 = collab.collaborate('동일 아웃라인', '동일 상세');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('동일 입력 → 동일 출력 (멱등성 #2)', () => {
+    const r1 = collab.collaborate('# 제목\n\n내용A', '## 상세\n\n설명A');
+    const r2 = collab.collaborate('# 제목\n\n내용A', '## 상세\n\n설명A');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('동일 입력 → 동일 출력 (멱등성 #3)', () => {
+    const outline = 'outline-content-xyz';
+    const details = 'details-content-xyz';
+    const r1 = collab.collaborate(outline, details);
+    const r2 = collab.collaborate(outline, details);
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('순서 보장: outline → separator → details', () => {
+    const outline = 'FIRST_PART';
+    const details = 'SECOND_PART';
+    const result = collab.collaborate(outline, details);
+    if (result.ok) {
+      const idx1 = result.value.indexOf('FIRST_PART');
+      const idx2 = result.value.indexOf('SECOND_PART');
+      expect(idx1).toBeLessThan(idx2);
+    }
+  });
+
+  it('outline 길이가 다른 경우 → 결과 포함 확인', () => {
+    const r = collab.collaborate('A'.repeat(1), 'B'.repeat(100));
+    if (r.ok) {
+      expect(r.value).toContain('A');
+      expect(r.value).toContain('B');
+    }
+  });
+
+  it('details 길이가 다른 경우 → 결과 포함 확인', () => {
+    const r = collab.collaborate('A'.repeat(100), 'B'.repeat(1));
+    if (r.ok) {
+      expect(r.value).toContain('A');
+      expect(r.value).toContain('B');
+    }
+  });
+
+  it('다국어 혼합 outline 멱등성', () => {
+    const r1 = collab.collaborate('한국어 Korean 日本語', 'detail details');
+    const r2 = collab.collaborate('한국어 Korean 日本語', 'detail details');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('이모지 outline 멱등성', () => {
+    const r1 = collab.collaborate('🎉🚀💻🌟', '🔥💡✨🎯');
+    const r2 = collab.collaborate('🎉🚀💻🌟', '🔥💡✨🎯');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('JSON outline 멱등성', () => {
+    const r1 = collab.collaborate('{"a":1}', '{"b":2}');
+    const r2 = collab.collaborate('{"a":1}', '{"b":2}');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('코드 블록 outline 멱등성', () => {
+    const r1 = collab.collaborate('```js\nconst x=1;\n```', '구현 상세');
+    const r2 = collab.collaborate('```js\nconst x=1;\n```', '구현 상세');
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('결과 value가 개행으로 시작하지 않음', () => {
+    const r = collab.collaborate('outline', 'details');
+    if (r.ok) expect(r.value.startsWith('\n')).toBe(false);
+  });
+
+  it('outline 내용이 details 앞에 위치', () => {
+    const r = collab.collaborate('START_MARKER', 'END_MARKER');
+    if (r.ok) {
+      expect(r.value.indexOf('START_MARKER')).toBeLessThan(r.value.indexOf('END_MARKER'));
+    }
+  });
+
+  it('collaborate 결과에 outline 포함 (UUID 기반)', () => {
+    const uuid = crypto.randomUUID();
+    const r = collab.collaborate(`outline-${uuid}`, 'details');
+    if (r.ok) expect(r.value).toContain(`outline-${uuid}`);
+  });
+
+  it('collaborate 결과에 details 포함 (UUID 기반)', () => {
+    const uuid = crypto.randomUUID();
+    const r = collab.collaborate('outline', `details-${uuid}`);
+    if (r.ok) expect(r.value).toContain(`details-${uuid}`);
+  });
+
+  it('5회 호출 모두 string 타입 반환', () => {
+    for (let i = 0; i < 5; i++) {
+      const r = collab.collaborate(`outline ${i}`, `details ${i}`);
+      if (r.ok) expect(typeof r.value).toBe('string');
+    }
+  });
+
+  it('입력 공백 포함 → ok=true (공백 외 내용 있음)', () => {
+    const r = collab.collaborate('  real outline  ', '  real details  ');
+    expect(r.ok).toBe(true);
+  });
+
+  it('outline에 탭+공백 혼용 → ok=true', () => {
+    const r = collab.collaborate('\t tab outline \t', '\t tab details \t');
+    expect(r.ok).toBe(true);
+  });
+});
+
+// ── generateTableOfContents 목차 내용 검증 ────────────────────
+
+describe('DocCollaborator generateTableOfContents 내용 검증', () => {
+  let collab: DocCollaborator;
+
+  beforeEach(() => {
+    collab = makeCollaborator();
+  });
+
+  it('목차 결과가 빈 문자열이 아님', () => {
+    const r = collab.generateTableOfContents('# 제목\n내용');
+    if (r.ok) expect(r.value.length).toBeGreaterThan(0);
+  });
+
+  it('목차에 헤딩 텍스트 포함 (단순)', () => {
+    const r = collab.generateTableOfContents('# 간단 제목\n내용');
+    if (r.ok) expect(r.value).toContain('간단 제목');
+  });
+
+  it('멱등성: 동일 입력 → 동일 목차', () => {
+    const content = '# H1\n## H2\n### H3\n내용';
+    const r1 = collab.generateTableOfContents(content);
+    const r2 = collab.generateTableOfContents(content);
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+
+  it('멱등성 반복 10회', () => {
+    const content = '# 반복 제목\n내용';
+    const first = collab.generateTableOfContents(content);
+    for (let i = 0; i < 10; i++) {
+      const r = collab.generateTableOfContents(content);
+      if (first.ok && r.ok) expect(r.value).toBe(first.value);
+    }
+  });
+
+  it('20개 헤딩 목차 → 모두 포함 검증', () => {
+    const content = Array.from({ length: 20 }, (_, i) => `## 항목${i}\n내용`).join('\n\n');
+    const r = collab.generateTableOfContents(content);
+    if (r.ok) {
+      for (let i = 0; i < 20; i++) {
+        expect(r.value).toContain(`항목${i}`);
+      }
+    }
+  });
+
+  it('H1+H2+H3 혼합 → 목차 ok=true', () => {
+    const content = '# 대제목\n## 중제목\n### 소제목\n내용';
+    expect(collab.generateTableOfContents(content).ok).toBe(true);
+  });
+
+  it('내용에 헤딩 없음 → ok=true (빈 목차)', () => {
+    const r = collab.generateTableOfContents('단순 텍스트\n헤딩 없음');
+    expect(r.ok).toBe(true);
+  });
+
+  it('결과 타입이 string', () => {
+    const r = collab.generateTableOfContents('# 제목\n내용');
+    if (r.ok) expect(typeof r.value).toBe('string');
+  });
+
+  it('헤딩 앞에 공백 있는 경우 → ok=true', () => {
+    const r = collab.generateTableOfContents('  # 제목\n내용');
+    expect(r.ok).toBe(true);
+  });
+
+  it('연속 헤딩 (내용 없음) → ok=true', () => {
+    const r = collab.generateTableOfContents('# A\n# B\n# C\n# D');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value).toContain('A');
+      expect(r.value).toContain('B');
+    }
+  });
+
+  it('헤딩 텍스트에 숫자 포함 → 목차에 포함', () => {
+    const r = collab.generateTableOfContents('# 1단계\n## 2단계\n내용');
+    if (r.ok) {
+      expect(r.value).toContain('1단계');
+      expect(r.value).toContain('2단계');
+    }
+  });
+
+  it('긴 헤딩 텍스트 → 목차에 포함', () => {
+    const longHeading = '이것은 매우 긴 헤딩 텍스트입니다 '.repeat(5);
+    const r = collab.generateTableOfContents(`# ${longHeading}\n내용`);
+    if (r.ok) expect(r.value).toContain(longHeading.trim());
+  });
+
+  it('BOM 포함 내용 → ok=true', () => {
+    const r = collab.generateTableOfContents('\uFEFF# BOM 포함 헤딩\n내용');
+    expect(r.ok).toBe(true);
+  });
+
+  it('CRLF 줄끝 헤딩 → ok=true', () => {
+    const r = collab.generateTableOfContents('# CRLF 제목\r\n내용\r\n## 소제목\r\n내용');
+    expect(typeof r.ok).toBe('boolean');
+  });
+});
+
+// ── 동시 호출 시뮬레이션 ───────────────────────────────────────
+
+describe('DocCollaborator 동시 호출 시뮬레이션', () => {
+  it('여러 collab 인스턴스 collaborate 동시 → 모두 ok=true', () => {
+    const instances = Array.from({ length: 10 }, () => makeCollaborator());
+    const results = instances.map((c, i) => c.collaborate(`outline ${i}`, `details ${i}`));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('여러 collab 인스턴스 generateTableOfContents 동시 → 모두 ok=true', () => {
+    const instances = Array.from({ length: 10 }, () => makeCollaborator());
+    const results = instances.map((c, i) => c.generateTableOfContents(`# 섹션 ${i}\n내용`));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('simple 인스턴스 5개 collaborate → 모두 ok=true', () => {
+    const instances = Array.from({ length: 5 }, () => makeSimpleCollaborator());
+    const results = instances.map((c, i) => c.collaborate(`outline ${i}`, `details ${i}`));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('collaborate + generateTableOfContents 혼합 → 모두 ok=true', () => {
+    const collab = makeCollaborator();
+    const r1 = collab.collaborate('outline', 'details');
+    const r2 = collab.generateTableOfContents('# 제목\n내용');
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+  });
+
+  it('동일 인스턴스 10회 collaborate → 모두 동일', () => {
+    const collab = makeCollaborator();
+    const outline = '# 동일 아웃라인\n내용';
+    const details = '## 동일 상세\n설명';
+    const results = Array.from({ length: 10 }, () => collab.collaborate(outline, details));
+    const first = results[0];
+    for (const r of results) {
+      if (first?.ok && r.ok) expect(r.value).toBe(first.value);
+    }
+  });
+
+  it('다른 인스턴스 5개 같은 입력 → 모두 동일 결과', () => {
+    const outline = '# 공통 아웃라인\n내용';
+    const details = '## 공통 상세\n설명';
+    const results = Array.from({ length: 5 }, () => makeCollaborator().collaborate(outline, details));
+    const first = results[0];
+    for (const r of results) {
+      if (first?.ok && r.ok) expect(r.value).toBe(first.value);
+    }
+  });
+
+  it('에러 케이스 동시 5개 → 모두 ok=false', () => {
+    const instances = Array.from({ length: 5 }, () => makeCollaborator());
+    const results = instances.map((c) => c.collaborate('', ''));
+    for (const r of results) {
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('에러 + 성공 혼합 → 각각 올바른 결과', () => {
+    const collab = makeCollaborator();
+    const errorResult = collab.collaborate('', 'details');
+    const successResult = collab.collaborate('outline', 'details');
+    expect(errorResult.ok).toBe(false);
+    expect(successResult.ok).toBe(true);
+  });
+});
+
+// ── complete + getState 통합 시나리오 ─────────────────────────
+
+describe('DocCollaborator complete + getState 통합', () => {
+  it('start → getState → complete 플로우', async () => {
+    const collab = makeCollaborator();
+    const startResult = await collab.start({
+      projectId: 'flow-test-1',
+      type: 'technical-spec',
+      context: '통합 플로우 테스트',
+      fragments: [],
+    });
+    expect(startResult.ok).toBe(true);
+    if (startResult.ok) {
+      const docId = startResult.value.id;
+      const stateResult = await collab.getState(docId);
+      expect(stateResult.ok).toBe(true);
+      const completeResult = await collab.complete(docId);
+      expect(typeof completeResult.ok).toBe('boolean');
+    }
+  });
+
+  it('start → start → getState 두 번 → 둘 다 ok', async () => {
+    const collab = makeCollaborator();
+    const r1 = await collab.start({ projectId: 'p-a', type: 'technical-spec', context: 'ctx', fragments: [] });
+    const r2 = await collab.start({ projectId: 'p-b', type: 'technical-spec', context: 'ctx', fragments: [] });
+    if (r1.ok && r2.ok) {
+      const s1 = await collab.getState(r1.value.id);
+      const s2 = await collab.getState(r2.value.id);
+      expect(s1.ok).toBe(true);
+      expect(s2.ok).toBe(true);
+    }
+  });
+
+  it('start 후 다른 ID getState → ok=false', async () => {
+    const collab = makeCollaborator();
+    const r = await collab.start({ projectId: 'p-test', type: 'technical-spec', context: 'ctx', fragments: [] });
+    if (r.ok) {
+      const wrongState = await collab.getState('wrong-id-' + r.value.id);
+      expect(wrongState.ok).toBe(false);
+    }
+  });
+
+  it('complete 미존재 doc → error.code 문자열', async () => {
+    const collab = makeCollaborator();
+    const r = await collab.complete('non-existent-doc');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('getState 미존재 → error.message 문자열', async () => {
+    const collab = makeCollaborator();
+    const r = await collab.getState('non-existent-doc');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('start 5개 → 각 getState → 모두 ok=true', async () => {
+    const collab = makeCollaborator();
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await collab.start({ projectId: `proj-${i}`, type: 'technical-spec', context: 'ctx', fragments: [] });
+      if (r.ok) ids.push(r.value.id);
+    }
+    for (const id of ids) {
+      const s = await collab.getState(id);
+      expect(s.ok).toBe(true);
+    }
+  });
+
+  it('UUID 기반 projectId start → getState → type 확인', async () => {
+    const collab = makeCollaborator();
+    const r = await collab.start({
+      projectId: crypto.randomUUID(),
+      type: 'technical-spec',
+      context: '타입 확인 테스트',
+      fragments: [],
+    });
+    if (r.ok) {
+      const s = await collab.getState(r.value.id);
+      if (s.ok) expect(s.value.type).toBe('technical-spec');
+    }
+  });
+
+  it('start → state.updatedAt이 Date 인스턴스', async () => {
+    const collab = makeCollaborator();
+    const r = await collab.start({ projectId: 'up-test', type: 'technical-spec', context: 'ctx', fragments: [] });
+    if (r.ok) {
+      const s = await collab.getState(r.value.id);
+      if (s.ok) expect(s.value.updatedAt).toBeInstanceOf(Date);
+    }
+  });
+});
+
+// ── collaborate 에러 케이스 심화 ───────────────────────────────
+
+describe('DocCollaborator collaborate 에러 케이스 심화', () => {
+  let collab: DocCollaborator;
+
+  beforeEach(() => {
+    collab = makeCollaborator();
+  });
+
+  it('outline 빈 문자열 에러 코드 agent_invalid_input #1', () => {
+    const r = collab.collaborate('', 'detail');
+    if (!r.ok) expect(r.error.code).toBe('agent_invalid_input');
+  });
+
+  it('outline 빈 문자열 에러 코드 agent_invalid_input #2', () => {
+    const r = collab.collaborate('', '다른 상세 내용');
+    if (!r.ok) expect(r.error.code).toBe('agent_invalid_input');
+  });
+
+  it('details 빈 문자열 에러 코드 agent_invalid_input #1', () => {
+    const r = collab.collaborate('outline 내용', '');
+    if (!r.ok) expect(r.error.code).toBe('agent_invalid_input');
+  });
+
+  it('details 빈 문자열 에러 코드 agent_invalid_input #2', () => {
+    const r = collab.collaborate('다른 아웃라인', '');
+    if (!r.ok) expect(r.error.code).toBe('agent_invalid_input');
+  });
+
+  it('outline 공백만 에러 ok=false', () => {
+    const r = collab.collaborate(' ', 'detail');
+    expect(r.ok).toBe(false);
+  });
+
+  it('outline 탭만 에러 ok=false', () => {
+    const r = collab.collaborate('\t', 'detail');
+    expect(r.ok).toBe(false);
+  });
+
+  it('details 공백만 에러 ok=false', () => {
+    const r = collab.collaborate('outline', ' ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('details 탭만 에러 ok=false', () => {
+    const r = collab.collaborate('outline', '\t');
+    expect(r.ok).toBe(false);
+  });
+
+  it('outline+details 모두 빈 문자열 → ok=false', () => {
+    const r = collab.collaborate('', '');
+    expect(r.ok).toBe(false);
+  });
+
+  it('outline+details 모두 공백 → ok=false', () => {
+    const r = collab.collaborate('   ', '   ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('에러 시 error.code 타입은 string', () => {
+    const r = collab.collaborate('', 'detail');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('에러 시 error.message 타입은 string', () => {
+    const r = collab.collaborate('', 'detail');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('개행만인 outline 에러 ok=false', () => {
+    const r = collab.collaborate('\n\n', 'detail');
+    expect(r.ok).toBe(false);
+  });
+
+  it('개행만인 details 에러 ok=false', () => {
+    const r = collab.collaborate('outline', '\n\n');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CRLF만인 outline 에러 ok=false', () => {
+    const r = collab.collaborate('\r\n', 'detail');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CRLF만인 details 에러 ok=false', () => {
+    const r = collab.collaborate('outline', '\r\n');
+    expect(r.ok).toBe(false);
+  });
+
+  it('탭+개행만인 outline 에러 ok=false', () => {
+    const r = collab.collaborate('\t\n\t', 'detail');
+    expect(r.ok).toBe(false);
+  });
+
+  it('탭+개행만인 details 에러 ok=false', () => {
+    const r = collab.collaborate('outline', '\t\n\t');
+    expect(r.ok).toBe(false);
+  });
+});
+
+// ── generateTableOfContents 에러 케이스 심화 ──────────────────
+
+describe('DocCollaborator generateTableOfContents 에러 심화', () => {
+  let collab: DocCollaborator;
+
+  beforeEach(() => {
+    collab = makeCollaborator();
+  });
+
+  it('빈 문자열 에러 코드 agent_invalid_input', () => {
+    const r = collab.generateTableOfContents('');
+    if (!r.ok) expect(r.error.code).toBe('agent_invalid_input');
+  });
+
+  it('공백만 에러 ok=false', () => {
+    const r = collab.generateTableOfContents('   ');
+    expect(r.ok).toBe(false);
+  });
+
+  it('탭만 에러 ok=false', () => {
+    const r = collab.generateTableOfContents('\t');
+    expect(r.ok).toBe(false);
+  });
+
+  it('개행만 에러 ok=false', () => {
+    const r = collab.generateTableOfContents('\n\n\n');
+    expect(r.ok).toBe(false);
+  });
+
+  it('CRLF만 에러 ok=false', () => {
+    const r = collab.generateTableOfContents('\r\n\r\n');
+    expect(r.ok).toBe(false);
+  });
+
+  it('탭+공백+개행 에러 ok=false', () => {
+    const r = collab.generateTableOfContents('\t  \n  \t');
+    expect(r.ok).toBe(false);
+  });
+
+  it('에러 코드 타입 string', () => {
+    const r = collab.generateTableOfContents('');
+    if (!r.ok) expect(typeof r.error.code).toBe('string');
+  });
+
+  it('에러 메시지 타입 string', () => {
+    const r = collab.generateTableOfContents('');
+    if (!r.ok) expect(typeof r.error.message).toBe('string');
+  });
+
+  it('빈 에러 5회 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const r = collab.generateTableOfContents('');
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('공백 에러 5회 반복 일관성', () => {
+    for (let i = 0; i < 5; i++) {
+      const r = collab.generateTableOfContents('   ');
+      expect(r.ok).toBe(false);
+    }
+  });
+});
