@@ -1422,4 +1422,341 @@ describe('ClaudeApi', () => {
       }
     });
   });
+
+  // ── createMessage 극한 경계값 ────────────────────────────────
+
+  describe('createMessage 극한 경계값', () => {
+    it('[edge] 50개 멀티턴 메시지 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const messages = Array.from({ length: 50 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: `message content ${i}`,
+      }));
+      const result = await api.createMessage(messages);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] content가 JSON 문자열 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([
+        { role: 'user', content: JSON.stringify({ action: 'test', params: [1, 2, 3] }) },
+      ]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] content가 코드 블록 포함 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{
+        role: 'user',
+        content: '```typescript\nconst x = 1;\nconsole.log(x);\n```',
+      }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] assistant 역할 메시지 포함 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([
+        { role: 'user', content: 'question' },
+        { role: 'assistant', content: 'answer' },
+        { role: 'user', content: 'follow-up' },
+      ]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 매우 짧은 content "a" → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'a' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[normal] content.length=0 → mock은 성공', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[normal] inputTokens >= 0', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'token count' }]);
+      if (result.ok) {
+        expect(result.value.metadata.inputTokens).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('[normal] outputTokens >= 0', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'output token check' }]);
+      if (result.ok) {
+        expect(result.value.metadata.outputTokens).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('[edge] content가 HTML → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{
+        role: 'user',
+        content: '<html><body><h1>Hello</h1></body></html>',
+      }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] content가 SQL → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{
+        role: 'user',
+        content: 'SELECT * FROM users WHERE id = 1 ORDER BY name ASC',
+      }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] content가 CSV 형식 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{
+        role: 'user',
+        content: 'name,age,email\nAlice,30,alice@example.com\nBob,25,bob@example.com',
+      }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] content가 base64 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const base64 = btoa('Hello, World!');
+      const result = await api.createMessage([{ role: 'user', content: base64 }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[random] 10번 반복 다른 content → 모두 ok=true', async () => {
+      for (let i = 0; i < 10; i++) {
+        api = makeApi();
+        injectClient(api, makeOkClient());
+        const content = `Random content iteration ${i}: ${Math.random()}`;
+        const result = await api.createMessage([{ role: 'user', content }]);
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('[edge] model이 빈 문자열 옵션 → ok=true (mock 성공)', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage(
+        [{ role: 'user', content: 'test' }],
+        { model: '' },
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] temperature 0 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage(
+        [{ role: 'user', content: 'temp 0' }],
+        { temperature: 0 },
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] temperature 1 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage(
+        [{ role: 'user', content: 'temp 1' }],
+        { temperature: 1 },
+      );
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── streamMessage 극한 경계값 ────────────────────────────────
+
+  describe('streamMessage 극한 경계값', () => {
+    it('[normal] 콜백에서 이벤트 타입 수집', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const types: string[] = [];
+      await api.streamMessage(
+        [{ role: 'user', content: 'collect types' }],
+        (event) => { types.push(event.type); },
+      );
+      expect(types.length).toBeGreaterThan(0);
+    });
+
+    it('[normal] content_delta 이벤트 포함', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const types: string[] = [];
+      await api.streamMessage(
+        [{ role: 'user', content: 'delta check' }],
+        (event) => { types.push(event.type); },
+      );
+      expect(types).toContain('content_delta');
+    });
+
+    it('[normal] content_start 이벤트 포함', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const types: string[] = [];
+      await api.streamMessage(
+        [{ role: 'user', content: 'start check' }],
+        (event) => { types.push(event.type); },
+      );
+      expect(types).toContain('content_start');
+    });
+
+    it('[normal] content_stop 이벤트 포함', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const types: string[] = [];
+      await api.streamMessage(
+        [{ role: 'user', content: 'stop check' }],
+        (event) => { types.push(event.type); },
+      );
+      expect(types).toContain('content_stop');
+    });
+
+    it('[edge] 스트리밍 이모지 content → ok=true', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const result = await api.streamMessage(
+        [{ role: 'user', content: '안녕하세요 🔥✨' }],
+        () => {},
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 스트리밍 멀티턴 메시지 → ok=true', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const result = await api.streamMessage(
+        [
+          { role: 'user', content: 'first' },
+          { role: 'assistant', content: 'response' },
+          { role: 'user', content: 'follow-up' },
+        ],
+        () => {},
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 스트리밍 중 예외 객체 throw → ok=false', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = {
+        messages: {
+          create: mock(async function* () {
+            throw { code: 'custom_error', message: '커스텀 에러' };
+          }),
+        },
+      };
+      const result = await api.streamMessage([{ role: 'user', content: 'test' }], () => {});
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 스트리밍 null throw → ok=false', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = {
+        messages: {
+          create: mock(async function* () {
+            throw null;
+          }),
+        },
+      };
+      const result = await api.streamMessage([{ role: 'user', content: 'test' }], () => {});
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 스트리밍 undefined throw → ok=false', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = {
+        messages: {
+          create: mock(async function* () {
+            throw undefined;
+          }),
+        },
+      };
+      const result = await api.streamMessage([{ role: 'user', content: 'test' }], () => {});
+      expect(result.ok).toBe(false);
+    });
+
+    it('[normal] 10번 반복 스트리밍 → 모두 ok=true', async () => {
+      for (let i = 0; i < 10; i++) {
+        api = makeApi();
+        // @ts-expect-error WHY: private field 주입
+        api.client = { messages: { create: mockStreamCreate } };
+        const result = await api.streamMessage([{ role: 'user', content: `stream-${i}` }], () => {});
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('[edge] 스트리밍 에러 code는 항상 string', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = {
+        messages: {
+          create: mock(async function* () {
+            throw new Error('streaming failure');
+          }),
+        },
+      };
+      const result = await api.streamMessage([{ role: 'user', content: 'test' }], () => {});
+      if (!result.ok) expect(typeof result.error.code).toBe('string');
+    });
+
+    it('[edge] 스트리밍 에러는 AgentError 인스턴스', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = {
+        messages: {
+          create: mock(async function* () {
+            throw new Error('stream err');
+          }),
+        },
+      };
+      const result = await api.streamMessage([{ role: 'user', content: 'test' }], () => {});
+      if (!result.ok) expect(result.error).toBeInstanceOf(AgentError);
+    });
+
+    it('[normal] system 옵션 포함 스트리밍 → ok=true', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const result = await api.streamMessage(
+        [{ role: 'user', content: 'test' }],
+        () => {},
+        { system: 'You are helpful.' },
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('[normal] model 옵션 포함 스트리밍 → ok=true', async () => {
+      api = makeApi();
+      // @ts-expect-error WHY: private field 주입
+      api.client = { messages: { create: mockStreamCreate } };
+      const result = await api.streamMessage(
+        [{ role: 'user', content: 'test' }],
+        () => {},
+        { model: 'claude-haiku-4-5-20251001' },
+      );
+      expect(result.ok).toBe(true);
+    });
+  });
 });

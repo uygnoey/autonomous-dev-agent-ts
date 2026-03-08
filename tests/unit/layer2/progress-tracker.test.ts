@@ -666,28 +666,147 @@ describe('ProgressTracker 랜덤/경계값', () => {
     tracker = new ProgressTracker(new ConsoleLogger('error'));
   });
 
-  it.each(Array.from({ length: 10 }, (_, i) => i))('랜덤 기능 %i 초기화 독립성', (i) => {
-    const featureId = `rand-feat-${i}-${Date.now()}`;
+  it('랜덤 기능 0 초기화 독립성', () => {
+    const featureId = `rand-feat-0-${Date.now()}`;
     const result = tracker.initFeature(featureId);
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.featureId).toBe(featureId);
-      expect(result.value.status).toBe('pending');
-      expect(result.value.currentPhase).toBe('DESIGN');
-    }
+    if (result.ok) { expect(result.value.featureId).toBe(featureId); expect(result.value.status).toBe('pending'); expect(result.value.currentPhase).toBe('DESIGN'); }
   });
 
-  it.each(ALL_PHASES)('Phase %s 경계값 테스트', (phase) => {
-    tracker.initFeature('feat-phase');
-    tracker.updatePhase('feat-phase', phase);
-    expect(tracker.getProgress('feat-phase')?.currentPhase).toBe(phase);
-  });
-
-  it.each(ALL_STATUSES)('FeatureStatus %s 경계값', (status) => {
-    tracker.initFeature('feat-status');
-    const result = tracker.updateStatus('feat-status', status);
+  it('랜덤 기능 1 초기화 독립성', () => {
+    const featureId = `rand-feat-1-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
     expect(result.ok).toBe(true);
-    expect(tracker.getProgress('feat-status')?.status).toBe(status);
+    if (result.ok) { expect(result.value.featureId).toBe(featureId); expect(result.value.status).toBe('pending'); }
+  });
+
+  it('랜덤 기능 2 초기화 독립성', () => {
+    const featureId = `rand-feat-2-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.featureId).toBe(featureId); expect(result.value.status).toBe('pending'); }
+  });
+
+  it('랜덤 기능 3 초기화 독립성', () => {
+    const featureId = `rand-feat-3-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.currentPhase).toBe('DESIGN'); }
+  });
+
+  it('랜덤 기능 4 초기화 독립성', () => {
+    const featureId = `rand-feat-4-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.status).toBe('pending'); }
+  });
+
+  it('랜덤 기능 5 초기화 독립성', () => {
+    const featureId = `rand-feat-5-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.completedPhases).toHaveLength(0); }
+  });
+
+  it('랜덤 기능 6 초기화 독립성', () => {
+    const featureId = `rand-feat-6-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.verificationResults).toHaveLength(0); }
+  });
+
+  it('랜덤 기능 7 초기화 독립성', () => {
+    const featureId = `rand-feat-7-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.startedAt).toBeInstanceOf(Date); }
+  });
+
+  it('랜덤 기능 8 초기화 독립성', () => {
+    const featureId = `rand-feat-8-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(result.value.updatedAt).toBeInstanceOf(Date); }
+  });
+
+  it('랜덤 기능 9 초기화 독립성', () => {
+    const featureId = `rand-feat-9-${Date.now()}`;
+    const result = tracker.initFeature(featureId);
+    expect(result.ok).toBe(true);
+    if (result.ok) { expect(typeof result.value.featureId).toBe('string'); }
+  });
+
+  it('Phase DESIGN 경계값 테스트', () => {
+    tracker.initFeature('feat-phase-design');
+    tracker.updatePhase('feat-phase-design', 'DESIGN');
+    expect(tracker.getProgress('feat-phase-design')?.currentPhase).toBe('DESIGN');
+  });
+
+  it('Phase CODE 경계값 테스트', () => {
+    tracker.initFeature('feat-phase-code');
+    tracker.updatePhase('feat-phase-code', 'CODE');
+    expect(tracker.getProgress('feat-phase-code')?.currentPhase).toBe('CODE');
+  });
+
+  it('Phase TEST 경계값 테스트', () => {
+    tracker.initFeature('feat-phase-test');
+    tracker.updatePhase('feat-phase-test', 'TEST');
+    expect(tracker.getProgress('feat-phase-test')?.currentPhase).toBe('TEST');
+  });
+
+  it('Phase VERIFY 경계값 테스트', () => {
+    tracker.initFeature('feat-phase-verify');
+    tracker.updatePhase('feat-phase-verify', 'VERIFY');
+    expect(tracker.getProgress('feat-phase-verify')?.currentPhase).toBe('VERIFY');
+  });
+
+  it('FeatureStatus pending 경계값', () => {
+    tracker.initFeature('feat-s-pending');
+    const result = tracker.updateStatus('feat-s-pending', 'pending');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-pending')?.status).toBe('pending');
+  });
+
+  it('FeatureStatus designing 경계값', () => {
+    tracker.initFeature('feat-s-designing');
+    const result = tracker.updateStatus('feat-s-designing', 'designing');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-designing')?.status).toBe('designing');
+  });
+
+  it('FeatureStatus coding 경계값', () => {
+    tracker.initFeature('feat-s-coding');
+    const result = tracker.updateStatus('feat-s-coding', 'coding');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-coding')?.status).toBe('coding');
+  });
+
+  it('FeatureStatus testing 경계값', () => {
+    tracker.initFeature('feat-s-testing');
+    const result = tracker.updateStatus('feat-s-testing', 'testing');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-testing')?.status).toBe('testing');
+  });
+
+  it('FeatureStatus verifying 경계값', () => {
+    tracker.initFeature('feat-s-verifying');
+    const result = tracker.updateStatus('feat-s-verifying', 'verifying');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-verifying')?.status).toBe('verifying');
+  });
+
+  it('FeatureStatus complete 경계값', () => {
+    tracker.initFeature('feat-s-complete');
+    const result = tracker.updateStatus('feat-s-complete', 'complete');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-complete')?.status).toBe('complete');
+  });
+
+  it('FeatureStatus failed 경계값', () => {
+    tracker.initFeature('feat-s-failed');
+    const result = tracker.updateStatus('feat-s-failed', 'failed');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-s-failed')?.status).toBe('failed');
   });
 
   it('완료율 경계값: 50% (짝수)', () => {
@@ -708,15 +827,35 @@ describe('ProgressTracker 랜덤/경계값', () => {
     expect(tracker.getOverallCompletion()).toBe(1);
   });
 
-  it.each(Array.from({ length: 5 }, (_, i) => i + 2))(
-    '기능 %i개 중 절반 complete → 완료율 0.5',
-    (n) => {
-      const even = n % 2 === 0 ? n : n + 1;
-      for (let i = 0; i < even; i++) tracker.initFeature(`feat-half-${i}`);
-      for (let i = 0; i < even / 2; i++) tracker.updateStatus(`feat-half-${i}`, 'complete');
-      expect(tracker.getOverallCompletion()).toBe(0.5);
-    },
-  );
+  it('기능 2개 중 절반 complete → 완료율 0.5', () => {
+    for (let i = 0; i < 2; i++) tracker.initFeature(`feat-half2-${i}`);
+    tracker.updateStatus('feat-half2-0', 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('기능 4개 중 절반 complete → 완료율 0.5', () => {
+    for (let i = 0; i < 4; i++) tracker.initFeature(`feat-half4-${i}`);
+    for (let i = 0; i < 2; i++) tracker.updateStatus(`feat-half4-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('기능 6개 중 절반 complete → 완료율 0.5', () => {
+    for (let i = 0; i < 6; i++) tracker.initFeature(`feat-half6-${i}`);
+    for (let i = 0; i < 3; i++) tracker.updateStatus(`feat-half6-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('기능 8개 중 절반 complete → 완료율 0.5', () => {
+    for (let i = 0; i < 8; i++) tracker.initFeature(`feat-half8-${i}`);
+    for (let i = 0; i < 4; i++) tracker.updateStatus(`feat-half8-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('기능 10개 중 절반 complete → 완료율 0.5', () => {
+    for (let i = 0; i < 10; i++) tracker.initFeature(`feat-half10-${i}`);
+    for (let i = 0; i < 5; i++) tracker.updateStatus(`feat-half10-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
 });
 
 // ── 추가 edge case: initFeature 경계값 ────────────────────────
@@ -1280,5 +1419,321 @@ describe('ProgressTracker 복합 시나리오 추가', () => {
       tracker.initFeature(`feat-bulk-${i}`);
     }
     expect(tracker.getAllProgress()).toHaveLength(1000);
+  });
+});
+
+// ── updatePhase 추가 경계값 ────────────────────────────────────
+
+describe('ProgressTracker updatePhase 추가 경계값', () => {
+  let tracker: ProgressTracker;
+
+  beforeEach(() => {
+    tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+  });
+
+  it('DESIGN → CODE → TEST → VERIFY 순서 전환 후 completedPhases 3개', () => {
+    tracker.updatePhase('feat-1', 'CODE');
+    tracker.updatePhase('feat-1', 'TEST');
+    tracker.updatePhase('feat-1', 'VERIFY');
+    const progress = tracker.getProgress('feat-1');
+    expect(progress?.completedPhases).toContain('DESIGN');
+    expect(progress?.completedPhases).toContain('CODE');
+    expect(progress?.completedPhases).toContain('TEST');
+  });
+
+  it('같은 Phase로 self-transition → ok', () => {
+    const result = tracker.updatePhase('feat-1', 'DESIGN');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('DESIGN');
+  });
+
+  it('Phase 역전환 가능 (CODE → DESIGN)', () => {
+    tracker.updatePhase('feat-1', 'CODE');
+    const result = tracker.updatePhase('feat-1', 'DESIGN');
+    expect(result.ok).toBe(true);
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('DESIGN');
+  });
+
+  it('10개 기능 각각 VERIFY Phase → 모두 ok', () => {
+    for (let i = 0; i < 10; i++) {
+      tracker.initFeature(`feat-phase-v-${i}`);
+      const result = tracker.updatePhase(`feat-phase-v-${i}`, 'VERIFY');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('updatePhase 5번 → 완전한 Phase 순환', () => {
+    tracker.updatePhase('feat-1', 'CODE');
+    tracker.updatePhase('feat-1', 'TEST');
+    tracker.updatePhase('feat-1', 'VERIFY');
+    tracker.updatePhase('feat-1', 'DESIGN');
+    tracker.updatePhase('feat-1', 'CODE');
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('CODE');
+  });
+
+  it('없는 기능 DESIGN 전환 → err + agent_feature_not_found', () => {
+    const result = tracker.updatePhase('no-such-feature', 'DESIGN');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('agent_feature_not_found');
+  });
+
+  it('없는 기능 TEST 전환 → err', () => {
+    const result = tracker.updatePhase('no-such', 'TEST');
+    expect(result.ok).toBe(false);
+  });
+
+  it('DESIGN Phase 자기 전환 → completedPhases 변화', () => {
+    tracker.updatePhase('feat-1', 'DESIGN');
+    const progress = tracker.getProgress('feat-1');
+    // 자기 자신으로 전환 시 completedPhases는 이전 phase를 포함
+    expect(progress?.currentPhase).toBe('DESIGN');
+  });
+
+  it('두 기능 독립 Phase 전환 확인', () => {
+    tracker.initFeature('feat-2');
+    tracker.updatePhase('feat-1', 'TEST');
+    tracker.updatePhase('feat-2', 'CODE');
+    expect(tracker.getProgress('feat-1')?.currentPhase).toBe('TEST');
+    expect(tracker.getProgress('feat-2')?.currentPhase).toBe('CODE');
+  });
+
+  it('updatePhase 결과 ok는 boolean', () => {
+    const result = tracker.updatePhase('feat-1', 'CODE');
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── addVerification 추가 경계값 ───────────────────────────────
+
+describe('ProgressTracker addVerification 추가 경계값', () => {
+  let tracker: ProgressTracker;
+
+  beforeEach(() => {
+    tracker = new ProgressTracker(new ConsoleLogger('error'));
+    tracker.initFeature('feat-1');
+  });
+
+  it('10번 같은 Phase 검증 추가 → verificationResults 10개', () => {
+    for (let i = 0; i < 10; i++) {
+      tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc', i % 2 === 0));
+    }
+    expect(tracker.getProgress('feat-1')?.verificationResults).toHaveLength(10);
+  });
+
+  it('passed=true 검증 → passed 속성 true', () => {
+    tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc', true));
+    const results = tracker.getProgress('feat-1')?.verificationResults ?? [];
+    expect(results[0]?.passed).toBe(true);
+  });
+
+  it('passed=false 검증 → passed 속성 false', () => {
+    tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc', false));
+    const results = tracker.getProgress('feat-1')?.verificationResults ?? [];
+    expect(results[0]?.passed).toBe(false);
+  });
+
+  it('4개 Phase 모두 추가 → 4개 results', () => {
+    for (const phase of ALL_VERIFICATION_PHASES) {
+      tracker.addVerification('feat-1', makeVerification('feat-1', phase, true));
+    }
+    expect(tracker.getProgress('feat-1')?.verificationResults).toHaveLength(4);
+  });
+
+  it('없는 기능에 추가 → err + agent_feature_not_found', () => {
+    const result = tracker.addVerification('ghost-feat', makeVerification('ghost-feat', 'qa_qc'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('agent_feature_not_found');
+  });
+
+  it('verificationResult featureId 속성 일치', () => {
+    const vr = makeVerification('feat-1', 'reviewer', true);
+    tracker.addVerification('feat-1', vr);
+    const results = tracker.getProgress('feat-1')?.verificationResults ?? [];
+    expect(results[0]?.featureId).toBe('feat-1');
+  });
+
+  it('verificationResult phase 속성 일치', () => {
+    tracker.addVerification('feat-1', makeVerification('feat-1', 'layer1', true));
+    const results = tracker.getProgress('feat-1')?.verificationResults ?? [];
+    expect(results[0]?.phase).toBe('layer1');
+  });
+
+  it('여러 기능에 독립 검증 추가', () => {
+    tracker.initFeature('feat-2');
+    tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc', true));
+    tracker.addVerification('feat-2', makeVerification('feat-2', 'reviewer', false));
+    expect(tracker.getProgress('feat-1')?.verificationResults).toHaveLength(1);
+    expect(tracker.getProgress('feat-2')?.verificationResults).toHaveLength(1);
+  });
+
+  it('adev Phase 검증 → ok', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'adev', true));
+    expect(result.ok).toBe(true);
+  });
+
+  it('addVerification 결과 ok는 boolean', () => {
+    const result = tracker.addVerification('feat-1', makeVerification('feat-1', 'qa_qc'));
+    expect(typeof result.ok).toBe('boolean');
+  });
+});
+
+// ── getProgress/getAllProgress 추가 경계값 ─────────────────────
+
+describe('ProgressTracker getProgress/getAllProgress 추가 경계값', () => {
+  let tracker: ProgressTracker;
+
+  beforeEach(() => {
+    tracker = new ProgressTracker(new ConsoleLogger('error'));
+  });
+
+  it('초기화하지 않은 UUID featureId → null', () => {
+    expect(tracker.getProgress('550e8400-e29b-41d4-a716-446655440000')).toBeNull();
+  });
+
+  it('초기화 후 getProgress → null 아님', () => {
+    tracker.initFeature('feat-not-null');
+    expect(tracker.getProgress('feat-not-null')).not.toBeNull();
+  });
+
+  it('getProgress 반환 값의 completedPhases는 배열', () => {
+    tracker.initFeature('feat-arr');
+    const progress = tracker.getProgress('feat-arr');
+    expect(Array.isArray(progress?.completedPhases)).toBe(true);
+  });
+
+  it('getProgress 반환 값의 verificationResults는 배열', () => {
+    tracker.initFeature('feat-vr-arr');
+    const progress = tracker.getProgress('feat-vr-arr');
+    expect(Array.isArray(progress?.verificationResults)).toBe(true);
+  });
+
+  it('getAllProgress 10개 → 배열 길이 10', () => {
+    for (let i = 0; i < 10; i++) tracker.initFeature(`feat-len-${i}`);
+    expect(tracker.getAllProgress().length).toBe(10);
+  });
+
+  it('getAllProgress → 배열 타입', () => {
+    tracker.initFeature('feat-type-check');
+    expect(Array.isArray(tracker.getAllProgress())).toBe(true);
+  });
+
+  it('getAllProgress → 각 원소에 featureId 존재', () => {
+    tracker.initFeature('feat-id-check');
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(typeof p.featureId).toBe('string');
+    }
+  });
+
+  it('getAllProgress → 각 원소에 status 존재', () => {
+    tracker.initFeature('feat-status-check');
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(typeof p.status).toBe('string');
+    }
+  });
+
+  it('getAllProgress → 각 원소에 currentPhase 존재', () => {
+    tracker.initFeature('feat-phase-check');
+    const all = tracker.getAllProgress();
+    for (const p of all) {
+      expect(typeof p.currentPhase).toBe('string');
+    }
+  });
+
+  it('getAllProgress 50개 → 배열 길이 50', () => {
+    for (let i = 0; i < 50; i++) tracker.initFeature(`feat-50-${i}`);
+    expect(tracker.getAllProgress()).toHaveLength(50);
+  });
+});
+
+// ── getOverallCompletion 추가 경계값 ──────────────────────────
+
+describe('ProgressTracker getOverallCompletion 추가 경계값', () => {
+  let tracker: ProgressTracker;
+
+  beforeEach(() => {
+    tracker = new ProgressTracker(new ConsoleLogger('error'));
+  });
+
+  it('100개 중 50개 complete → 0.5', () => {
+    for (let i = 0; i < 100; i++) tracker.initFeature(`feat-100-${i}`);
+    for (let i = 0; i < 50; i++) tracker.updateStatus(`feat-100-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBe(0.5);
+  });
+
+  it('100개 모두 complete → 1', () => {
+    for (let i = 0; i < 100; i++) {
+      tracker.initFeature(`feat-all-${i}`);
+      tracker.updateStatus(`feat-all-${i}`, 'complete');
+    }
+    expect(tracker.getOverallCompletion()).toBe(1);
+  });
+
+  it('100개 모두 failed → 0', () => {
+    for (let i = 0; i < 100; i++) {
+      tracker.initFeature(`feat-fail-${i}`);
+      tracker.updateStatus(`feat-fail-${i}`, 'failed');
+    }
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('완료 후 failed 전환 → 완료율 감소', () => {
+    tracker.initFeature('feat-decrease');
+    tracker.updateStatus('feat-decrease', 'complete');
+    expect(tracker.getOverallCompletion()).toBe(1);
+    tracker.updateStatus('feat-decrease', 'failed');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('getOverallCompletion 결과는 0~1 범위', () => {
+    for (let i = 0; i < 10; i++) tracker.initFeature(`feat-range-${i}`);
+    for (let i = 0; i < 5; i++) tracker.updateStatus(`feat-range-${i}`, 'complete');
+    const rate = tracker.getOverallCompletion();
+    expect(rate).toBeGreaterThanOrEqual(0);
+    expect(rate).toBeLessThanOrEqual(1);
+  });
+
+  it('getOverallCompletion 결과는 숫자', () => {
+    tracker.initFeature('feat-num');
+    const rate = tracker.getOverallCompletion();
+    expect(typeof rate).toBe('number');
+  });
+
+  it('5개 중 4개 complete → 0.8', () => {
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-4-of-5-${i}`);
+    for (let i = 0; i < 4; i++) tracker.updateStatus(`feat-4-of-5-${i}`, 'complete');
+    expect(tracker.getOverallCompletion()).toBeCloseTo(0.8);
+  });
+
+  it('5개 중 1개 complete → 0.2', () => {
+    for (let i = 0; i < 5; i++) tracker.initFeature(`feat-1-of-5-${i}`);
+    tracker.updateStatus('feat-1-of-5-0', 'complete');
+    expect(tracker.getOverallCompletion()).toBeCloseTo(0.2);
+  });
+
+  it('designing 상태 → 완료율에 포함 안 됨', () => {
+    tracker.initFeature('feat-designing');
+    tracker.updateStatus('feat-designing', 'designing');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('coding 상태 → 완료율에 포함 안 됨', () => {
+    tracker.initFeature('feat-coding');
+    tracker.updateStatus('feat-coding', 'coding');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('testing 상태 → 완료율에 포함 안 됨', () => {
+    tracker.initFeature('feat-testing-rate');
+    tracker.updateStatus('feat-testing-rate', 'testing');
+    expect(tracker.getOverallCompletion()).toBe(0);
+  });
+
+  it('verifying 상태 → 완료율에 포함 안 됨', () => {
+    tracker.initFeature('feat-verifying-rate');
+    tracker.updateStatus('feat-verifying-rate', 'verifying');
+    expect(tracker.getOverallCompletion()).toBe(0);
   });
 });

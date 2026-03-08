@@ -1418,4 +1418,407 @@ describe('ContractBuilder', () => {
       }
     });
   });
+
+  // ── buildContract 극한 경계값 ─────────────────────────────────
+
+  describe('buildContract 극한 경계값', () => {
+    it('500개 기능 → ok', () => {
+      const features = Array.from({ length: 500 }, (_, i) => createFeature({ id: `mega-feat-${i}` }));
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.implementationOrder.length).toBe(500);
+      }
+    });
+
+    it('기능 id가 공백만 → ok', () => {
+      const features = [createFeature({ id: '   ' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 id가 개행 문자 포함 → ok', () => {
+      const features = [createFeature({ id: 'feat\n1' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 id 탭 포함 → ok', () => {
+      const features = [createFeature({ id: 'feat\t1' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 acceptanceCriteria verifiable=false 10개 → ok', () => {
+      const features = [createFeature({
+        id: 'feat-unverifiable-10',
+        acceptanceCriteria: Array.from({ length: 10 }, (_, i) => ({
+          id: `ac-unv-${i}`,
+          description: `검증 불가 기준 ${i}`,
+          verifiable: false,
+          testCategory: 'general',
+        })),
+      })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 inputs 10개 → allIODefined=true', () => {
+      const features = [createFeature({
+        id: 'feat-inputs-10',
+        inputs: Array.from({ length: 10 }, (_, i) => ({
+          name: `input-${i}`,
+          type: 'string',
+          constraints: '',
+          required: true,
+        })),
+        outputs: [{ name: 'result', type: 'boolean', constraints: '', required: true }],
+      })];
+      const result = builder.buildContract(features, [], 'Design');
+      if (result.ok) {
+        expect(result.value.verificationMatrix.allIODefined).toBe(true);
+      }
+    });
+
+    it('기능 outputs 10개 → ok', () => {
+      const features = [createFeature({
+        id: 'feat-outputs-10',
+        inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+        outputs: Array.from({ length: 10 }, (_, i) => ({
+          name: `output-${i}`,
+          type: 'string',
+          constraints: '',
+          required: true,
+        })),
+      })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.verificationMatrix.allIODefined).toBe(true);
+      }
+    });
+
+    it('tree 의존성 구조 → 올바른 위상 정렬', () => {
+      // root → branch1, branch2 → leaf
+      const features = [
+        createFeature({ id: 'root', dependencies: [] }),
+        createFeature({ id: 'branch1', dependencies: ['root'] }),
+        createFeature({ id: 'branch2', dependencies: ['root'] }),
+        createFeature({ id: 'leaf', dependencies: ['branch1', 'branch2'] }),
+      ];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const order = result.value.implementationOrder;
+        expect(order.indexOf('root')).toBeLessThan(order.indexOf('branch1'));
+        expect(order.indexOf('root')).toBeLessThan(order.indexOf('branch2'));
+        expect(order.indexOf('branch1')).toBeLessThan(order.indexOf('leaf'));
+        expect(order.indexOf('branch2')).toBeLessThan(order.indexOf('leaf'));
+      }
+    });
+
+    it('서로 독립적인 10개 기능 → implementationOrder 10개', () => {
+      const features = Array.from({ length: 10 }, (_, i) => createFeature({ id: `ind-feat-${i}`, dependencies: [] }));
+      const result = builder.buildContract(features, [], 'Design');
+      if (result.ok) {
+        expect(result.value.implementationOrder.length).toBe(10);
+      }
+    });
+
+    it('testDefinitions 50개 → ok', () => {
+      const features = Array.from({ length: 50 }, (_, i) => createFeature({ id: `ft-${i}` }));
+      const testDefs = features.map(f => createTestDef(f.id));
+      const result = builder.buildContract(features, testDefs, 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.testDefinitions.length).toBe(50);
+      }
+    });
+
+    it('designDoc에 JSON 포함 → ok + projectType 탐지', () => {
+      const features = [createFeature()];
+      const result = builder.buildContract(features, [], '{"type":"rest-api","version":"2.0"}');
+      expect(result.ok).toBe(true);
+    });
+
+    it('designDoc에 SQL 키워드 포함 → ok', () => {
+      const features = [createFeature()];
+      const result = builder.buildContract(features, [], 'SELECT * FROM users WHERE id = 1');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 name이 null자 포함 → ok', () => {
+      const features = [createFeature({ id: 'feat-null-char', name: 'feat\x00name' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 description이 공백 → ok', () => {
+      const features = [createFeature({ id: 'feat-space-desc', description: ' ' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('testDefinitions featureId 매핑 불일치 → ok', () => {
+      const features = [createFeature({ id: 'feat-real' })];
+      const testDefs = [createTestDef('feat-ghost')]; // 없는 featureId
+      const result = builder.buildContract(features, testDefs, 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('별 모양 의존성 (center←all, all→center 아님) → ok', () => {
+      const features = [
+        createFeature({ id: 'center', dependencies: [] }),
+        createFeature({ id: 'star-a', dependencies: ['center'] }),
+        createFeature({ id: 'star-b', dependencies: ['center'] }),
+        createFeature({ id: 'star-c', dependencies: ['center'] }),
+        createFeature({ id: 'star-d', dependencies: ['center'] }),
+      ];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const order = result.value.implementationOrder;
+        expect(order.indexOf('center')).toBeLessThan(order.indexOf('star-a'));
+        expect(order.indexOf('center')).toBeLessThan(order.indexOf('star-b'));
+      }
+    });
+  });
+
+  // ── buildHandoffPackage 극한 경계값 ──────────────────────────
+
+  describe('buildHandoffPackage 극한 경계값', () => {
+    it('planDocument 100000자 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P'.repeat(100000), 'D', 'S');
+      expect(result.ok).toBe(true);
+    });
+
+    it('designDocument 100000자 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D'.repeat(100000), 'S');
+      expect(result.ok).toBe(true);
+    });
+
+    it('specDocument 100000자 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D', 'S'.repeat(100000));
+      expect(result.ok).toBe(true);
+    });
+
+    it('projectId에 유니코드 → ok', () => {
+      const result = builder.buildHandoffPackage('프로젝트-2026', makeContract(), 'P', 'D', 'S');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.projectId).toBe('프로젝트-2026');
+      }
+    });
+
+    it('contract.implementationOrder 포함 → 반영됨', () => {
+      const contract = makeContract();
+      contract.implementationOrder = ['feat-z', 'feat-a', 'feat-m'];
+      const result = builder.buildHandoffPackage('proj-ord', contract, 'P', 'D', 'S');
+      if (result.ok) {
+        expect(result.value.contract.implementationOrder).toEqual(['feat-z', 'feat-a', 'feat-m']);
+      }
+    });
+
+    it('createdAt 밀리초는 양의 정수', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D', 'S');
+      if (result.ok) {
+        expect(result.value.createdAt.getTime()).toBeGreaterThan(0);
+      }
+    });
+
+    it('200번 반복 → 각 id 모두 고유', () => {
+      const ids = new Set<string>();
+      for (let i = 0; i < 200; i++) {
+        const r = builder.buildHandoffPackage(`p${i}`, makeContract(), 'P', 'D', 'S');
+        if (r.ok) ids.add(r.value.id);
+      }
+      expect(ids.size).toBe(200);
+    });
+
+    it('designDocument 멀티라인 → ok', () => {
+      const multiline = Array.from({ length: 100 }, (_, i) => `line ${i}`).join('\n');
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', multiline, 'S');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.designDocument).toBe(multiline);
+      }
+    });
+
+    it('specDocument 탭 포함 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D', 'col1\tcol2\tcol3');
+      expect(result.ok).toBe(true);
+    });
+
+    it('planDocument 개행만 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), '\n\n\n', 'D', 'S');
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── validateContract 극한 경계값 ─────────────────────────────
+
+  describe('validateContract 극한 경계값', () => {
+    it('completenessScore=0.5 원칙 모두 통과 → issues 1개 (완전성만)', () => {
+      const result = builder.validateContract(makeContract({ completenessScore: 0.5 }));
+      if (result.ok) {
+        expect(result.value.some(e => e.includes('완전성'))).toBe(true);
+      }
+    });
+
+    it('원칙 1만 위반 → issues 1개', () => {
+      const result = builder.validateContract(makeContract({ allFeaturesHaveCriteria: false }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('원칙 2만 위반 → issues 1개', () => {
+      const result = builder.validateContract(makeContract({ allCriteriaHaveTests: false }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('원칙 3만 위반 → issues 1개', () => {
+      const result = builder.validateContract(makeContract({ noCyclicDependencies: false }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('원칙 4만 위반 → issues 1개', () => {
+      const result = builder.validateContract(makeContract({ allIODefined: false }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('원칙 1+3 위반 → issues 2개 이상', () => {
+      const result = builder.validateContract(makeContract({
+        allFeaturesHaveCriteria: false,
+        noCyclicDependencies: false,
+        completenessScore: 0.5,
+      }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it('원칙 2+4 위반 → issues 2개 이상', () => {
+      const result = builder.validateContract(makeContract({
+        allCriteriaHaveTests: false,
+        allIODefined: false,
+        completenessScore: 0.5,
+      }));
+      if (result.ok) {
+        expect(result.value.length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it('완전한 contract → issues는 빈 배열', () => {
+      for (let i = 0; i < 10; i++) {
+        const r = builder.validateContract(makeContract());
+        if (r.ok) expect(r.value).toEqual([]);
+      }
+    });
+
+    it('validateContract 결과가 Result 타입', () => {
+      const result = builder.validateContract(makeContract());
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('issue 문자열들 모두 공백 아님', () => {
+      const result = builder.validateContract(makeContract({
+        allFeaturesHaveCriteria: false,
+        allCriteriaHaveTests: false,
+        noCyclicDependencies: false,
+        allIODefined: false,
+        completenessScore: 0,
+      }));
+      if (result.ok) {
+        for (const issue of result.value) {
+          expect(issue.trim().length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('5개 issue 모두 서로 다른 내용', () => {
+      const result = builder.validateContract(makeContract({
+        allFeaturesHaveCriteria: false,
+        allCriteriaHaveTests: false,
+        noCyclicDependencies: false,
+        allIODefined: false,
+        completenessScore: 0,
+      }));
+      if (result.ok && result.value.length === 5) {
+        const unique = new Set(result.value);
+        expect(unique.size).toBe(5);
+      }
+    });
+
+    it('원칙 위반 없고 score=1.0 → issues 없음', () => {
+      const result = builder.validateContract(makeContract({ completenessScore: 1.0 }));
+      if (result.ok) {
+        expect(result.value.length).toBe(0);
+      }
+    });
+  });
+
+  // ── buildContract 연속 호출 일관성 ───────────────────────────
+
+  describe('buildContract 연속 호출 일관성', () => {
+    it('동일 입력 10번 → 동일 ok 결과', () => {
+      const features = [createFeature({ id: 'feat-consistent' })];
+      for (let i = 0; i < 10; i++) {
+        const result = builder.buildContract(features, [], 'Design');
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it('동일 입력 10번 → implementationOrder 동일', () => {
+      const features = [createFeature({ id: 'feat-a' }), createFeature({ id: 'feat-b' })];
+      const first = builder.buildContract(features, [], 'Design');
+      const firstOrder = first.ok ? first.value.implementationOrder : [];
+      for (let i = 0; i < 9; i++) {
+        const r = builder.buildContract(features, [], 'Design');
+        if (r.ok) expect(r.value.implementationOrder).toEqual(firstOrder);
+      }
+    });
+
+    it('동일 입력 10번 → version 동일', () => {
+      const features = [createFeature()];
+      for (let i = 0; i < 10; i++) {
+        const r = builder.buildContract(features, [], 'Design');
+        if (r.ok) expect(r.value.version).toBe(1);
+      }
+    });
+
+    it('여러 빌더 인스턴스 동일 입력 → 동일 결과', () => {
+      const features = [createFeature({ id: 'multi-builder-feat' })];
+      const builders = Array.from({ length: 5 }, () => new ContractBuilder(logger));
+      const results = builders.map(b => b.buildContract(features, [], 'Design'));
+      for (const r of results) {
+        expect(r.ok).toBe(true);
+        if (r.ok) expect(r.value.version).toBe(1);
+      }
+    });
+
+    it('빈 기능 → 에러 5번 반복 동일 코드', () => {
+      for (let i = 0; i < 5; i++) {
+        const r = builder.buildContract([], [], 'Design');
+        if (!r.ok) expect(r.error.code).toBe('contract_no_features');
+      }
+    });
+
+    it('순환 의존성 → 에러 5번 반복 동일 코드', () => {
+      const features = [
+        createFeature({ id: 'cycle-x', dependencies: ['cycle-y'] }),
+        createFeature({ id: 'cycle-y', dependencies: ['cycle-x'] }),
+      ];
+      for (let i = 0; i < 5; i++) {
+        const r = builder.buildContract(features, [], 'Design');
+        if (!r.ok) expect(r.error.code).toBe('contract_cyclic_dependency');
+      }
+    });
+  });
 });

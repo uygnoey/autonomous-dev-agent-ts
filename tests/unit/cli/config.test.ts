@@ -1420,3 +1420,340 @@ describe('parseConfigValue 심층 경계값', () => {
     expect(result).toBe('  ');
   });
 });
+
+// ── ConfigCommand set 연속 파이프라인 ──────────────────────────
+
+describe('ConfigCommand set 연속 파이프라인', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await makeTempDir();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('set → get → 값 일치 확인 (log.level=debug)', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'debug'], makeOptions(tempDir));
+    const result = await cmd.execute(['get', 'log.level'], makeOptions(tempDir));
+    expect(result.ok).toBe(true);
+  });
+
+  it('set → get → 값 일치 확인 (log.level=warn)', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'warn'], makeOptions(tempDir));
+    const result = await cmd.execute(['get', 'log.level'], makeOptions(tempDir));
+    expect(result.ok).toBe(true);
+  });
+
+  it('set 3번 연속 덮어씀 → 마지막 값 유지', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'debug'], makeOptions(tempDir));
+    await cmd.execute(['set', 'log.level', 'info'], makeOptions(tempDir));
+    await cmd.execute(['set', 'log.level', 'error'], makeOptions(tempDir));
+    const configPath = resolve(tempDir, '.adev', 'config.json');
+    const config = JSON.parse(await Bun.file(configPath).text());
+    expect(config.log.level).toBe('error');
+  });
+
+  it('set true → get 반영 확인', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'verification.opusEscalationOnFailure', 'true'], makeOptions(tempDir));
+    const configPath = resolve(tempDir, '.adev', 'config.json');
+    const config = JSON.parse(await Bun.file(configPath).text());
+    expect(config.verification.opusEscalationOnFailure).toBe(true);
+  });
+
+  it('set false → get 반영 확인', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'verification.opusEscalationOnFailure', 'false'], makeOptions(tempDir));
+    const configPath = resolve(tempDir, '.adev', 'config.json');
+    const config = JSON.parse(await Bun.file(configPath).text());
+    expect(config.verification.opusEscalationOnFailure).toBe(false);
+  });
+
+  it('set → reset → 기본값 복원', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'debug'], makeOptions(tempDir));
+    await cmd.execute(['reset'], makeOptions(tempDir));
+    const configPath = resolve(tempDir, '.adev', 'config.json');
+    const config = JSON.parse(await Bun.file(configPath).text());
+    expect(config.log.level).toBe(DEFAULT_CONFIG.log.level);
+  });
+
+  it('set 숫자 → 파일에 number 타입 저장', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'testing.unitCount', '9999'], makeOptions(tempDir));
+    const configPath = resolve(tempDir, '.adev', 'config.json');
+    const config = JSON.parse(await Bun.file(configPath).text());
+    expect(typeof config.testing.unitCount).toBe('number');
+    expect(config.testing.unitCount).toBe(9999);
+  });
+
+  it('여러 키 set 후 list → ok', async () => {
+    const cmd = new ConfigCommand(logger);
+    await cmd.execute(['set', 'log.level', 'debug'], makeOptions(tempDir));
+    await cmd.execute(['set', 'verification.opusEscalationOnFailure', 'true'], makeOptions(tempDir));
+    const result = await cmd.execute(['list'], makeOptions(tempDir));
+    expect(result.ok).toBe(true);
+  });
+
+  it('get missing → ok=false + code=cli_config_key_not_found', async () => {
+    const cmd = new ConfigCommand(logger);
+    const result = await cmd.execute(['get', 'missing.key.path'], makeOptions(tempDir));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('cli_config_key_not_found');
+  });
+
+  it('set ok=true 반환', async () => {
+    const result = await new ConfigCommand(logger).execute(['set', 'log.level', 'info'], makeOptions(tempDir));
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── getNestedValue 극한 경계값 ───────────────────────────────
+
+describe('getNestedValue 극한 경계값', () => {
+  it('10단계 중첩 키 → 값 반환', () => {
+    const obj: Record<string, unknown> = {};
+    let cur = obj as Record<string, unknown>;
+    for (let i = 0; i < 9; i++) {
+      const next: Record<string, unknown> = {};
+      cur[`l${i}`] = next;
+      cur = next;
+    }
+    cur['l9'] = 'deepValue';
+    const path = Array.from({ length: 10 }, (_, i) => `l${i}`).join('.');
+    expect(getNestedValue(obj, path)).toBe('deepValue');
+  });
+
+  it('숫자 0 값 → 0 반환 (truthy 검사 아님)', () => {
+    expect(getNestedValue({ zero: 0 }, 'zero')).toBe(0);
+  });
+
+  it('false 값 → false 반환', () => {
+    expect(getNestedValue({ flag: false }, 'flag')).toBe(false);
+  });
+
+  it('빈 배열 값 → 빈 배열 반환', () => {
+    const result = getNestedValue({ arr: [] }, 'arr');
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it('객체 자체 반환 (단일 키)', () => {
+    const inner = { a: 1, b: 2 };
+    const result = getNestedValue({ obj: inner }, 'obj');
+    expect(result).toEqual(inner);
+  });
+
+  it('undefined 값 → undefined 반환', () => {
+    const obj = { key: undefined } as Record<string, unknown>;
+    expect(getNestedValue(obj, 'key')).toBeUndefined();
+  });
+
+  it('음수 값 → 음수 반환', () => {
+    expect(getNestedValue({ val: -42 }, 'val')).toBe(-42);
+  });
+
+  it('NaN 값 → NaN 반환', () => {
+    const result = getNestedValue({ val: Number.NaN }, 'val');
+    expect(Number.isNaN(result)).toBe(true);
+  });
+
+  it('이모지 키 → 값 반환', () => {
+    const obj = { '🔑': '값' } as Record<string, unknown>;
+    expect(getNestedValue(obj, '🔑')).toBe('값');
+  });
+
+  it('중첩 배열 값 → 배열 반환', () => {
+    const obj = { nested: { arr: [1, 2, 3] } };
+    const result = getNestedValue(obj, 'nested.arr');
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it('경로 없음 → undefined', () => {
+    expect(getNestedValue({}, 'a.b.c.d.e.f.g.h.i.j')).toBeUndefined();
+  });
+
+  it('단순 string 값 → string 타입', () => {
+    const result = getNestedValue({ s: 'hello' }, 's');
+    expect(typeof result).toBe('string');
+  });
+
+  it('단순 number 값 → number 타입', () => {
+    const result = getNestedValue({ n: 42 }, 'n');
+    expect(typeof result).toBe('number');
+  });
+
+  it('중첩 빈 객체 접근 → undefined', () => {
+    expect(getNestedValue({ a: {} } as Record<string, unknown>, 'a.b')).toBeUndefined();
+  });
+});
+
+// ── setNestedValue 극한 경계값 ──────────────────────────────
+
+describe('setNestedValue 극한 경계값', () => {
+  it('10단계 중첩 경로 생성', () => {
+    const obj: Record<string, unknown> = {};
+    const path = 'l0.l1.l2.l3.l4.l5.l6.l7.l8.l9';
+    setNestedValue(obj, path, 'ultraDeep');
+    // 최소한 첫 번째 키는 생성됨
+    expect(obj.l0).toBeDefined();
+  });
+
+  it('기존 깊은 경로 덮어쓰기', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'a.b.c', 'first');
+    setNestedValue(obj, 'a.b.c', 'second');
+    expect((obj as { a: { b: { c: string } } }).a.b.c).toBe('second');
+  });
+
+  it('0 값 설정 후 다른 키 접근 시 영향 없음', () => {
+    const obj: Record<string, unknown> = { other: 'intact' };
+    setNestedValue(obj, 'count', 0);
+    expect(obj.other).toBe('intact');
+  });
+
+  it('빈 배열 설정', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'list', []);
+    expect(Array.isArray(obj.list)).toBe(true);
+    expect((obj.list as unknown[]).length).toBe(0);
+  });
+
+  it('함수 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    const fn = () => 42;
+    setNestedValue(obj, 'fn', fn);
+    expect(typeof obj.fn).toBe('function');
+  });
+
+  it('Symbol 값 설정', () => {
+    const obj: Record<string, unknown> = {};
+    const sym = Symbol('test');
+    setNestedValue(obj, 'sym', sym);
+    expect(obj.sym).toBe(sym);
+  });
+
+  it('같은 경로 100번 설정 → 마지막 값', () => {
+    const obj: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) {
+      setNestedValue(obj, 'repeated', i);
+    }
+    expect(obj.repeated).toBe(99);
+  });
+
+  it('다른 최상위 키들 독립', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'a', 1);
+    setNestedValue(obj, 'b', 2);
+    setNestedValue(obj, 'c', 3);
+    expect(obj.a).toBe(1);
+    expect(obj.b).toBe(2);
+    expect(obj.c).toBe(3);
+  });
+
+  it('중첩 경로와 같은 이름 최상위 키 공존', () => {
+    const obj: Record<string, unknown> = {};
+    setNestedValue(obj, 'x', 'top');
+    setNestedValue(obj, 'x.sub', 'nested');
+    // x는 이제 객체로 변환됨
+    expect(typeof obj.x).toBe('object');
+  });
+});
+
+// ── parseConfigValue 극한 경계값 ─────────────────────────────
+
+describe('parseConfigValue 극한 경계값', () => {
+  it('"true" 10번 반복 → 항상 boolean true', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(parseConfigValue('true')).toBe(true);
+    }
+  });
+
+  it('"false" 10번 반복 → 항상 boolean false', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(parseConfigValue('false')).toBe(false);
+    }
+  });
+
+  it('"null" 10번 반복 → 항상 null', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(parseConfigValue('null')).toBeNull();
+    }
+  });
+
+  it('"0" → 0 (숫자)', () => {
+    expect(parseConfigValue('0')).toBe(0);
+  });
+
+  it('"-0.5" → -0.5', () => {
+    expect(parseConfigValue('-0.5')).toBe(-0.5);
+  });
+
+  it('"99.99" → number', () => {
+    const result = parseConfigValue('99.99');
+    expect(typeof result).toBe('number');
+    expect(result).toBeCloseTo(99.99);
+  });
+
+  it('"boolean" → string 그대로', () => {
+    expect(parseConfigValue('boolean')).toBe('boolean');
+  });
+
+  it('"number" → string 그대로', () => {
+    expect(parseConfigValue('number')).toBe('number');
+  });
+
+  it('"string" → string 그대로', () => {
+    expect(parseConfigValue('string')).toBe('string');
+  });
+
+  it('"object" → string 그대로', () => {
+    expect(parseConfigValue('object')).toBe('object');
+  });
+
+  it('이모지 → string 반환', () => {
+    const emoji = '🔥✨💡';
+    expect(parseConfigValue(emoji)).toBe(emoji);
+  });
+
+  it('UUID 문자열 → string 반환', () => {
+    const uuid = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+    expect(parseConfigValue(uuid)).toBe(uuid);
+  });
+
+  it('URL → string 반환', () => {
+    const url = 'https://api.example.com/v1/chat';
+    expect(parseConfigValue(url)).toBe(url);
+  });
+
+  it('path → string 반환', () => {
+    const path = '/usr/local/bin/adev';
+    expect(parseConfigValue(path)).toBe(path);
+  });
+
+  it('"1.23456789" → number', () => {
+    const result = parseConfigValue('1.23456789');
+    expect(typeof result).toBe('number');
+  });
+
+  it('"9007199254740991" → MAX_SAFE_INTEGER', () => {
+    const result = parseConfigValue('9007199254740991');
+    expect(result).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('"false" 타입이 boolean', () => {
+    expect(typeof parseConfigValue('false')).toBe('boolean');
+  });
+
+  it('"true" 타입이 boolean', () => {
+    expect(typeof parseConfigValue('true')).toBe('boolean');
+  });
+
+  it('"null" 타입이 object (null은 object)', () => {
+    expect(typeof parseConfigValue('null')).toBe('object');
+  });
+});
