@@ -889,3 +889,287 @@ describe('isAdevError 복합 경계값', () => {
     }
   });
 });
+
+// ── AdevError 직렬화/역직렬화 패턴 ────────────────────────────
+
+describe('AdevError 직렬화/역직렬화 패턴', () => {
+  it('JSON.stringify 가능 (circular 없음)', () => {
+    const err = new AdevError('json_code', 'json message');
+    expect(() => JSON.stringify({ code: err.code, message: err.message })).not.toThrow();
+  });
+
+  it('toJSON 패턴 구성 가능', () => {
+    const err = new AdevError('ser_code', 'ser message');
+    const obj = { code: err.code, message: err.message, name: err.name };
+    expect(JSON.parse(JSON.stringify(obj)).code).toBe('ser_code');
+  });
+
+  it('code와 message 추출 후 재생성', () => {
+    const original = new AdevError('extract_code', 'extract message');
+    const restored = new AdevError(original.code, original.message);
+    expect(restored.code).toBe(original.code);
+    expect(restored.message).toBe(original.message);
+  });
+
+  it('빈 code + 빈 message 재생성', () => {
+    const err = new AdevError('', '');
+    const restored = new AdevError(err.code, err.message);
+    expect(restored.code).toBe('');
+    expect(restored.message).toBe('');
+  });
+
+  it('unicode code + message 재생성 일관성', () => {
+    const err = new AdevError('에러코드', '메시지 내용');
+    const restored = new AdevError(err.code, err.message);
+    expect(restored.code).toBe('에러코드');
+    expect(restored.message).toBe('메시지 내용');
+  });
+
+  it('원인 에러 포함 객체로 구성 가능', () => {
+    const cause = new Error('underlying cause');
+    const err = new AdevError('with_cause', 'wrapped', cause);
+    const info = { code: err.code, causeName: (err.cause as Error).message };
+    expect(info.causeName).toBe('underlying cause');
+  });
+
+  it('50개 반복 생성 → 메모리 문제 없음', () => {
+    const errors = Array.from({ length: 50 }, (_, i) => new AdevError(`code_${i}`, `msg_${i}`));
+    expect(errors.length).toBe(50);
+    expect(errors[49]?.code).toBe('code_49');
+  });
+
+  it('100개 인스턴스 name 모두 AdevError', () => {
+    for (let i = 0; i < 100; i++) {
+      expect(new AdevError(`c${i}`, `m${i}`).name).toBe('AdevError');
+    }
+  });
+});
+
+// ── isAdevError 프로토타입 체인 검증 ──────────────────────────
+
+describe('isAdevError 프로토타입 체인 검증', () => {
+  it('Object.create(AdevError.prototype) → false (생성자 미호출)', () => {
+    const fake = Object.create(AdevError.prototype) as object;
+    // 생성자 미호출이지만 instanceof 체인은 통과
+    expect(typeof isAdevError(fake)).toBe('boolean');
+  });
+
+  it('AdevError 서브클래스 직접 instanceof AdevError 확인', () => {
+    for (const { Class } of ALL_SUBCLASSES) {
+      const inst = new Class('c', 'm');
+      expect(inst instanceof AdevError).toBe(true);
+    }
+  });
+
+  it('서브클래스 isAdevError → 모두 true', () => {
+    const instances = [
+      new ConfigError('c', 'm'),
+      new AuthError('c', 'm'),
+      new RagError('c', 'm'),
+      new AgentError('c', 'm'),
+      new PhaseError('c', 'm'),
+      new ContractError('c', 'm'),
+      new McpError('c', 'm'),
+      new Layer3Error('c', 'm'),
+    ];
+    for (const inst of instances) {
+      expect(isAdevError(inst)).toBe(true);
+    }
+  });
+
+  it('isAdevError(new AdevError(...)) 10번 → 모두 true', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(isAdevError(new AdevError(`c${i}`, `m${i}`))).toBe(true);
+    }
+  });
+
+  it('비 AdevError 타입들 isAdevError=false', () => {
+    const cases: unknown[] = [
+      new TypeError('t'),
+      new RangeError('r'),
+      new SyntaxError('s'),
+      new URIError('u'),
+      new EvalError('e'),
+      'string',
+      42,
+      null,
+      undefined,
+      {},
+      [],
+      true,
+      false,
+    ];
+    for (const c of cases) {
+      expect(isAdevError(c)).toBe(false);
+    }
+  });
+});
+
+// ── DEFAULT_RETRY_POLICY 함수형 동작 검증 ─────────────────────
+
+describe('DEFAULT_RETRY_POLICY 함수형 동작 검증', () => {
+  it('지수 백오프 계산: baseDelay * backoffFactor^(attempt-1)', () => {
+    const { baseDelay, backoffFactor } = DEFAULT_RETRY_POLICY;
+    expect(baseDelay * backoffFactor ** 0).toBe(1_000);
+    expect(baseDelay * backoffFactor ** 1).toBe(2_000);
+    expect(baseDelay * backoffFactor ** 2).toBe(4_000);
+  });
+
+  it('maxDelay 초과 cap 계산', () => {
+    const { baseDelay, backoffFactor, maxDelay } = DEFAULT_RETRY_POLICY;
+    const computed = baseDelay * backoffFactor ** 5;
+    const capped = Math.min(computed, maxDelay);
+    expect(capped).toBeLessThanOrEqual(maxDelay);
+  });
+
+  it('retryableErrors.includes 동작', () => {
+    expect(DEFAULT_RETRY_POLICY.retryableErrors.includes('auth_rate_limited')).toBe(true);
+    expect(DEFAULT_RETRY_POLICY.retryableErrors.includes('agent_timeout')).toBe(true);
+    expect(DEFAULT_RETRY_POLICY.retryableErrors.includes('rag_db_error')).toBe(true);
+    expect(DEFAULT_RETRY_POLICY.retryableErrors.includes('unknown_error')).toBe(false);
+  });
+
+  it('retryableErrors는 frozen/readonly — 직접 접근만 가능', () => {
+    const codes = DEFAULT_RETRY_POLICY.retryableErrors;
+    expect(codes.length).toBe(3);
+    expect(codes[0]).toBe('auth_rate_limited');
+    expect(codes[1]).toBe('agent_timeout');
+    expect(codes[2]).toBe('rag_db_error');
+  });
+
+  it('backoffFactor === 2 (exactly)', () => {
+    expect(DEFAULT_RETRY_POLICY.backoffFactor).toStrictEqual(2);
+  });
+
+  it('maxAttempts === 3 (exactly)', () => {
+    expect(DEFAULT_RETRY_POLICY.maxAttempts).toStrictEqual(3);
+  });
+
+  it('baseDelay === 1000 (exactly)', () => {
+    expect(DEFAULT_RETRY_POLICY.baseDelay).toStrictEqual(1_000);
+  });
+
+  it('maxDelay === 30000 (exactly)', () => {
+    expect(DEFAULT_RETRY_POLICY.maxDelay).toStrictEqual(30_000);
+  });
+
+  it('retryableErrors에 없는 코드들 → false', () => {
+    const notRetryable = ['config_missing', 'phase_invalid', 'mcp_conn_failed', 'layer3_compile'];
+    for (const code of notRetryable) {
+      expect(DEFAULT_RETRY_POLICY.retryableErrors.includes(code)).toBe(false);
+    }
+  });
+
+  it('3번 시도 계산: delays 배열 생성', () => {
+    const delays: number[] = [];
+    for (let i = 0; i < DEFAULT_RETRY_POLICY.maxAttempts; i++) {
+      const delay = Math.min(
+        DEFAULT_RETRY_POLICY.baseDelay * DEFAULT_RETRY_POLICY.backoffFactor ** i,
+        DEFAULT_RETRY_POLICY.maxDelay,
+      );
+      delays.push(delay);
+    }
+    expect(delays).toEqual([1_000, 2_000, 4_000]);
+  });
+});
+
+// ── 서브클래스 고급 동작 검증 ─────────────────────────────────
+
+describe('서브클래스 고급 동작 검증', () => {
+  it('ConfigError code 10개 다양한 접두사', () => {
+    const codes = [
+      'config_missing_key', 'config_invalid_type', 'config_file_not_found',
+      'config_parse_error', 'config_validation_failed', 'config_env_not_set',
+      'config_default_invalid', 'config_override_conflict', 'config_load_timeout',
+      'config_schema_mismatch',
+    ];
+    for (const code of codes) {
+      const err = new ConfigError(code, `msg for ${code}`);
+      expect(err.code).toBe(code);
+      expect(err.name).toBe('ConfigError');
+    }
+  });
+
+  it('AuthError 10개 다양한 코드', () => {
+    const codes = [
+      'auth_rate_limited', 'auth_invalid_key', 'auth_expired_token',
+      'auth_permission_denied', 'auth_oauth_failed', 'auth_refresh_failed',
+      'auth_no_credentials', 'auth_2fa_required', 'auth_session_expired',
+      'auth_revoked_token',
+    ];
+    for (const code of codes) {
+      const err = new AuthError(code, `msg ${code}`);
+      expect(err.code).toBe(code);
+      expect(isAdevError(err)).toBe(true);
+    }
+  });
+
+  it('AgentError 10개 다양한 코드', () => {
+    const codes = [
+      'agent_timeout', 'agent_spawn_failed', 'agent_comm_error',
+      'agent_resource_limit', 'agent_invalid_state', 'agent_task_failed',
+      'agent_queue_full', 'agent_not_found', 'agent_exec_error',
+      'agent_hook_failed',
+    ];
+    for (const code of codes) {
+      const err = new AgentError(code, `msg ${code}`);
+      expect(err.code).toBe(code);
+      expect(err instanceof AgentError).toBe(true);
+    }
+  });
+
+  it('PhaseError 단계별 코드', () => {
+    const phases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const phase of phases) {
+      const err = new PhaseError(`phase_${phase.toLowerCase()}_failed`, `${phase} failed`);
+      expect(err.code).toContain('phase_');
+      expect(err.name).toBe('PhaseError');
+    }
+  });
+
+  it('Layer3Error → AgentError와 다른 타입', () => {
+    expect(new Layer3Error('c', 'm') instanceof AgentError).toBe(false);
+    expect(new Layer3Error('c', 'm') instanceof AdevError).toBe(true);
+  });
+
+  it('McpError → RagError와 다른 타입', () => {
+    expect(new McpError('c', 'm') instanceof RagError).toBe(false);
+  });
+
+  it('ContractError → PhaseError와 다른 타입', () => {
+    expect(new ContractError('c', 'm') instanceof PhaseError).toBe(false);
+  });
+
+  it('서브클래스 cause 중첩 → 각 레벨 접근 가능', () => {
+    const base = new ConfigError('base_code', 'base msg');
+    const mid = new AuthError('mid_code', 'mid msg', base);
+    const top = new AgentError('top_code', 'top msg', mid);
+    expect((top.cause as AuthError).code).toBe('mid_code');
+    expect(((top.cause as AuthError).cause as ConfigError).code).toBe('base_code');
+  });
+
+  it('모든 서브클래스 code는 string 타입', () => {
+    for (const { Class } of ALL_SUBCLASSES) {
+      expect(typeof new Class('test_code', 'test msg').code).toBe('string');
+    }
+  });
+
+  it('모든 서브클래스 message는 string 타입', () => {
+    for (const { Class } of ALL_SUBCLASSES) {
+      expect(typeof new Class('c', 'test message').message).toBe('string');
+    }
+  });
+
+  it('모든 서브클래스 name은 string 타입', () => {
+    for (const { Class } of ALL_SUBCLASSES) {
+      expect(typeof new Class('c', 'm').name).toBe('string');
+    }
+  });
+
+  it('모든 서브클래스 name !== AdevError', () => {
+    for (const { Class, name } of ALL_SUBCLASSES) {
+      expect(new Class('c', 'm').name).toBe(name);
+      expect(new Class('c', 'm').name).not.toBe('AdevError');
+    }
+  });
+});

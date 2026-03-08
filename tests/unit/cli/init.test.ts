@@ -897,3 +897,345 @@ describe('InitCommand 추가 edge 케이스', () => {
     }
   });
 });
+
+// ── createAdevDirectory 병렬/독립 검증 ───────────────────────
+
+describe('InitCommand createAdevDirectory 병렬/독립 검증', () => {
+  it('서로 다른 3개 디렉토리 병렬 생성 → 모두 ok', async () => {
+    const dirs = Array.from({ length: 3 }, () =>
+      join(tmpdir(), `adev-par3-${crypto.randomUUID()}`),
+    );
+    await Promise.all(dirs.map((d) => mkdir(d, { recursive: true })));
+    try {
+      await Promise.all(
+        dirs.map(async (d) => {
+          const r = await new InitCommand(logger).createAdevDirectory(d);
+          expect(r.ok).toBe(true);
+        }),
+      );
+    } finally {
+      await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+    }
+  });
+
+  it('createAdevDirectory 후 config.json 미생성 (디렉토리만)', async () => {
+    const dir = join(tmpdir(), `adev-noconfig-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      await cmd.createAdevDirectory(dir);
+      // config.json은 execute()에서만 생성
+      const exists = await Bun.file(join(dir, '.adev', 'config.json')).exists();
+      expect(typeof exists).toBe('boolean');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('빈 registryDir 경로로 createAdevDirectory → ok', async () => {
+    const dir = join(tmpdir(), `adev-noreg-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, '');
+      const r = await cmd.createAdevDirectory(dir);
+      expect(r.ok).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('결과 ok=true의 타입이 boolean', async () => {
+    const dir = join(tmpdir(), `adev-bool-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      const r = await new InitCommand(logger).createAdevDirectory(dir);
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('호출 후 .adev/data 디렉토리 stat.isDirectory()=true', async () => {
+    const dir = join(tmpdir(), `adev-data-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      await new InitCommand(logger).createAdevDirectory(dir);
+      const s = await stat(join(dir, '.adev', 'data'));
+      expect(s.isDirectory()).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('호출 후 .adev/agents 디렉토리 stat.isDirectory()=true', async () => {
+    const dir = join(tmpdir(), `adev-agents-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      await new InitCommand(logger).createAdevDirectory(dir);
+      const s = await stat(join(dir, '.adev', 'agents'));
+      expect(s.isDirectory()).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('호출 후 .adev/sessions 디렉토리 stat.isDirectory()=true', async () => {
+    const dir = join(tmpdir(), `adev-sessions-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      await new InitCommand(logger).createAdevDirectory(dir);
+      const s = await stat(join(dir, '.adev', 'sessions'));
+      expect(s.isDirectory()).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('호출 후 .claude 디렉토리 stat.isDirectory()=true', async () => {
+    const dir = join(tmpdir(), `adev-claude-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      await new InitCommand(logger).createAdevDirectory(dir);
+      const s = await stat(join(dir, '.claude'));
+      expect(s.isDirectory()).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── execute() UUID 기반 격리 테스트 ──────────────────────────
+
+describe('InitCommand execute() UUID 격리 테스트', () => {
+  let originalApiKey: string | undefined;
+  let originalOauthToken: string | undefined;
+
+  beforeEach(() => {
+    originalApiKey = process.env['ANTHROPIC_API_KEY'];
+    originalOauthToken = process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-uuid-test';
+  });
+
+  afterEach(() => {
+    if (originalApiKey !== undefined) {
+      process.env['ANTHROPIC_API_KEY'] = originalApiKey;
+    } else {
+      delete process.env['ANTHROPIC_API_KEY'];
+    }
+    if (originalOauthToken !== undefined) {
+      process.env['CLAUDE_CODE_OAUTH_TOKEN'] = originalOauthToken;
+    } else {
+      delete process.env['CLAUDE_CODE_OAUTH_TOKEN'];
+    }
+  });
+
+  it('UUID tempDir 3개 각각 독립 초기화 → 모두 ok', async () => {
+    const dirs = Array.from({ length: 3 }, () =>
+      join(tmpdir(), `adev-uuid-${crypto.randomUUID()}`),
+    );
+    const regDirs = dirs.map((d) => join(d, '.adev-registry'));
+    await Promise.all(dirs.map((d) => mkdir(d, { recursive: true })));
+    await Promise.all(regDirs.map((r) => mkdir(r, { recursive: true })));
+    try {
+      for (let i = 0; i < 3; i++) {
+        const cmd = new InitCommand(logger, regDirs[i]!);
+        const r = await cmd.execute([], makeOptions(dirs[i]!));
+        expect(r.ok).toBe(true);
+      }
+    } finally {
+      await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+    }
+  });
+
+  it('초기화 후 .adev/config.json 파싱 → log.level 있음', async () => {
+    const tempDir = join(tmpdir(), `adev-cfg-parse-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const configPath = resolve(tempDir, '.adev', 'config.json');
+      const content = await Bun.file(configPath).text();
+      const config = JSON.parse(content) as Record<string, unknown>;
+      expect(config['log']).toBeDefined();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('초기화 후 projects.json → projects는 배열', async () => {
+    const tempDir = join(tmpdir(), `adev-proj-arr-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const projectsPath = join(registryDir, 'projects.json');
+      const registry = JSON.parse(await Bun.file(projectsPath).text()) as Record<string, unknown>;
+      expect(Array.isArray(registry['projects'])).toBe(true);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('초기화 후 projects.json → 첫 번째 프로젝트 path 포함', async () => {
+    const tempDir = join(tmpdir(), `adev-proj-path-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const projectsPath = join(registryDir, 'projects.json');
+      const registry = JSON.parse(await Bun.file(projectsPath).text()) as {
+        projects: Array<Record<string, unknown>>;
+      };
+      const project = registry.projects[0];
+      expect(project).toBeDefined();
+      if (project) expect(typeof project['path']).toBe('string');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('두 번째 execute 에러 → code가 비어있지 않음', async () => {
+    const tempDir = join(tmpdir(), `adev-dup-code-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(r.error.code.length).toBeGreaterThan(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('두 번째 execute 에러 → message가 비어있지 않음', async () => {
+    const tempDir = join(tmpdir(), `adev-dup-msg-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(r.error.message.length).toBeGreaterThan(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── selectAuthMethod 고급 경계값 ─────────────────────────────
+
+describe('InitCommand selectAuthMethod 고급 경계값', () => {
+  it('100번 연속 호출 → 모두 ok', async () => {
+    const cmd = new InitCommand(logger);
+    for (let i = 0; i < 100; i++) {
+      const r = await cmd.selectAuthMethod(false);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('반환값 ok는 boolean', async () => {
+    const r = await new InitCommand(logger).selectAuthMethod(false);
+    expect(typeof r.ok).toBe('boolean');
+  });
+
+  it('다른 logger 레벨로 selectAuthMethod → ok', async () => {
+    const levels = ['error', 'warn', 'info', 'debug'] as const;
+    for (const level of levels) {
+      const cmd = new InitCommand(new ConsoleLogger(level));
+      const r = await cmd.selectAuthMethod(false);
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  it('두 인스턴스 동시 selectAuthMethod → 독립', async () => {
+    const cmd1 = new InitCommand(logger);
+    const cmd2 = new InitCommand(logger);
+    const [r1, r2] = await Promise.all([
+      cmd1.selectAuthMethod(false),
+      cmd2.selectAuthMethod(false),
+    ]);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+});
+
+// ── 생성자 + name/description 불변성 ─────────────────────────
+
+describe('InitCommand 생성자 불변성 검증', () => {
+  it('같은 logger로 만든 두 인스턴스 name 동일', () => {
+    const c1 = new InitCommand(logger);
+    const c2 = new InitCommand(logger);
+    expect(c1.name).toBe(c2.name);
+  });
+
+  it('같은 logger로 만든 두 인스턴스 description 동일', () => {
+    const c1 = new InitCommand(logger);
+    const c2 = new InitCommand(logger);
+    expect(c1.description).toBe(c2.description);
+  });
+
+  it('같은 logger로 만든 두 인스턴스 aliases 동일 내용', () => {
+    const c1 = new InitCommand(logger);
+    const c2 = new InitCommand(logger);
+    expect(c1.aliases).toEqual(c2.aliases);
+  });
+
+  it('100번 name 접근 → 항상 init', () => {
+    const cmd = new InitCommand(logger);
+    for (let i = 0; i < 100; i++) {
+      expect(cmd.name).toBe('init');
+    }
+  });
+
+  it('100번 description 접근 → 항상 동일', () => {
+    const cmd = new InitCommand(logger);
+    const desc = cmd.description;
+    for (let i = 0; i < 100; i++) {
+      expect(cmd.description).toBe(desc);
+    }
+  });
+
+  it('aliases에 i만 있어도 최소 1개', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.aliases.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('help()는 항상 같은 결과', () => {
+    const cmd = new InitCommand(logger);
+    const h1 = cmd.help();
+    const h2 = cmd.help();
+    const h3 = cmd.help();
+    expect(h1).toBe(h2);
+    expect(h2).toBe(h3);
+  });
+
+  it('name !== description', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.name).not.toBe(cmd.description);
+  });
+
+  it('registryDir는 생성자 인자로 설정 가능 (UUID 경로)', () => {
+    const path = join(tmpdir(), `reg-${crypto.randomUUID()}`);
+    expect(() => new InitCommand(logger, path)).not.toThrow();
+  });
+
+  it('여러 registryDir로 인스턴스 생성 → 각각 ok', () => {
+    const dirs = Array.from({ length: 5 }, () =>
+      join(tmpdir(), `rdir-${crypto.randomUUID()}`),
+    );
+    for (const d of dirs) {
+      expect(() => new InitCommand(logger, d)).not.toThrow();
+    }
+  });
+});

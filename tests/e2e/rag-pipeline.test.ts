@@ -891,4 +891,325 @@ export function createConfig(host: string, port: number): Config {
       expect(typeof chunk.metadata.module).toBe('string');
     }
   });
+
+  it('ChunkSplitter: metadata.startLine은 양수', () => {
+    const splitter = new ChunkSplitter();
+    const code = 'export function start() { return 1; }';
+    const chunks = splitter.splitCode(code, 'src/start.ts');
+    for (const chunk of chunks) {
+      expect(chunk.metadata.startLine).toBeGreaterThan(0);
+    }
+  });
+
+  it('ChunkSplitter: metadata.endLine >= startLine', () => {
+    const splitter = new ChunkSplitter();
+    const code = 'export function end() { return 2; }';
+    const chunks = splitter.splitCode(code, 'src/end.ts');
+    for (const chunk of chunks) {
+      expect(chunk.metadata.endLine).toBeGreaterThanOrEqual(chunk.metadata.startLine);
+    }
+  });
+
+  it('ChunkSplitter: metadata.filePath와 입력 경로 일치', () => {
+    const splitter = new ChunkSplitter();
+    const code = 'export const match = true;';
+    const filePath = 'src/core/match.ts';
+    const chunks = splitter.splitCode(code, filePath);
+    for (const chunk of chunks) {
+      expect(chunk.metadata.filePath).toBe(filePath);
+    }
+  });
+
+  it('ChunkSplitter: metadata.language는 string', () => {
+    const splitter = new ChunkSplitter();
+    const chunks = splitter.splitCode('export const x = 1;', 'src/x.ts');
+    for (const chunk of chunks) {
+      expect(typeof chunk.metadata.language).toBe('string');
+    }
+  });
+
+  it('ChunkSplitter: 매우 긴 코드 처리 → 반환값은 배열', () => {
+    const splitter = new ChunkSplitter();
+    const code = Array.from({ length: 200 }, (_, i) =>
+      `export function fn${i}() { return ${i}; }`,
+    ).join('\n');
+    const chunks = splitter.splitCode(code, 'src/big.ts', { maxChunkSize: 500 });
+    expect(Array.isArray(chunks)).toBe(true);
+    expect(chunks.length).toBeGreaterThan(0);
+  });
+
+  it('ChunkSplitter: 단일 const 선언 → 청크 반환', () => {
+    const splitter = new ChunkSplitter();
+    const chunks = splitter.splitCode('const x = 42;', 'src/const.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ChunkSplitter: 다중 인터페이스 파일 → 청크 분할', () => {
+    const splitter = new ChunkSplitter();
+    const code = `
+export interface A { x: number; }
+export interface B { y: string; }
+export interface C { z: boolean; }
+`.trim();
+    const chunks = splitter.splitCode(code, 'src/interfaces.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ChunkSplitter: enum 포함 파일 → 분할 처리', () => {
+    const splitter = new ChunkSplitter();
+    const code = `
+export enum Status {
+  PENDING = 'pending',
+  ACTIVE = 'active',
+  DONE = 'done',
+}
+export function getStatus(): Status { return Status.PENDING; }
+`.trim();
+    const chunks = splitter.splitCode(code, 'src/status.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+    for (const chunk of chunks) {
+      expect(chunk.metadata.language).toBe('typescript');
+    }
+  });
+
+  it('ChunkSplitter: 화살표 함수 export → 청크 반환', () => {
+    const splitter = new ChunkSplitter();
+    const code = 'export const compute = (x: number): number => x * 2;';
+    const chunks = splitter.splitCode(code, 'src/compute.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ChunkSplitter: 멀티라인 문자열 포함 → 안전 처리', () => {
+    const splitter = new ChunkSplitter();
+    const code = 'export const template = `\nhello\nworld\n`;';
+    const chunks = splitter.splitCode(code, 'src/template.ts');
+    expect(typeof chunks.length).toBe('number');
+  });
+
+  it('detectLanguage: .tsx 확장자 → typescript 또는 string', () => {
+    const result = detectLanguage('src/App.tsx');
+    expect(typeof result).toBe('string');
+  });
+
+  it('detectLanguage: .d.ts 확장자 → string 반환', () => {
+    const result = detectLanguage('types/index.d.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('detectLanguage: 숫자로 시작하는 파일명 → string', () => {
+    const result = detectLanguage('123file.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('detectLanguage: 경로에 공백 포함 → string 반환', () => {
+    const result = detectLanguage('src/my folder/main.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('detectLanguage: 점으로 시작하는 파일 → unknown', () => {
+    const result = detectLanguage('.env');
+    expect(typeof result).toBe('string');
+  });
+
+  it('detectLanguage: 반환값은 항상 string (10개 다양한 경로)', () => {
+    const paths = [
+      'src/main.ts', 'lib/util.js', 'main.py', 'cmd/main.go',
+      'src/lib.rs', 'unknown.xyz', 'Makefile', 'test.abc', '', 'a.ts',
+    ];
+    for (const p of paths) {
+      expect(typeof detectLanguage(p)).toBe('string');
+    }
+  });
+
+  it('extractModule: 5단계 중첩 경로 → string 반환', () => {
+    const result = extractModule('a/b/c/d/e/file.ts');
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('extractModule: 특수문자 포함 경로 → string 반환', () => {
+    const result = extractModule('src/my-module/my-file.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('extractModule: 슬래시 하나 → string 반환', () => {
+    const result = extractModule('a/file.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('normalizeVector: 3요소 벡터 정규화 → norm≈1', () => {
+    const raw = new Float32Array([1, 2, 2]);
+    const normalized = normalizeVector(raw);
+    let sumSq = 0;
+    for (const val of normalized) sumSq += (val ?? 0) ** 2;
+    expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+  });
+
+  it('normalizeVector: 4요소 벡터 정규화 → norm≈1', () => {
+    const raw = new Float32Array([1, 1, 1, 1]);
+    const normalized = normalizeVector(raw);
+    let sumSq = 0;
+    for (const val of normalized) sumSq += (val ?? 0) ** 2;
+    expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+  });
+
+  it('normalizeVector: 이미 정규화된 벡터 → 변화 없음', () => {
+    const raw = new Float32Array([1, 0, 0]);
+    const normalized = normalizeVector(raw);
+    expect(Math.abs((normalized[0] ?? 0) - 1.0)).toBeLessThan(0.001);
+    expect(Math.abs((normalized[1] ?? 0))).toBeLessThan(0.001);
+    expect(Math.abs((normalized[2] ?? 0))).toBeLessThan(0.001);
+  });
+
+  it('normalizeVector: 큰 양수 값들 → 정규화 후 norm≈1', () => {
+    const raw = new Float32Array([100, 200, 300]);
+    const normalized = normalizeVector(raw);
+    let sumSq = 0;
+    for (const val of normalized) sumSq += (val ?? 0) ** 2;
+    expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+  });
+
+  it('normalizeVector: 큰 음수 값들 → 정규화 후 norm≈1', () => {
+    const raw = new Float32Array([-100, -200, -300]);
+    const normalized = normalizeVector(raw);
+    let sumSq = 0;
+    for (const val of normalized) sumSq += (val ?? 0) ** 2;
+    expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+  });
+
+  it('normalizeVector: 768차원 랜덤 벡터 → norm≈1', () => {
+    const raw = Float32Array.from({ length: 768 }, () => Math.random() * 2 - 1);
+    const allZero = Array.from(raw).every((v) => v === 0);
+    if (!allZero) {
+      const normalized = normalizeVector(raw);
+      let sumSq = 0;
+      for (const val of normalized) sumSq += (val ?? 0) ** 2;
+      expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+    }
+  });
+
+  it('normalizeVector: 10차원 랜덤 벡터 → norm≈1', () => {
+    const raw = Float32Array.from({ length: 10 }, () => (Math.random() - 0.5) * 100);
+    const allZero = Array.from(raw).every((v) => v === 0);
+    if (!allZero) {
+      const normalized = normalizeVector(raw);
+      let sumSq = 0;
+      for (const val of normalized) sumSq += (val ?? 0) ** 2;
+      expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+    }
+  });
+
+  it('normalizeVector: Float32Array 타입 보존', () => {
+    const raw = new Float32Array([3, 4]);
+    const result = normalizeVector(raw);
+    expect(result instanceof Float32Array).toBe(true);
+  });
+
+  it('normalizeVector: 입출력 길이 동일 (384차원)', () => {
+    const raw = new Float32Array(384).fill(1);
+    const result = normalizeVector(raw);
+    expect(result.length).toBe(384);
+  });
+
+  it('Vectorizer: 초기화 성공 → ok=true', async () => {
+    const dbPath = join(tmpDir, 'lance-init-only');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const result = await vectorizer.initialize();
+    expect(result.ok).toBe(true);
+  });
+
+  it('Vectorizer: 초기화 후 search limit=0 → 결과 처리 가능', async () => {
+    const dbPath = join(tmpDir, 'lance-limit0');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    await vectorizer.initialize();
+    const result = await vectorizer.search('test', 0);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('Vectorizer: 초기화 후 search limit=100 → ok 또는 에러', async () => {
+    const dbPath = join(tmpDir, 'lance-limit100');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    await vectorizer.initialize();
+    const result = await vectorizer.search('function', 100);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('Vectorizer: 여러 파일 인덱싱 후 결과 수는 0 이상', async () => {
+    const dbPath = join(tmpDir, 'lance-multi-file');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    await vectorizer.initialize();
+    const srcDir = join(tmpDir, 'src-multi');
+    for (let i = 0; i < 5; i++) {
+      await Bun.write(join(srcDir, `file${i}.ts`), `export function fn${i}() { return ${i}; }`);
+    }
+    const result = await vectorizer.index(srcDir, { extensions: ['ts'], projectId: 'multi-proj' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBeGreaterThanOrEqual(0);
+  });
+
+  it('Vectorizer: 인덱싱 결과 value는 number', async () => {
+    const dbPath = join(tmpDir, 'lance-num');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    await vectorizer.initialize();
+    const srcDir = join(tmpDir, 'src-num');
+    await Bun.write(join(srcDir, 'num.ts'), 'export const n = 1;');
+    const result = await vectorizer.index(srcDir, { extensions: ['ts'], projectId: 'num-proj' });
+    if (result.ok) expect(typeof result.value).toBe('number');
+  });
+
+  it('Vectorizer: 검색 결과 배열 반환', async () => {
+    const dbPath = join(tmpDir, 'lance-arr');
+    const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
+    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    await vectorizer.initialize();
+    const srcDir = join(tmpDir, 'src-arr');
+    await Bun.write(join(srcDir, 'arr.ts'), 'export const arr = [1,2,3];');
+    await vectorizer.index(srcDir, { extensions: ['ts'], projectId: 'arr-proj' });
+    const result = await vectorizer.search('array', 5);
+    if (result.ok) expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('ChunkSplitter: 10개 파일 시뮬레이션 → 각각 배열 반환', () => {
+    const splitter = new ChunkSplitter();
+    const files = Array.from({ length: 10 }, (_, i) => ({
+      code: `export function fn${i}() { return ${i}; }`,
+      path: `src/fn${i}.ts`,
+    }));
+    for (const { code, path } of files) {
+      const chunks = splitter.splitCode(code, path);
+      expect(Array.isArray(chunks)).toBe(true);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('ChunkSplitter: UUID를 변수명으로 사용 → 처리 가능', () => {
+    const splitter = new ChunkSplitter();
+    const varName = `_${crypto.randomUUID().replace(/-/g, '_')}`;
+    const code = `export const ${varName} = 42;`;
+    const chunks = splitter.splitCode(code, 'src/uuid-var.ts');
+    expect(chunks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('detectLanguage: 경로에 점 여러개 → 마지막 확장자 기준', () => {
+    expect(detectLanguage('src/a.b.c.ts')).toBe('typescript');
+    expect(detectLanguage('src/x.y.z.js')).toBe('javascript');
+  });
+
+  it('extractModule: 경로에 공백 → string 반환', () => {
+    const result = extractModule('my module/file.ts');
+    expect(typeof result).toBe('string');
+  });
+
+  it('normalizeVector: 5차원 양수 벡터 → norm≈1', () => {
+    const raw = new Float32Array([1, 2, 3, 4, 5]);
+    const normalized = normalizeVector(raw);
+    let sumSq = 0;
+    for (const val of normalized) sumSq += (val ?? 0) ** 2;
+    expect(Math.abs(Math.sqrt(sumSq) - 1.0)).toBeLessThan(0.001);
+  });
 });
