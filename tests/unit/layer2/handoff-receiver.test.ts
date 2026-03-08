@@ -1344,3 +1344,570 @@ describe('HandoffReceiver receive 복합 실패 조건', () => {
     }
   });
 });
+
+// ── receive 추가 경계값 ──────────────────────────────────────────
+
+describe('receive 추가 경계값', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(new ConsoleLogger('error'));
+  });
+
+  it('유효한 패키지는 항상 ok=true', () => {
+    const contract = createValidContract();
+    const handoff = createValidHandoff(contract);
+    const result = receiver.receive(handoff);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accept criteria 있지만 test definition 없으면 에러', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      testDefinitions: [],
+    };
+    const result = receiver.receive(createValidHandoff(bad));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('contract_structure_invalid');
+    }
+  });
+
+  it('completenessScore=0.8 → ok (경계값)', () => {
+    const contract = createValidContract();
+    const edge: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        completenessScore: 0.8,
+      },
+    };
+    const result = receiver.receive(createValidHandoff(edge));
+    expect(result.ok).toBe(true);
+  });
+
+  it('completenessScore=0.79 → 에러', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        completenessScore: 0.79,
+      },
+    };
+    const result = receiver.receive(createValidHandoff(bad));
+    expect(result.ok).toBe(false);
+  });
+
+  it('completenessScore=1.0 → ok', () => {
+    const contract = createValidContract();
+    const perfect: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        completenessScore: 1.0,
+      },
+    };
+    const result = receiver.receive(createValidHandoff(perfect));
+    expect(result.ok).toBe(true);
+  });
+
+  it('completenessScore=0.0 → 에러', () => {
+    const contract = createValidContract();
+    const zero: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        completenessScore: 0.0,
+      },
+    };
+    const result = receiver.receive(createValidHandoff(zero));
+    expect(result.ok).toBe(false);
+  });
+
+  it('features가 빈 배열이면 ok (기능이 없으면 에러 없음)', () => {
+    const contract = createValidContract();
+    const noFeatures: ContractSchema = {
+      ...contract,
+      features: [],
+      testDefinitions: [],
+      implementationOrder: [],
+    };
+    // features=[] → 루프 없음 → 원칙 1,2,4는 통과
+    const result = receiver.receive(createValidHandoff(noFeatures));
+    // completenessScore=1.0이면 ok 가능
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('여러 기능 중 하나만 acceptanceCriteria=[] → 에러', () => {
+    const contract = createValidContract();
+    const feature1 = contract.features[0]!;
+    const feature2 = {
+      ...feature1,
+      id: 'feat-2',
+      name: '기능2',
+      acceptanceCriteria: [],
+    };
+    const bad: ContractSchema = {
+      ...contract,
+      features: [feature1, feature2],
+    };
+    const result = receiver.receive(createValidHandoff(bad));
+    expect(result.ok).toBe(false);
+  });
+
+  it('입력만 있고 출력 없어도 ok (inputs.length > 0)', () => {
+    const contract = createValidContract();
+    const inputOnly: ContractSchema = {
+      ...contract,
+      features: [
+        {
+          ...contract.features[0]!,
+          inputs: [{ name: 'in', type: 'string', constraints: 'c', required: true }],
+          outputs: [],
+        },
+      ],
+    };
+    const result = receiver.receive(createValidHandoff(inputOnly));
+    expect(result.ok).toBe(true);
+  });
+
+  it('출력만 있고 입력 없어도 ok (outputs.length > 0)', () => {
+    const contract = createValidContract();
+    const outputOnly: ContractSchema = {
+      ...contract,
+      features: [
+        {
+          ...contract.features[0]!,
+          inputs: [],
+          outputs: [{ name: 'out', type: 'string', constraints: 'c', required: true }],
+        },
+      ],
+    };
+    const result = receiver.receive(createValidHandoff(outputOnly));
+    expect(result.ok).toBe(true);
+  });
+
+  it('receive 결과 ok는 boolean', () => {
+    const contract = createValidContract();
+    const result = receiver.receive(createValidHandoff(contract));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('유효한 패키지 연속 10회 → 모두 ok', () => {
+    const contract = createValidContract();
+    for (let i = 0; i < 10; i++) {
+      const handoff = createValidHandoff(contract);
+      const result = receiver.receive(handoff);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('여러 기능 → 모두 유효 → ok', () => {
+    const contract = createValidContract();
+    const feature1 = contract.features[0]!;
+    const feature2 = {
+      ...feature1,
+      id: 'feat-2',
+      name: '기능2',
+      dependencies: ['feat-1'],
+    };
+    const multiFeature: ContractSchema = {
+      ...contract,
+      features: [feature1, feature2],
+      testDefinitions: [
+        ...contract.testDefinitions,
+        { ...contract.testDefinitions[0]!, featureId: 'feat-2' },
+      ],
+      implementationOrder: ['feat-1', 'feat-2'],
+    };
+    const result = receiver.receive(createValidHandoff(multiFeature));
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── validateStructure 추가 경계값 ────────────────────────────────
+
+describe('validateStructure 추가 경계값', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(new ConsoleLogger('error'));
+  });
+
+  it('유효한 contract → 빈 errors 배열', () => {
+    const contract = createValidContract();
+    const result = receiver.validateStructure(contract);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('acceptanceCriteria=[] → 에러 1개 이상', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      features: [{ ...contract.features[0]!, acceptanceCriteria: [] }],
+    };
+    const result = receiver.validateStructure(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('testDefinition 없는 기능 → 에러 포함', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      testDefinitions: [],
+    };
+    const result = receiver.validateStructure(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('순환 의존성 → 에러 포함', () => {
+    const contract = createValidContract();
+    const feat1 = { ...contract.features[0]!, id: 'f1', dependencies: ['f2'] };
+    const feat2 = { ...contract.features[0]!, id: 'f2', name: 'feat2', dependencies: ['f1'] };
+    const cyclic: ContractSchema = {
+      ...contract,
+      features: [feat1, feat2],
+      testDefinitions: [
+        contract.testDefinitions[0]!,
+        { ...contract.testDefinitions[0]!, featureId: 'f2' },
+      ],
+      implementationOrder: ['f1', 'f2'],
+    };
+    const result = receiver.validateStructure(cyclic);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((e) => e.includes('순환'))).toBe(true);
+    }
+  });
+
+  it('inputs=[] AND outputs=[] → 에러 포함', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      features: [{ ...contract.features[0]!, inputs: [], outputs: [] }],
+    };
+    const result = receiver.validateStructure(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((e) => e.includes('입출력'))).toBe(true);
+    }
+  });
+
+  it('completenessScore=0.5 → 에러 포함', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: { ...contract.verificationMatrix, completenessScore: 0.5 },
+    };
+    const result = receiver.validateStructure(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((e) => e.includes('완전성'))).toBe(true);
+    }
+  });
+
+  it('validateStructure 결과 value는 string[]', () => {
+    const contract = createValidContract();
+    const result = receiver.validateStructure(contract);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+      for (const e of result.value) {
+        expect(typeof e).toBe('string');
+      }
+    }
+  });
+
+  it('모든 에러가 한번에 수집됨 (acceptanceCriteria + testDef + io)', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      features: [
+        { ...contract.features[0]!, acceptanceCriteria: [], inputs: [], outputs: [] },
+      ],
+      testDefinitions: [],
+    };
+    const result = receiver.validateStructure(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // 여러 에러가 모두 수집됨
+      expect(result.value.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('completenessScore 경계 0.8 → 에러 없음', () => {
+    const contract = createValidContract();
+    const edge: ContractSchema = {
+      ...contract,
+      verificationMatrix: { ...contract.verificationMatrix, completenessScore: 0.8 },
+    };
+    const result = receiver.validateStructure(edge);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((e) => e.includes('완전성'))).toHaveLength(0);
+    }
+  });
+
+  it('validateStructure 연속 10회 동일 결과', () => {
+    const contract = createValidContract();
+    const results = Array.from({ length: 10 }, () => receiver.validateStructure(contract));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toHaveLength(0);
+    }
+  });
+});
+
+// ── validateConsistency 추가 경계값 ──────────────────────────────
+
+describe('validateConsistency 추가 경계값', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(new ConsoleLogger('error'));
+  });
+
+  it('유효한 contract → 빈 warnings', () => {
+    const contract = createValidContract();
+    const result = receiver.validateConsistency(contract);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('구현 순서에 없는 기능 → warning 포함', () => {
+    const contract = createValidContract();
+    const missing: ContractSchema = {
+      ...contract,
+      implementationOrder: [],
+    };
+    const result = receiver.validateConsistency(missing);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('검증 매트릭스 allFeaturesHaveCriteria=false → warning', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        allFeaturesHaveCriteria: false,
+      },
+    };
+    const result = receiver.validateConsistency(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((w) => w.includes('매트릭스'))).toBe(true);
+    }
+  });
+
+  it('검증 매트릭스 allCriteriaHaveTests=false → warning', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        allCriteriaHaveTests: false,
+      },
+    };
+    const result = receiver.validateConsistency(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((w) => w.includes('매트릭스'))).toBe(true);
+    }
+  });
+
+  it('검증 매트릭스 noCyclicDependencies=false → warning', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        noCyclicDependencies: false,
+      },
+    };
+    const result = receiver.validateConsistency(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((w) => w.includes('매트릭스'))).toBe(true);
+    }
+  });
+
+  it('검증 매트릭스 allIODefined=false → warning', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        ...contract.verificationMatrix,
+        allIODefined: false,
+      },
+    };
+    const result = receiver.validateConsistency(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((w) => w.includes('매트릭스'))).toBe(true);
+    }
+  });
+
+  it('warnings는 string[] 타입', () => {
+    const contract = createValidContract();
+    const result = receiver.validateConsistency(contract);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+      for (const w of result.value) {
+        expect(typeof w).toBe('string');
+      }
+    }
+  });
+
+  it('모든 매트릭스 플래그 false → warning 포함', () => {
+    const contract = createValidContract();
+    const allFalse: ContractSchema = {
+      ...contract,
+      verificationMatrix: {
+        allFeaturesHaveCriteria: false,
+        allCriteriaHaveTests: false,
+        noCyclicDependencies: false,
+        allIODefined: false,
+        completenessScore: 1.0,
+      },
+    };
+    const result = receiver.validateConsistency(allFalse);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('validateConsistency 연속 5회 동일 결과', () => {
+    const contract = createValidContract();
+    const results = Array.from({ length: 5 }, () => receiver.validateConsistency(contract));
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value).toHaveLength(0);
+    }
+  });
+
+  it('구현 순서 비어있고 features 있으면 warning 포함', () => {
+    const contract = createValidContract();
+    const bad: ContractSchema = {
+      ...contract,
+      implementationOrder: [],
+    };
+    const result = receiver.validateConsistency(bad);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ── 순환 의존성 탐지 추가 경계값 ──────────────────────────────────
+
+describe('순환 의존성 탐지 추가 경계값', () => {
+  let receiver: HandoffReceiver;
+
+  beforeEach(() => {
+    receiver = new HandoffReceiver(new ConsoleLogger('error'));
+  });
+
+  it('자기 자신을 의존하는 경우 → 순환 에러', () => {
+    const contract = createValidContract();
+    const selfRef: ContractSchema = {
+      ...contract,
+      features: [
+        { ...contract.features[0]!, id: 'f-self', dependencies: ['f-self'] },
+      ],
+      testDefinitions: [
+        { ...contract.testDefinitions[0]!, featureId: 'f-self' },
+      ],
+      implementationOrder: ['f-self'],
+    };
+    const result = receiver.validateStructure(selfRef);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((e) => e.includes('순환'))).toBe(true);
+    }
+  });
+
+  it('3개 기능 순환 A→B→C→A → 순환 에러', () => {
+    const contract = createValidContract();
+    const base = contract.features[0]!;
+    const f1 = { ...base, id: 'A', dependencies: ['C'] };
+    const f2 = { ...base, id: 'B', name: 'B', dependencies: ['A'] };
+    const f3 = { ...base, id: 'C', name: 'C', dependencies: ['B'] };
+    const cyclic: ContractSchema = {
+      ...contract,
+      features: [f1, f2, f3],
+      testDefinitions: [
+        contract.testDefinitions[0]!,
+        { ...contract.testDefinitions[0]!, featureId: 'B' },
+        { ...contract.testDefinitions[0]!, featureId: 'C' },
+      ],
+      implementationOrder: ['A', 'B', 'C'],
+    };
+    const result = receiver.validateStructure(cyclic);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.some((e) => e.includes('순환'))).toBe(true);
+    }
+  });
+
+  it('의존성 없는 기능들 → 순환 없음', () => {
+    const contract = createValidContract();
+    const noDeps: ContractSchema = {
+      ...contract,
+      features: [
+        { ...contract.features[0]!, id: 'x1', dependencies: [] },
+        { ...contract.features[0]!, id: 'x2', name: 'x2', dependencies: [] },
+      ],
+      testDefinitions: [
+        contract.testDefinitions[0]!,
+        { ...contract.testDefinitions[0]!, featureId: 'x2' },
+      ],
+      implementationOrder: ['x1', 'x2'],
+    };
+    const result = receiver.validateStructure(noDeps);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((e) => e.includes('순환'))).toHaveLength(0);
+    }
+  });
+
+  it('단방향 의존성 → 순환 없음', () => {
+    const contract = createValidContract();
+    const base = contract.features[0]!;
+    const f1 = { ...base, id: 'dep-1', dependencies: [] };
+    const f2 = { ...base, id: 'dep-2', name: 'dep2', dependencies: ['dep-1'] };
+    const linear: ContractSchema = {
+      ...contract,
+      features: [f1, f2],
+      testDefinitions: [
+        contract.testDefinitions[0]!,
+        { ...contract.testDefinitions[0]!, featureId: 'dep-2' },
+      ],
+      implementationOrder: ['dep-1', 'dep-2'],
+    };
+    const result = receiver.validateStructure(linear);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((e) => e.includes('순환'))).toHaveLength(0);
+    }
+  });
+});

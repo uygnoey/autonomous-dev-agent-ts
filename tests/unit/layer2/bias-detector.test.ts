@@ -1326,3 +1326,919 @@ describe('BiasDetector 추가 복합/경계 케이스', () => {
     }
   });
 });
+
+// ── 추가 확인 편향 edge case ────────────────────────────────────
+
+describe('확인 편향 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('count=1 → alert 없음', () => {
+    const events = [makePreToolUse('coder', 'Read', { path: '/a.ts' }, 0)];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(0);
+    }
+  });
+
+  it('count=2 → alert 없음', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 1),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(0);
+    }
+  });
+
+  it('count=3 → alert 1개 (정확히 threshold에서만 fires)', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 1),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 2),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=4 → alert 여전히 1개 (threshold 초과 시 새 alert 없음)', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 1),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 2),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 3),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=5 → alert 여전히 1개', () => {
+    const events = Array.from({ length: 5 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/b.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=6 → alert 여전히 1개', () => {
+    const events = Array.from({ length: 6 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/c.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=9 → alert 여전히 1개 (3×threshold)', () => {
+    const events = Array.from({ length: 9 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/d.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=10 → alert 여전히 1개', () => {
+    const events = Array.from({ length: 10 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/e.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('count=3 일 때 severity는 low (calculateSeverity(3,3))', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Write', { path: '/f.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alerts = result.value.filter((a) => a.type === 'confirmation_bias');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]?.severity).toBe('low');
+    }
+  });
+
+  it('count=6 시 기존 alert severity는 low 그대로', () => {
+    // count===3에서 한 번 알림 fires, count>=4 시 새 알림 없음 → 알림 여전히 severity=low
+    const events = Array.from({ length: 6 }, (_, i) =>
+      makePreToolUse('coder', 'Write', { path: '/g.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alerts = result.value.filter((a) => a.type === 'confirmation_bias');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]?.severity).toBe('low');
+    }
+  });
+
+  it('count=9 시 기존 alert severity는 low 그대로', () => {
+    const events = Array.from({ length: 9 }, (_, i) =>
+      makePreToolUse('coder', 'Write', { path: '/h.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alerts = result.value.filter((a) => a.type === 'confirmation_bias');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]?.severity).toBe('low');
+    }
+  });
+
+  it('count=10 시 기존 alert severity는 low 그대로', () => {
+    const events = Array.from({ length: 10 }, (_, i) =>
+      makePreToolUse('coder', 'Write', { path: '/i.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alerts = result.value.filter((a) => a.type === 'confirmation_bias');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]?.severity).toBe('low');
+    }
+  });
+
+  it('서로 다른 데이터 → 각 시그니처 독립 count', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 1),
+      makePreToolUse('coder', 'Read', { path: '/a.ts' }, 2),
+      makePreToolUse('coder', 'Read', { path: '/b.ts' }, 3),
+      makePreToolUse('coder', 'Read', { path: '/b.ts' }, 4),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // /a.ts는 3회 → alert 1개, /b.ts는 2회 → alert 없음
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+
+  it('두 시그니처 각각 3회 → alert 2개', () => {
+    const events = [
+      ...Array.from({ length: 3 }, (_, i) => makePreToolUse('coder', 'Read', { path: '/p.ts' }, i)),
+      ...Array.from({ length: 3 }, (_, i) => makePreToolUse('coder', 'Write', { path: '/q.ts' }, i + 10)),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(2);
+    }
+  });
+
+  it('alert description에 count가 포함된다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Bash', { cmd: 'ls' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'confirmation_bias');
+      expect(alert?.description).toContain('3');
+    }
+  });
+
+  it('alert agentName이 일치한다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('tester', 'Glob', { pattern: '*.ts' }, i)
+    );
+    const result = detector.analyze(events, 'tester');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'confirmation_bias');
+      expect(alert?.agentName).toBe('tester');
+    }
+  });
+
+  it('alert timestamp가 Date 인스턴스이다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('qa', 'Read', { path: '/x.ts' }, i)
+    );
+    const result = detector.analyze(events, 'qa');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'confirmation_bias');
+      expect(alert?.timestamp).toBeInstanceOf(Date);
+    }
+  });
+
+  it('alert evidence가 비어있지 않다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('reviewer', 'Glob', { pattern: '**/*.ts' }, i)
+    );
+    const result = detector.analyze(events, 'reviewer');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'confirmation_bias');
+      expect(alert?.evidence.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('PreToolUse 아닌 이벤트는 count에서 제외', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/z.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/z.ts' }, 1),
+      makePostToolUse('coder', 'Read', 2),
+      makePostToolUse('coder', 'Read', 3),
+    ];
+    // PostToolUse는 시그니처 계산에 포함 안됨 → count=2 → alert 없음
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(0);
+    }
+  });
+
+  it('toolName이 다르면 다른 시그니처 → 각각 독립', () => {
+    // Read:{path:"/z.ts"} 3회 + Write:{path:"/z.ts"} 2회 → alert 1개 (Read만)
+    const events = [
+      makePreToolUse('coder', 'Read', { path: '/z.ts' }, 0),
+      makePreToolUse('coder', 'Read', { path: '/z.ts' }, 1),
+      makePreToolUse('coder', 'Read', { path: '/z.ts' }, 2),
+      makePreToolUse('coder', 'Write', { path: '/z.ts' }, 3),
+      makePreToolUse('coder', 'Write', { path: '/z.ts' }, 4),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'confirmation_bias')).toHaveLength(1);
+    }
+  });
+});
+
+// ── 무한 루프 추가 경계값 ─────────────────────────────────────────
+
+describe('무한 루프 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('패턴 2회 반복 → 감지 안함', () => {
+    const events = [
+      makePreToolUse('coder', 'A', {}, 0),
+      makePreToolUse('coder', 'B', {}, 1),
+      makePreToolUse('coder', 'A', {}, 2),
+      makePreToolUse('coder', 'B', {}, 3),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(0);
+    }
+  });
+
+  it('패턴 3회 반복 → 감지함', () => {
+    const events = [
+      makePreToolUse('coder', 'X', {}, 0),
+      makePreToolUse('coder', 'Y', {}, 1),
+      makePreToolUse('coder', 'X', {}, 2),
+      makePreToolUse('coder', 'Y', {}, 3),
+      makePreToolUse('coder', 'X', {}, 4),
+      makePreToolUse('coder', 'Y', {}, 5),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(1);
+    }
+  });
+
+  it('도구 시퀀스가 중간에 끊기면 감지 안함', () => {
+    const events = [
+      makePreToolUse('coder', 'A', {}, 0),
+      makePreToolUse('coder', 'B', {}, 1),
+      makePreToolUse('coder', 'C', {}, 2), // 끊김
+      makePreToolUse('coder', 'A', {}, 3),
+      makePreToolUse('coder', 'B', {}, 4),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(0);
+    }
+  });
+
+  it('3-tool 패턴 3회 → 감지됨', () => {
+    const events = [
+      makePreToolUse('coder', 'A', {}, 0),
+      makePreToolUse('coder', 'B', {}, 1),
+      makePreToolUse('coder', 'C', {}, 2),
+      makePreToolUse('coder', 'A', {}, 3),
+      makePreToolUse('coder', 'B', {}, 4),
+      makePreToolUse('coder', 'C', {}, 5),
+      makePreToolUse('coder', 'A', {}, 6),
+      makePreToolUse('coder', 'B', {}, 7),
+      makePreToolUse('coder', 'C', {}, 8),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(1);
+    }
+  });
+
+  it('4-tool 패턴 3회 → 감지됨', () => {
+    const tools = ['W', 'X', 'Y', 'Z'];
+    const events = [
+      ...tools.map((t, i) => makePreToolUse('tester', t, {}, i)),
+      ...tools.map((t, i) => makePreToolUse('tester', t, {}, i + 4)),
+      ...tools.map((t, i) => makePreToolUse('tester', t, {}, i + 8)),
+    ];
+    const result = detector.analyze(events, 'tester');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(1);
+    }
+  });
+
+  it('alert description에 pattern이 포함된다', () => {
+    const events = [
+      makePreToolUse('coder', 'Read', {}, 0),
+      makePreToolUse('coder', 'Write', {}, 1),
+      makePreToolUse('coder', 'Read', {}, 2),
+      makePreToolUse('coder', 'Write', {}, 3),
+      makePreToolUse('coder', 'Read', {}, 4),
+      makePreToolUse('coder', 'Write', {}, 5),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'infinite_loop');
+      expect(alert?.description).toBeDefined();
+      expect(alert?.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('alert severity는 repeat=3, threshold=3 → low', () => {
+    const events = [
+      makePreToolUse('coder', 'P', {}, 0),
+      makePreToolUse('coder', 'Q', {}, 1),
+      makePreToolUse('coder', 'P', {}, 2),
+      makePreToolUse('coder', 'Q', {}, 3),
+      makePreToolUse('coder', 'P', {}, 4),
+      makePreToolUse('coder', 'Q', {}, 5),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'infinite_loop');
+      expect(alert?.severity).toBe('low');
+    }
+  });
+
+  it('단일 도구 반복만으로는 무한 루프 미감지 (패턴 길이 최소 2)', () => {
+    // 단일 도구 "A" 5회 반복 - 시퀀스 길이가 patternLen*threshold(2*3=6) 미만이므로 감지 안됨
+    const events = Array.from({ length: 5 }, (_, i) =>
+      makePreToolUse('coder', 'A', { x: i }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    // 시퀀스가 임계값 미만이므로 infinite_loop는 없어야 함
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'infinite_loop')).toHaveLength(0);
+    }
+  });
+
+  it('총 alert count가 number 타입', () => {
+    const events: HookEvent[] = [];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(typeof result.value.length).toBe('number');
+    }
+  });
+});
+
+// ── 교착 상태 추가 경계값 ────────────────────────────────────────
+
+describe('교착 상태 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('TeammateIdle 19회 연속 → 감지 안함', () => {
+    const events = Array.from({ length: 19 }, (_, i) => makeTeammateIdle('coder', i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(0);
+    }
+  });
+
+  it('TeammateIdle 20회 연속 → 감지됨 (threshold)', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('coder', i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(1);
+    }
+  });
+
+  it('TeammateIdle 21회 → alert 1개만 (break 후 종료)', () => {
+    const events = Array.from({ length: 21 }, (_, i) => makeTeammateIdle('coder', i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(1);
+    }
+  });
+
+  it('19 Idle + 1 PreToolUse + 20 Idle → 연속 리셋 후 재감지', () => {
+    const events = [
+      ...Array.from({ length: 19 }, (_, i) => makeTeammateIdle('coder', i)),
+      makePreToolUse('coder', 'Read', {}, 20),
+      ...Array.from({ length: 20 }, (_, i) => makeTeammateIdle('coder', i + 21)),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // PreToolUse가 연속을 끊고 다시 20회 → deadlock 1개
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(1);
+    }
+  });
+
+  it('Idle 10 + PreToolUse + Idle 10 → 연속 없음 → deadlock 미감지', () => {
+    const events = [
+      ...Array.from({ length: 10 }, (_, i) => makeTeammateIdle('coder', i)),
+      makePreToolUse('coder', 'Write', {}, 11),
+      ...Array.from({ length: 10 }, (_, i) => makeTeammateIdle('coder', i + 12)),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(0);
+    }
+  });
+
+  it('deadlock alert severity는 항상 high', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('qc', i));
+    const result = detector.analyze(events, 'qc');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'deadlock');
+      expect(alert?.severity).toBe('high');
+    }
+  });
+
+  it('deadlock alert agentName이 일치한다', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('reviewer', i));
+    const result = detector.analyze(events, 'reviewer');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'deadlock');
+      expect(alert?.agentName).toBe('reviewer');
+    }
+  });
+
+  it('deadlock alert timestamp가 Date 인스턴스', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('documenter', i));
+    const result = detector.analyze(events, 'documenter');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'deadlock');
+      expect(alert?.timestamp).toBeInstanceOf(Date);
+    }
+  });
+
+  it('deadlock alert evidence가 비어있지 않다', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('architect', i));
+    const result = detector.analyze(events, 'architect');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'deadlock');
+      expect(alert?.evidence.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('30회 연속 Idle → alert 1개만 (break 후 종료)', () => {
+    const events = Array.from({ length: 30 }, (_, i) => makeTeammateIdle('coder', i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(1);
+    }
+  });
+
+  it('PostToolUse가 연속을 끊어 deadlock 미감지', () => {
+    const events = [
+      ...Array.from({ length: 19 }, (_, i) => makeTeammateIdle('coder', i)),
+      makePostToolUse('coder', 'Read', 20),
+      ...Array.from({ length: 5 }, (_, i) => makeTeammateIdle('coder', i + 21)),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'deadlock')).toHaveLength(0);
+    }
+  });
+});
+
+// ── 범위 이탈 추가 경계값 ────────────────────────────────────────
+
+describe('범위 이탈 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('uniqueTools=0 → scope_creep 미감지 (toolEvents=0)', () => {
+    const events = [makeTeammateIdle('coder', 0)];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'scope_creep')).toHaveLength(0);
+    }
+  });
+
+  it('uniqueTools=6, 총 7회 → diversity 6/7 > 0.3 AND uniqueTools > 5 → scope_creep 감지', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const events = [
+      ...tools.map((t, i) => makePreToolUse('coder', t, {}, i)),
+      makePreToolUse('coder', 'T1', {}, 6),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // 6/7 ≈ 0.857 > 0.3 AND uniqueTools=6 > 5 → 감지
+      expect(result.value.filter((a) => a.type === 'scope_creep')).toHaveLength(1);
+    }
+  });
+
+  it('uniqueTools=5, 총 6회 → uniqueTools ≤ 5 → scope_creep 미감지', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5'];
+    const events = [
+      ...tools.map((t, i) => makePreToolUse('coder', t, {}, i)),
+      makePreToolUse('coder', 'T1', {}, 5),
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'scope_creep')).toHaveLength(0);
+    }
+  });
+
+  it('scope_creep alert severity는 low', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const events = tools.map((t, i) => makePreToolUse('coder', t, {}, i));
+    // 6/6 = 1.0 > 0.3 AND uniqueTools=6 > 5 → scope_creep
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'scope_creep');
+      if (alert) {
+        expect(alert.severity).toBe('low');
+      }
+    }
+  });
+
+  it('scope_creep alert agentName이 일치', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const events = tools.map((t, i) => makePreToolUse('architect', t, {}, i));
+    const result = detector.analyze(events, 'architect');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'scope_creep');
+      if (alert) {
+        expect(alert.agentName).toBe('architect');
+      }
+    }
+  });
+
+  it('scope_creep alert timestamp가 Date 인스턴스', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const events = tools.map((t, i) => makePreToolUse('coder', t, {}, i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'scope_creep');
+      if (alert) {
+        expect(alert.timestamp).toBeInstanceOf(Date);
+      }
+    }
+  });
+
+  it('scope_creep alert evidence에 비율 정보 포함', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const events = tools.map((t, i) => makePreToolUse('coder', t, {}, i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const alert = result.value.find((a) => a.type === 'scope_creep');
+      if (alert) {
+        expect(alert.evidence.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('툴 이름이 undefined인 이벤트는 toolEvents에서 제외', () => {
+    // toolName이 없는 PreToolUse는 toolEvents에서 제외됨
+    const events: HookEvent[] = [
+      { type: 'PreToolUse', agentName: 'coder', toolName: undefined, data: {}, timestamp: new Date() },
+      { type: 'PreToolUse', agentName: 'coder', toolName: undefined, data: {}, timestamp: new Date() },
+    ];
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'scope_creep')).toHaveLength(0);
+    }
+  });
+
+  it('uniqueTools=6, 총 20회 대부분 중복 → diversity=6/20=0.3 → 미감지 (not > 0.3)', () => {
+    const tools = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const events = [
+      ...tools.map((t, i) => makePreToolUse('coder', t, {}, i)),
+      ...Array.from({ length: 14 }, (_, i) => makePreToolUse('coder', 'T1', {}, i + 6)),
+    ];
+    // 6/20 = 0.3 (not > 0.3)
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.filter((a) => a.type === 'scope_creep')).toHaveLength(0);
+    }
+  });
+});
+
+// ── getSeverity 추가 경계값 ──────────────────────────────────────
+
+describe('getSeverity 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('빈 alert 배열 → none', () => {
+    expect(detector.getSeverity([])).toBe('none');
+  });
+
+  it('low만 있으면 → low', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'confirmation_bias',
+        agentName: 'coder',
+        description: '테스트',
+        evidence: '증거',
+        severity: 'low',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('low');
+  });
+
+  it('medium만 있으면 → medium', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'infinite_loop',
+        agentName: 'coder',
+        description: '테스트',
+        evidence: '증거',
+        severity: 'medium',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('medium');
+  });
+
+  it('high만 있으면 → high', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'deadlock',
+        agentName: 'coder',
+        description: '테스트',
+        evidence: '증거',
+        severity: 'high',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('high');
+  });
+
+  it('low + high 혼합 → high 우선', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'confirmation_bias',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'low',
+        timestamp: new Date(),
+      },
+      {
+        type: 'deadlock',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'high',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('high');
+  });
+
+  it('low + medium 혼합 → medium 우선', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'scope_creep',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'low',
+        timestamp: new Date(),
+      },
+      {
+        type: 'infinite_loop',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'medium',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('medium');
+  });
+
+  it('medium + high → high 우선', () => {
+    const alerts: BiasAlert[] = [
+      {
+        type: 'infinite_loop',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'medium',
+        timestamp: new Date(),
+      },
+      {
+        type: 'deadlock',
+        agentName: 'coder',
+        description: 'd',
+        evidence: 'e',
+        severity: 'high',
+        timestamp: new Date(),
+      },
+    ];
+    expect(detector.getSeverity(alerts)).toBe('high');
+  });
+
+  it('getSeverity 반환값은 유효한 severity 문자열', () => {
+    const validValues = ['none', 'low', 'medium', 'high'];
+    const result = detector.getSeverity([]);
+    expect(validValues).toContain(result);
+  });
+
+  it('단일 low alert → getSeverity=low', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/test.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // count=3 → calculateSeverity(3,3) = 'low'
+      expect(detector.getSeverity(result.value)).toBe('low');
+    }
+  });
+
+  it('deadlock → getSeverity=high (always)', () => {
+    const events = Array.from({ length: 20 }, (_, i) => makeTeammateIdle('coder', i));
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(detector.getSeverity(result.value)).toBe('high');
+    }
+  });
+});
+
+// ── analyze 에이전트 필터링 추가 경계값 ─────────────────────────
+
+describe('analyze 에이전트 필터링 추가 경계값', () => {
+  let detector: BiasDetector;
+
+  beforeEach(() => {
+    detector = new BiasDetector(new ConsoleLogger('error'));
+  });
+
+  it('대상 에이전트 이벤트 없으면 빈 alert', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/x.ts' }, i)
+    );
+    // qa 에이전트로 analyze → 이벤트 없음
+    const result = detector.analyze(events, 'qa');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('여러 에이전트 혼합 → 대상 에이전트만 필터링', () => {
+    const events = [
+      ...Array.from({ length: 3 }, (_, i) => makePreToolUse('coder', 'Read', { path: '/x.ts' }, i)),
+      ...Array.from({ length: 3 }, (_, i) => makePreToolUse('qa', 'Write', { path: '/y.ts' }, i + 10)),
+    ];
+    // coder analyze
+    const coderResult = detector.analyze(events, 'coder');
+    expect(coderResult.ok).toBe(true);
+    if (coderResult.ok) {
+      // qa 이벤트가 섞여도 coder 편향만 감지
+      const coderAlerts = coderResult.value.filter((a) => a.agentName === 'coder');
+      expect(coderAlerts.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('빈 이벤트 배열 → 빈 alert', () => {
+    const result = detector.analyze([], 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toHaveLength(0);
+    }
+  });
+
+  it('모든 에이전트에 대해 analyze 호출 가능', () => {
+    const agents: AgentName[] = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const agent of agents) {
+      const result = detector.analyze([], agent);
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('analyze 결과는 항상 ok=true', () => {
+    const events = Array.from({ length: 50 }, (_, i) =>
+      makePreToolUse('coder', `tool-${i}`, {}, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+  });
+
+  it('analyze 결과 value는 배열', () => {
+    const result = detector.analyze([], 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value)).toBe(true);
+    }
+  });
+
+  it('각 alert에 type 필드가 있다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/t.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (const alert of result.value) {
+        expect(typeof alert.type).toBe('string');
+      }
+    }
+  });
+
+  it('각 alert에 severity 필드가 있다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Read', { path: '/u.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (const alert of result.value) {
+        expect(['low', 'medium', 'high']).toContain(alert.severity);
+      }
+    }
+  });
+
+  it('각 alert에 description 필드가 있다', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      makePreToolUse('coder', 'Glob', { pattern: '*.ts' }, i)
+    );
+    const result = detector.analyze(events, 'coder');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      for (const alert of result.value) {
+        expect(typeof alert.description).toBe('string');
+      }
+    }
+  });
+});
