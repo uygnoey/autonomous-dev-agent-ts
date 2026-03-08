@@ -9,12 +9,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../../src/core/logger.js';
-import { ProcessExecutor } from '../../../../src/core/process-executor.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
 import {
   OsControlServer,
   OS_CONTROL_TOOLS,
-} from '../../../../src/mcp/builtin/os-control/index.js';
+} from 'mcp/builtin/os-control/index.js';
 
 let logger: ConsoleLogger;
 let executor: ProcessExecutor;

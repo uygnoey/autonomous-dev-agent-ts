@@ -13,11 +13,11 @@
  *     Checks 5 Contract verification principles.
  */
 
-import { ContractError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { ContractSchema, HandoffPackage } from '../layer1/types.js';
+import { ContractError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { ContractSchema, HandoffPackage } from 'layer1/types.js';
 
 /**
  * 최소 완전성 점수 / Minimum completeness score

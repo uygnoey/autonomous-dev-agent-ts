@@ -8,8 +8,8 @@
  *     Logs spawn and completion events.
  */
 
-import type { Logger } from '../core/logger.js';
-import type { AgentConfig, AgentEvent, AgentExecutor } from './types.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 
 /**
  * 에이전트 스포너 / Agent Spawner

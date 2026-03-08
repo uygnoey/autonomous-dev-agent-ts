@@ -8,11 +8,16 @@
  *     Implemented with ProcessExecutor, no external dependencies.
  */
 
-import type { Logger } from '../../../core/logger.js';
-import type { ProcessExecutor } from '../../../core/process-executor.js';
-import type { Result } from '../../../core/types.js';
-import type { McpServerConfig, McpTool } from '../../types.js';
-import { GIT_TOOLS, GitExecutor, type GitInput, type GitOutput } from './git-operations.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
+import {
+  GIT_TOOLS,
+  GitExecutor,
+  type GitInput,
+  type GitOutput,
+} from 'mcp/builtin/git/git-operations.js';
+import type { McpServerConfig, McpTool } from 'mcp/types.js';
 
 // ── 서버 설정 / Server Configuration ───────────────────────
 
@@ -24,7 +29,7 @@ import { GIT_TOOLS, GitExecutor, type GitInput, type GitOutput } from './git-ope
  * EN: Self-implemented using ProcessExecutor. No external npx packages needed.
  *
  * @example
- * import { GIT_SERVER } from './git/index.js';
+ * import { GIT_SERVER } from 'mcp/builtin/git/git/index.js';
  * registry.register(GIT_SERVER);
  */
 export const GIT_SERVER: McpServerConfig = {
@@ -90,4 +95,4 @@ export {
   GIT_TOOLS,
   type GitInput,
   type GitOutput,
-} from './git-operations.js';
+} from 'mcp/builtin/git/git-operations.js';

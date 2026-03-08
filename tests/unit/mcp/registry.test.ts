@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { McpRegistry } from '../../../src/mcp/registry.js';
-import type { McpServerConfig } from '../../../src/mcp/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { McpRegistry } from 'mcp/registry.js';
+import type { McpServerConfig } from 'mcp/types.js';
 
 describe('McpRegistry', () => {
   const logger = new ConsoleLogger('error');

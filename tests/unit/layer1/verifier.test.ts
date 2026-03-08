@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { Layer1VerificationRequest } from '../../../src/layer1/types.js';
-import { Layer1Verifier } from '../../../src/layer1/verifier.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { Layer1VerificationRequest } from 'layer1/types.js';
+import { Layer1Verifier } from 'layer1/verifier.js';
 
 function createRequest(overrides: Partial<Layer1VerificationRequest> = {}): Layer1VerificationRequest {
   return {

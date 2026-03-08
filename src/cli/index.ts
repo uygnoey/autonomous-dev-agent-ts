@@ -8,18 +8,18 @@
 
 // ── 메인 애플리케이션 / Main Application ──────────────────────
 
-export { CliApp, type ICliApp } from './main.js';
+export { CliApp, type ICliApp } from 'cli/main.js';
 
 // ── 라우터 / Router ──────────────────────────────────────────
 
-export { CommandRouter, type ParsedArgs, type RoutableCommand } from './command-router.js';
+export { CommandRouter, type ParsedArgs, type RoutableCommand } from 'cli/command-router.js';
 
 // ── 명령 / Commands ────────────────────────────────────────────
 
-export { ConfigCommand } from './commands/config.js';
-export { InitCommand } from './commands/init.js';
-export { ProjectCommand } from './commands/project.js';
-export { StartCommand } from './commands/start.js';
+export { ConfigCommand } from 'cli/commands/config.js';
+export { InitCommand } from 'cli/commands/init.js';
+export { ProjectCommand } from 'cli/commands/project.js';
+export { StartCommand } from 'cli/commands/start.js';
 
 // ── 타입 / Types ───────────────────────────────────────────────
 
@@ -35,5 +35,5 @@ export type {
   ProjectOptions,
   ProjectRegistry,
   StartOptions,
-} from './types.js';
-export { EXIT_CODES } from './types.js';
+} from 'cli/types.js';
+export { EXIT_CODES } from 'cli/types.js';

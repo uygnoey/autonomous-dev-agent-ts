@@ -8,20 +8,28 @@
  *     Implemented with ProcessExecutor, no external dependencies.
  */
 
-import { AdevError } from '../../../core/errors.js';
-import type { Logger } from '../../../core/logger.js';
-import type { ProcessExecutor } from '../../../core/process-executor.js';
-import type { Result } from '../../../core/types.js';
-import { err, ok } from '../../../core/types.js';
-import type { McpServerConfig, McpTool } from '../../types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
 import {
   FILESYSTEM_TOOLS,
   FilesystemExecutor,
   type FilesystemInput,
   type FilesystemOutput,
-} from './filesystem.js';
-import { PROCESS_TOOLS, ProcessManager, type ProcessOutput } from './process.js';
-import { SYSTEM_INFO_TOOLS, SystemInfoExecutor, type SystemInfoOutput } from './system-info.js';
+} from 'mcp/builtin/os-control/filesystem.js';
+import {
+  PROCESS_TOOLS,
+  ProcessManager,
+  type ProcessOutput,
+} from 'mcp/builtin/os-control/process.js';
+import {
+  SYSTEM_INFO_TOOLS,
+  SystemInfoExecutor,
+  type SystemInfoOutput,
+} from 'mcp/builtin/os-control/system-info.js';
+import type { McpServerConfig, McpTool } from 'mcp/types.js';
 
 // ── 서버 설정 / Server Configuration ───────────────────────
 
@@ -33,7 +41,7 @@ import { SYSTEM_INFO_TOOLS, SystemInfoExecutor, type SystemInfoOutput } from './
  * EN: Self-implemented using ProcessExecutor. No external npx packages needed.
  *
  * @example
- * import { OS_CONTROL_SERVER } from './os-control/index.js';
+ * import { OS_CONTROL_SERVER } from 'mcp/builtin/os-control/os-control/index.js';
  * registry.register(OS_CONTROL_SERVER);
  */
 export const OS_CONTROL_SERVER: McpServerConfig = {
@@ -129,17 +137,17 @@ export {
   FILESYSTEM_TOOLS,
   type FilesystemInput,
   type FilesystemOutput,
-} from './filesystem.js';
+} from 'mcp/builtin/os-control/filesystem.js';
 
 export {
   ProcessManager,
   PROCESS_TOOLS,
   type ProcessInput,
   type ProcessOutput,
-} from './process.js';
+} from 'mcp/builtin/os-control/process.js';
 
 export {
   SystemInfoExecutor,
   SYSTEM_INFO_TOOLS,
   type SystemInfoOutput,
-} from './system-info.js';
+} from 'mcp/builtin/os-control/system-info.js';

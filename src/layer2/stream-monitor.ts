@@ -8,10 +8,10 @@
  *     and detects anomalous patterns.
  */
 
-import type { Logger } from '../core/logger.js';
-import type { AgentName, Result } from '../core/types.js';
-import { ok } from '../core/types.js';
-import type { BiasAlert, HookEvent } from './types.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentName, Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import type { BiasAlert, HookEvent } from 'layer2/types.js';
 
 /**
  * 반복 도구 호출 임계값 / Repeated tool call threshold

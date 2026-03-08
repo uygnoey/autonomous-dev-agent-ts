@@ -9,7 +9,7 @@
  */
 
 import { basename, dirname } from 'node:path';
-import type { ChunkInput, ChunkMetadata, ChunkOptions } from './types.js';
+import type { ChunkInput, ChunkMetadata, ChunkOptions } from 'rag/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

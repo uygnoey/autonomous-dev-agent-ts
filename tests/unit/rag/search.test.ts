@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { Result } from '../../../src/core/types.js';
-import { ok } from '../../../src/core/types.js';
-import type { CodeRecord } from '../../../src/core/types.js';
-import { RagSearcher } from '../../../src/rag/search.js';
-import type { EmbeddingProvider } from '../../../src/rag/types.js';
-import { CodeVectorStore } from '../../../src/rag/vector-store.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import type { CodeRecord } from 'core/types.js';
+import { RagSearcher } from 'rag/search.js';
+import type { EmbeddingProvider } from 'rag/types.js';
+import { CodeVectorStore } from 'rag/vector-store.js';
 
 const logger = new ConsoleLogger('error');
 

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { DefaultPluginLoader } from '../../../src/core/plugin-loader.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { DefaultPluginLoader } from 'core/plugin-loader.js';
 
 describe('DefaultPluginLoader', () => {
   let tempDir: string;

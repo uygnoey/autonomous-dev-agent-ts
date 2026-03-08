@@ -9,13 +9,13 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { DocIntegrator } from '../../src/layer3/doc-integrator.js';
-import { DocCollaborator } from '../../src/layer3/doc-collaborator.js';
-import { ProductionTester } from '../../src/layer3/production-tester.js';
-import { BugEscalator } from '../../src/layer3/bug-escalator.js';
-import { DeliverableBuilder } from '../../src/layer3/deliverable-builder.js';
-import type { DocumentTemplate, IntegratedDocument, TestFailure } from '../../src/layer3/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { DocIntegrator } from 'layer3/doc-integrator.js';
+import { DocCollaborator } from 'layer3/doc-collaborator.js';
+import { ProductionTester } from 'layer3/production-tester.js';
+import { BugEscalator } from 'layer3/bug-escalator.js';
+import { DeliverableBuilder } from 'layer3/deliverable-builder.js';
+import type { DocumentTemplate, IntegratedDocument, TestFailure } from 'layer3/types.js';
 
 const logger = new ConsoleLogger('error');
 

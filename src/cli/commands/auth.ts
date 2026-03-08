@@ -17,11 +17,11 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { AuthError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 import inquirer from 'inquirer';
-import { AuthError } from '../../core/errors.js';
-import type { Logger } from '../../core/logger.js';
-import { err, ok } from '../../core/types.js';
-import type { Result } from '../../core/types.js';
 
 const ADEV_DIR = join(homedir(), '.adev');
 const ENV_FILE = join(ADEV_DIR, '.env');
@@ -124,13 +124,13 @@ export class AuthCommand {
   private async showStatus(): Promise<Result<void, AuthError>> {
     const status = await getAuthStatus();
     if (status) {
-      console.log('\n✅ 인증 상태 / Auth Status');
-      console.log(`   방법 / Method: ${status.method}`);
-      console.log(`   키 / Key:    ${status.masked}`);
-      console.log(`   파일 / File: ${ENV_FILE}\n`);
+      process.stdout.write('\n✅ 인증 상태 / Auth Status\n');
+      process.stdout.write(`   방법 / Method: ${status.method}\n`);
+      process.stdout.write(`   키 / Key:    ${status.masked}\n`);
+      process.stdout.write(`   파일 / File: ${ENV_FILE}\n\n`);
     } else {
-      console.log('\n⚠️  인증이 설정되지 않았습니다 / No authentication configured');
-      console.log('   adev auth 를 실행하세요 / Run: adev auth\n');
+      process.stdout.write('\n⚠️  인증이 설정되지 않았습니다 / No authentication configured\n');
+      process.stdout.write('   adev auth 를 실행하세요 / Run: adev auth\n\n');
     }
     return ok(undefined);
   }
@@ -141,7 +141,7 @@ export class AuthCommand {
   private async clearAuth(): Promise<Result<void, AuthError>> {
     const status = await getAuthStatus();
     if (!status) {
-      console.log('\n⚠️  삭제할 인증 정보가 없습니다 / No auth credentials to clear\n');
+      process.stdout.write('\n⚠️  삭제할 인증 정보가 없습니다 / No auth credentials to clear\n\n');
       return ok(undefined);
     }
 
@@ -156,9 +156,9 @@ export class AuthCommand {
 
     if (confirmed) {
       await clearAuthFromEnv();
-      console.log('\n✅ 인증 정보가 삭제되었습니다 / Auth credentials cleared\n');
+      process.stdout.write('\n✅ 인증 정보가 삭제되었습니다 / Auth credentials cleared\n\n');
     } else {
-      console.log('\n취소되었습니다 / Cancelled\n');
+      process.stdout.write('\n취소되었습니다 / Cancelled\n\n');
     }
     return ok(undefined);
   }
@@ -169,11 +169,10 @@ export class AuthCommand {
   private async setupAuth(): Promise<Result<void, AuthError>> {
     const existing = await getAuthStatus();
 
-    console.log('\n🔑 adev 인증 설정 / Authentication Setup\n');
+    process.stdout.write('\n🔑 adev 인증 설정 / Authentication Setup\n\n');
 
     if (existing) {
-      console.log(`   현재 설정 / Current: ${existing.method} (${existing.masked})`);
-      console.log('');
+      process.stdout.write(`   현재 설정 / Current: ${existing.method} (${existing.masked})\n\n`);
     }
 
     const { method } = await inquirer.prompt([
@@ -196,12 +195,12 @@ export class AuthCommand {
     ]);
 
     if (method === 'cancel') {
-      console.log('\n취소되었습니다 / Cancelled\n');
+      process.stdout.write('\n취소되었습니다 / Cancelled\n\n');
       return ok(undefined);
     }
 
     if (method === 'apikey') {
-      console.log('\n📘 API Key 발급: https://console.anthropic.com/settings/keys\n');
+      process.stdout.write('\n📘 API Key 발급: https://console.anthropic.com/settings/keys\n\n');
 
       const { apiKey } = await inquirer.prompt([
         {
@@ -219,10 +218,10 @@ export class AuthCommand {
 
       await saveToEnv('ANTHROPIC_API_KEY', apiKey.trim());
       this.logger.info('API Key 저장 완료');
-      console.log(`\n✅ API Key 저장 완료 → ${ENV_FILE}\n`);
+      process.stdout.write(`\n✅ API Key 저장 완료 → ${ENV_FILE}\n\n`);
     } else {
-      console.log('\n📘 OAuth Token 확인:');
-      console.log('   cat ~/.claude/.credentials.json | grep oauthToken\n');
+      process.stdout.write('\n📘 OAuth Token 확인:\n');
+      process.stdout.write('   cat ~/.claude/.credentials.json | grep oauthToken\n\n');
 
       const { oauthToken } = await inquirer.prompt([
         {
@@ -240,7 +239,7 @@ export class AuthCommand {
 
       await saveToEnv('CLAUDE_CODE_OAUTH_TOKEN', oauthToken.trim());
       this.logger.info('OAuth Token 저장 완료');
-      console.log(`\n✅ OAuth Token 저장 완료 → ${ENV_FILE}\n`);
+      process.stdout.write(`\n✅ OAuth Token 저장 완료 → ${ENV_FILE}\n\n`);
     }
 
     return ok(undefined);

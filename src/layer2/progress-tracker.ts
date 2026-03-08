@@ -8,11 +8,11 @@
  *     Provides overall completion rate calculation.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { FeatureStatus, Phase, Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { FeatureProgress, VerificationResult } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { FeatureStatus, Phase, Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { FeatureProgress, VerificationResult } from 'layer2/types.js';
 
 /**
  * 진행 상태 추적기 / Progress Tracker

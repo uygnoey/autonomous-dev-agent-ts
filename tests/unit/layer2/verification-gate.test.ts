@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { VerificationGate } from '../../../src/layer2/verification-gate.js';
-import type { VerificationResult } from '../../../src/layer2/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { VerificationGate } from 'layer2/verification-gate.js';
+import type { VerificationResult } from 'layer2/types.js';
 
 /**
  * 검증 결과를 생성한다 / Creates a verification result

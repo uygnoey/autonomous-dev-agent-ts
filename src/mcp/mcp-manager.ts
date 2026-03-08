@@ -8,13 +8,13 @@
  *     Actual process spawning is layer2's responsibility; this module manages state only.
  */
 
-import { McpError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { McpLoader } from './loader.js';
-import type { McpRegistry } from './registry.js';
-import type { McpServerInstance, McpServerStatus, McpTool } from './types.js';
+import { McpError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { McpLoader } from 'mcp/loader.js';
+import type { McpRegistry } from 'mcp/registry.js';
+import type { McpServerInstance, McpServerStatus, McpTool } from 'mcp/types.js';
 
 // ── McpManager ───────────────────────────────────────────────
 

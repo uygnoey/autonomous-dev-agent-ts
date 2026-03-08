@@ -9,12 +9,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../../src/core/logger.js';
-import { ProcessExecutor } from '../../../../src/core/process-executor.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
 import {
   WebSearchServer,
   WEB_SEARCH_SERVER,
-} from '../../../../src/mcp/builtin/web-search/index.js';
+} from 'mcp/builtin/web-search/index.js';
 
 let logger: ConsoleLogger;
 let executor: ProcessExecutor;

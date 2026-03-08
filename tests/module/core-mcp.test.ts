@@ -13,15 +13,15 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
+import { ConsoleLogger } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
 import {
   BUILTIN_SERVERS,
   McpLoader,
   McpManager,
   McpRegistry,
-} from '../../src/mcp/index.js';
-import type { McpServerConfig } from '../../src/mcp/index.js';
+} from 'mcp/index.js';
+import type { McpServerConfig } from 'mcp/index.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

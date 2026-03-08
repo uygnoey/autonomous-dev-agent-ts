@@ -16,7 +16,7 @@ export type {
   EmbeddingTier,
   IndexDirectoryOptions,
   SearchResult,
-} from './types.js';
+} from 'rag/types.js';
 
 // ── 임베딩 ──────────────────────────────────────────────────────
 
@@ -24,24 +24,24 @@ export {
   createTransformersEmbeddingProvider,
   normalizeVector,
   TransformersEmbeddingProvider,
-} from './embeddings.js';
+} from 'rag/embeddings.js';
 
 // ── 벡터 저장소 ────────────────────────────────────────────────
 
-export { CodeVectorStore } from './vector-store.js';
+export { CodeVectorStore } from 'rag/vector-store.js';
 
 // ── 청크 분할 ───────────────────────────────────────────────────
 
-export { ChunkSplitter, detectLanguage, extractModule } from './chunk-splitter.js';
+export { ChunkSplitter, detectLanguage, extractModule } from 'rag/chunk-splitter.js';
 
 // ── 인덱서 ──────────────────────────────────────────────────────
 
-export { CodeIndexer } from './code-indexer.js';
+export { CodeIndexer } from 'rag/code-indexer.js';
 
 // ── 검색 ────────────────────────────────────────────────────────
 
-export { RagSearcher } from './search.js';
+export { RagSearcher } from 'rag/search.js';
 
 // ── 벡터라이저 (최상위 API) ─────────────────────────────────────
 
-export { Vectorizer } from './vectorizer.js';
+export { Vectorizer } from 'rag/vectorizer.js';

@@ -10,11 +10,11 @@
  *     Branch naming: feature/{featureId}-{module}-coderN
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { CoderAllocation } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { CoderAllocation } from 'layer2/types.js';
 
 /**
  * Coder 할당기 / Coder Allocator

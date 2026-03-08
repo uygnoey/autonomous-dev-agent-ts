@@ -17,14 +17,14 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { AuthCommand } from './cli/commands/auth.js';
-import { ConfigCommand } from './cli/commands/config.js';
-import { InitCommand } from './cli/commands/init.js';
-import { ProjectCommand } from './cli/commands/project.js';
-import { StartCommand } from './cli/commands/start.js';
-import { CliApp } from './cli/index.js';
-import type { CliCommandHandler, CliResult } from './cli/types.js';
-import { ConsoleLogger } from './core/logger.js';
+import { AuthCommand } from 'cli/commands/auth.js';
+import { ConfigCommand } from 'cli/commands/config.js';
+import { InitCommand } from 'cli/commands/init.js';
+import { ProjectCommand } from 'cli/commands/project.js';
+import { StartCommand } from 'cli/commands/start.js';
+import { CliApp } from 'cli/index.js';
+import type { CliCommandHandler, CliResult } from 'cli/types.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── .env 파일 로드 / Load .env file ─────────────────────────────
 

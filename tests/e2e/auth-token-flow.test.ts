@@ -8,10 +8,10 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { ApiKeyAuth } from '../../src/auth/api-key-auth.js';
-import { SubscriptionAuth } from '../../src/auth/subscription-auth.js';
-import { TokenMonitor } from '../../src/layer2/token-monitor.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ApiKeyAuth } from 'auth/api-key-auth.js';
+import { SubscriptionAuth } from 'auth/subscription-auth.js';
+import { TokenMonitor } from 'layer2/token-monitor.js';
 
 const logger = new ConsoleLogger('error');
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { ConsoleLogger } from 'core/logger.js';
 import {
   TransformersEmbeddingProvider,
   createTransformersEmbeddingProvider,
   normalizeVector,
-} from '../../../src/rag/embeddings.js';
+} from 'rag/embeddings.js';
 
 const logger = new ConsoleLogger('error');
 

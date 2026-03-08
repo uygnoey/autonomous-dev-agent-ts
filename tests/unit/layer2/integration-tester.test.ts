@@ -9,13 +9,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { AdevError } from '../../../src/core/errors.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { ProcessExecutor, ProcessResult } from '../../../src/core/process-executor.js';
-import type { Result } from '../../../src/core/types.js';
-import { err, ok } from '../../../src/core/types.js';
-import type { CleanEnvManager } from '../../../src/layer2/clean-env-manager.js';
-import { IntegrationTester } from '../../../src/layer2/integration-tester.js';
+import { AdevError } from 'core/errors.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { ProcessExecutor, ProcessResult } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { CleanEnvManager } from 'layer2/clean-env-manager.js';
+import { IntegrationTester } from 'layer2/integration-tester.js';
 
 // ── Mock 클래스 / Mock classes ──────────────────────────────────
 class MockProcessExecutor implements ProcessExecutor {

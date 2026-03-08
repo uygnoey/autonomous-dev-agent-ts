@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { Designer } from '../../../src/layer1/designer.js';
-import type { FeatureSpec } from '../../../src/layer1/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { Designer } from 'layer1/designer.js';
+import type { FeatureSpec } from 'layer1/types.js';
 
 function createFeature(overrides: Partial<FeatureSpec> = {}): FeatureSpec {
   return {

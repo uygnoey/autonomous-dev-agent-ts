@@ -9,8 +9,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { ProcessExecutor } from '../../../src/core/process-executor.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
 
 let logger: ConsoleLogger;
 let executor: ProcessExecutor;

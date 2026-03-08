@@ -12,14 +12,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger, MemoryRepository } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
-import { ContractBuilder, ConversationManager } from '../../src/layer1/index.js';
+import { ConsoleLogger, MemoryRepository } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
+import { ContractBuilder, ConversationManager } from 'layer1/index.js';
 import type {
   ConversationMessage,
   FeatureSpec,
   TestTypeDefinition,
-} from '../../src/layer1/types.js';
+} from 'layer1/types.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

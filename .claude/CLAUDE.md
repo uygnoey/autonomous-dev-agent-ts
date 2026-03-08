@@ -11,6 +11,7 @@ CLI `adev`. TypeScript + Bun. Claude Agent SDK (V2 Session API) 단독 런타임
 - `SPEC.md` — v2.4 전체 스펙
 - `IMPLEMENTATION-GUIDE.md` — 구현 순서
 - `docs/references/` — 에이전트, Phase, 테스트, Contract 상세
+- `CLAUDE.md` - 클로드 코드 코딩 지침서
 
 ## 기술 스택
 
@@ -90,3 +91,5 @@ auth → core
 - `process.env` 직접 접근
 - 하드코딩된 매직 넘버/문자열
 - `node:` 내장 모듈 사용 시 Bun 호환성 미확인
+
+이 문서와 프로젝트 루트 폴더의 CALUDE.md 문서 모두 여기까지 모두 읽었으면 다읽은 시점의 시간을 HH24:mm:ss 포멧으로 표기하고 아랫줄에다 main-claude.md 읽음 이라고 tui에 표시해

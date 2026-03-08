@@ -10,11 +10,11 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
-import { AdevError } from '../../core/errors.js';
-import type { Logger } from '../../core/logger.js';
-import { err, ok } from '../../core/types.js';
-import type { Result } from '../../core/types.js';
-import type { ProjectInfo, ProjectOptions, ProjectRegistry } from '../types.js';
+import type { ProjectInfo, ProjectOptions, ProjectRegistry } from 'cli/types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── 경로 헬퍼 / Path Helpers ───────────────────────────────────
 

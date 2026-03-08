@@ -7,10 +7,10 @@
  *     (conversations, plan).
  */
 
-import type { Logger } from '../core/logger.js';
-import { ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { Layer1VerificationRequest, Layer1VerificationResult } from './types.js';
+import type { Logger } from 'core/logger.js';
+import { ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { Layer1VerificationRequest, Layer1VerificationResult } from 'layer1/types.js';
 
 // ── Layer1Verifier ──────────────────────────────────────────────
 

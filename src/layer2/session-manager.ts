@@ -8,11 +8,11 @@
  *     In-memory storage, replaceable with persistence layer.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { AgentName, Phase, Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { SessionFilter, SessionSnapshot, SessionState } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentName, Phase, Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { SessionFilter, SessionSnapshot, SessionState } from 'layer2/types.js';
 
 /**
  * 세션 관리자 / Session Manager

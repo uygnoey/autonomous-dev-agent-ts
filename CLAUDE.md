@@ -37,3 +37,5 @@ Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발�
 - **실패 분석**: `qc`만
 - **품질 검증**: `qa` (코딩 전), `reviewer` (코딩 후)
 - **문서화**: `documenter`만
+
+이 문서와 .cluade/CALUDE.md 문서 모두 여기까지 모두 읽었으면 다읽은 시점의 시간을 HH24:mm:ss 포멧으로 표기하고 아랫줄에다 main-claude.md 읽음 이라고 tui에 표시해

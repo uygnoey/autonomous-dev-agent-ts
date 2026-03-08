@@ -8,10 +8,10 @@
  *     Records user decisions (approve/revise) and feedback.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
 
 /**
  * 사용자 결정 / User decision

@@ -11,11 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { Vectorizer } from '../../src/rag/vectorizer.js';
-import { ChunkSplitter, detectLanguage, extractModule } from '../../src/rag/chunk-splitter.js';
-import { createTransformersEmbeddingProvider, normalizeVector } from '../../src/rag/embeddings.js';
-import type { EmbeddingConfig } from '../../src/core/config.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { Vectorizer } from 'rag/vectorizer.js';
+import { ChunkSplitter, detectLanguage, extractModule } from 'rag/chunk-splitter.js';
+import { createTransformersEmbeddingProvider, normalizeVector } from 'rag/embeddings.js';
+import type { EmbeddingConfig } from 'core/config.js';
 
 const logger = new ConsoleLogger('error');
 

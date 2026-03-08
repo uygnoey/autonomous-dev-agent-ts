@@ -8,11 +8,11 @@
  *     Validates transition rules, maps participating agents, and tracks transition history.
  */
 
-import { PhaseError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { AgentName, Phase, Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { PhaseTransition } from './types.js';
+import { PhaseError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentName, Phase, Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { PhaseTransition } from 'layer2/types.js';
 
 // ── Phase 참여 에이전트 매핑 / Phase participant mapping ────────
 

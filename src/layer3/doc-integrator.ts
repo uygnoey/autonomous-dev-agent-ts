@@ -9,16 +9,16 @@
  */
 
 import { Glob } from 'bun';
-import { Layer3Error } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
+import { Layer3Error } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
 import type {
   DocumentFragment,
   DocumentTemplate,
   IntegratedDocument,
   ProjectDocumentType,
-} from './types.js';
+} from 'layer3/types.js';
 
 /**
  * 문서 통합 옵션 / Document integration options

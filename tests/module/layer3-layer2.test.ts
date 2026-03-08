@@ -11,11 +11,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
-import { FailureHandler, PhaseEngine } from '../../src/layer2/index.js';
-import { BugEscalator, DocIntegrator, ProductionTester } from '../../src/layer3/index.js';
-import type { DocumentTemplate, TestFailure } from '../../src/layer3/types.js';
+import { ConsoleLogger } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
+import { FailureHandler, PhaseEngine } from 'layer2/index.js';
+import { BugEscalator, DocIntegrator, ProductionTester } from 'layer3/index.js';
+import type { DocumentTemplate, TestFailure } from 'layer3/types.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

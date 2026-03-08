@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectCommand } from '../../../src/cli/commands/project.js';
-import { loadRegistry, saveRegistry } from '../../../src/cli/commands/project.js';
-import type { CliOptions, ProjectRegistry } from '../../../src/cli/types.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { ProjectCommand } from 'cli/commands/project.js';
+import { loadRegistry, saveRegistry } from 'cli/commands/project.js';
+import type { CliOptions, ProjectRegistry } from 'cli/types.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 / Test Helpers ────────────────────────────────
 

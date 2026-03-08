@@ -12,11 +12,11 @@
 
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { McpError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { McpServerConfig } from './types.js';
+import { McpError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { McpServerConfig } from 'mcp/types.js';
 
 // ── McpLoader ────────────────────────────────────────────────
 

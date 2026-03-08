@@ -9,15 +9,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ApiKeyAuth, SubscriptionAuth, createAuthProvider } from '../../src/auth/index.js';
+import { ApiKeyAuth, SubscriptionAuth, createAuthProvider } from 'auth/index.js';
 import {
   AuthError,
   ConfigError,
   ConsoleLogger,
   loadEnvironment,
   maskSensitiveData,
-} from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
+} from 'core/index.js';
+import type { Logger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

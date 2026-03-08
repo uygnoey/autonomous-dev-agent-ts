@@ -9,10 +9,10 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ApiKeyAuth, SubscriptionAuth } from '../../src/auth/index.js';
-import { ConsoleLogger } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
-import { TokenMonitor } from '../../src/layer2/index.js';
+import { ApiKeyAuth, SubscriptionAuth } from 'auth/index.js';
+import { ConsoleLogger } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
+import { TokenMonitor } from 'layer2/index.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

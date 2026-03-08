@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { SubscriptionAuth } from '../../../src/auth/subscription-auth.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { SubscriptionAuth } from 'auth/subscription-auth.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 ─────────────────────────────────────────────
 

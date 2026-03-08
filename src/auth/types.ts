@@ -6,8 +6,8 @@
  * EN: Defines AuthProvider, RateLimitStatus, and Credential interfaces.
  */
 
-import type { AuthMode } from '../core/config.js';
-import type { Result } from '../core/types.js';
+import type { AuthMode } from 'core/config.js';
+import type { Result } from 'core/types.js';
 
 // ── 레이트 리밋 상태 ────────────────────────────────────────
 

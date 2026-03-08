@@ -3,9 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { BugEscalator } from '../../../src/layer3/bug-escalator.js';
-import type { TestFailure } from '../../../src/layer3/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { BugEscalator } from 'layer3/bug-escalator.js';
+import type { TestFailure } from 'layer3/types.js';
 
 describe('BugEscalator', () => {
   let escalator: BugEscalator;

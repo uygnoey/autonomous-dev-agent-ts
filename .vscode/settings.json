@@ -1,3 +1,7 @@
 {
-    "claudeCode.useTerminal": true
+    "claudeCode.useTerminal": true,
+    "claudeCode.useCtrlEnterToSend": true,
+    "claudeCode.preferredLocation": "sidebar",
+    "claudeCode.initialPermissionMode": "bypassPermissions",
+    "typescript.tsdk": "node_modules/typescript/lib"
 }

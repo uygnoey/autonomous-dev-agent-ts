@@ -16,11 +16,11 @@ export {
   type IBugEscalator,
   type StepwiseVerificationResult,
   type TriggerLayer2Options,
-} from './bug-escalator.js';
+} from 'layer3/bug-escalator.js';
 export {
   DeliverableBuilder,
   type IDeliverableBuilder,
-} from './deliverable-builder.js';
+} from 'layer3/deliverable-builder.js';
 export {
   DocCollaborator,
   type CollabDocState,
@@ -30,12 +30,12 @@ export {
   type Layer1Response,
   type Layer2Request,
   type Layer2Response,
-} from './doc-collaborator.js';
+} from 'layer3/doc-collaborator.js';
 export {
   DocIntegrator,
   type IDocIntegrator,
   type IntegrateOptions,
-} from './doc-integrator.js';
+} from 'layer3/doc-integrator.js';
 export {
   type ContinuousE2EConfig,
   type ContinuousE2ESession,
@@ -43,7 +43,7 @@ export {
   type IProductionTester,
   ProductionTester,
   type StartContinuousE2EOptions,
-} from './production-tester.js';
+} from 'layer3/production-tester.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
 
@@ -70,7 +70,7 @@ export type {
   ProjectDocumentType,
   TestExecutionReport,
   TestFailure,
-} from './types.js';
+} from 'layer3/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 
@@ -78,4 +78,4 @@ export {
   DEFAULT_BUSINESS_TEMPLATES,
   DEFAULT_CONTINUOUS_E2E_CONFIG,
   DEFAULT_PROJECT_TEMPLATES,
-} from './types.js';
+} from 'layer3/types.js';

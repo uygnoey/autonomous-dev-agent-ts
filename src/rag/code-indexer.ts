@@ -7,13 +7,13 @@
  */
 
 import { join } from 'node:path';
-import { RagError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { CodeRecord, Result } from '../core/types.js';
-import type { ChunkSplitter } from './chunk-splitter.js';
-import type { EmbeddingProvider, IndexDirectoryOptions } from './types.js';
-import type { CodeVectorStore } from './vector-store.js';
+import { RagError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { CodeRecord, Result } from 'core/types.js';
+import type { ChunkSplitter } from 'rag/chunk-splitter.js';
+import type { EmbeddingProvider, IndexDirectoryOptions } from 'rag/types.js';
+import type { CodeVectorStore } from 'rag/vector-store.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

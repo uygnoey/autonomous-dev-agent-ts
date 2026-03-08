@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { BiasDetector } from '../../../src/layer2/bias-detector.js';
-import type { HookEvent } from '../../../src/layer2/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { BiasDetector } from 'layer2/bias-detector.js';
+import type { HookEvent } from 'layer2/types.js';
 
 describe('BiasDetector', () => {
   let detector: BiasDetector;

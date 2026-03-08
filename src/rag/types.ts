@@ -7,7 +7,7 @@
  *     search results, and chunk metadata.
  */
 
-import type { Result } from '../core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── 임베딩 프로바이더 / Embedding Provider ─────────────────────
 

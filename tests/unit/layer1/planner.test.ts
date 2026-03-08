@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { Planner } from '../../../src/layer1/planner.js';
-import type { ConversationMessage } from '../../../src/layer1/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { Planner } from 'layer1/planner.js';
+import type { ConversationMessage } from 'layer1/types.js';
 
 function createMessage(role: 'user' | 'assistant', content: string): ConversationMessage {
   return {

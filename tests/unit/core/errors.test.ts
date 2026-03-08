@@ -10,7 +10,7 @@ import {
   PhaseError,
   RagError,
   isAdevError,
-} from '../../../src/core/errors.js';
+} from 'core/errors.js';
 
 describe('AdevError', () => {
   it('code, message, cause를 올바르게 저장한다', () => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ApiKeyAuth } from '../../../src/auth/api-key-auth.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { ApiKeyAuth } from 'auth/api-key-auth.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 ─────────────────────────────────────────────
 

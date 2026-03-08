@@ -6,7 +6,7 @@
  * EN: Type definitions for adev CLI commands and options.
  */
 
-import type { Result } from '../core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── CLI 명령어 / CLI Commands ──────────────────────────────────
 

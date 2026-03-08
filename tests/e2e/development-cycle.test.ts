@@ -8,17 +8,17 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { ProcessExecutor } from '../../src/core/process-executor.js';
-import { PhaseEngine } from '../../src/layer2/phase-engine.js';
-import { AgentGenerator } from '../../src/layer2/agent-generator.js';
-import { CoderAllocator } from '../../src/layer2/coder-allocator.js';
-import { IntegrationTester } from '../../src/layer2/integration-tester.js';
-import { VerificationGate } from '../../src/layer2/verification-gate.js';
-import { FailureHandler } from '../../src/layer2/failure-handler.js';
-import { CleanEnvManager } from '../../src/layer2/clean-env-manager.js';
-import type { AgentName } from '../../src/core/types.js';
-import type { VerificationResult } from '../../src/layer2/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
+import { PhaseEngine } from 'layer2/phase-engine.js';
+import { AgentGenerator } from 'layer2/agent-generator.js';
+import { CoderAllocator } from 'layer2/coder-allocator.js';
+import { IntegrationTester } from 'layer2/integration-tester.js';
+import { VerificationGate } from 'layer2/verification-gate.js';
+import { FailureHandler } from 'layer2/failure-handler.js';
+import { CleanEnvManager } from 'layer2/clean-env-manager.js';
+import type { AgentName } from 'core/types.js';
+import type { VerificationResult } from 'layer2/types.js';
 
 const logger = new ConsoleLogger('error');
 const processExecutor = new ProcessExecutor(logger);

@@ -3,9 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { DocIntegrator } from '../../../src/layer3/doc-integrator.js';
-import type { DocumentTemplate } from '../../../src/layer3/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { DocIntegrator } from 'layer3/doc-integrator.js';
+import type { DocumentTemplate } from 'layer3/types.js';
 
 describe('DocIntegrator', () => {
   let integrator: DocIntegrator;

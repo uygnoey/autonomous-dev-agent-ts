@@ -12,11 +12,11 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { DocCollaborator } from './doc-collaborator.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type {
   BusinessDeliverable,
   BusinessDeliverableType,
@@ -25,7 +25,7 @@ import type {
   DeliverableMetadata,
   DocumentTemplate,
   IntegratedDocument,
-} from './types.js';
+} from 'layer3/types.js';
 
 /**
  * 기본 비즈니스 산출물 템플릿 목록 / Default business deliverable templates

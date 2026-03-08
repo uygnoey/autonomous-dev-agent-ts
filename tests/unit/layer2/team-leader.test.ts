@@ -3,25 +3,25 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { AuthProvider, RateLimitStatus } from '../../../src/auth/types.js';
-import type { Result } from '../../../src/core/types.js';
-import { ok } from '../../../src/core/types.js';
-import type { HandoffPackage } from '../../../src/layer1/types.js';
-import { AgentGenerator } from '../../../src/layer2/agent-generator.js';
-import { AgentSpawner } from '../../../src/layer2/agent-spawner.js';
-import { BiasDetector } from '../../../src/layer2/bias-detector.js';
-import { CoderAllocator } from '../../../src/layer2/coder-allocator.js';
-import { FailureHandler } from '../../../src/layer2/failure-handler.js';
-import { IntegrationTester } from '../../../src/layer2/integration-tester.js';
-import { PhaseEngine } from '../../../src/layer2/phase-engine.js';
-import { ProgressTracker } from '../../../src/layer2/progress-tracker.js';
-import { SessionManager } from '../../../src/layer2/session-manager.js';
-import { StreamMonitor } from '../../../src/layer2/stream-monitor.js';
-import { TeamLeader } from '../../../src/layer2/team-leader.js';
-import { TokenMonitor } from '../../../src/layer2/token-monitor.js';
-import type { AgentConfig, AgentEvent, AgentExecutor } from '../../../src/layer2/types.js';
-import { VerificationGate } from '../../../src/layer2/verification-gate.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
+import type { Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import type { HandoffPackage } from 'layer1/types.js';
+import { AgentGenerator } from 'layer2/agent-generator.js';
+import { AgentSpawner } from 'layer2/agent-spawner.js';
+import { BiasDetector } from 'layer2/bias-detector.js';
+import { CoderAllocator } from 'layer2/coder-allocator.js';
+import { FailureHandler } from 'layer2/failure-handler.js';
+import { IntegrationTester } from 'layer2/integration-tester.js';
+import { PhaseEngine } from 'layer2/phase-engine.js';
+import { ProgressTracker } from 'layer2/progress-tracker.js';
+import { SessionManager } from 'layer2/session-manager.js';
+import { StreamMonitor } from 'layer2/stream-monitor.js';
+import { TeamLeader } from 'layer2/team-leader.js';
+import { TokenMonitor } from 'layer2/token-monitor.js';
+import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
+import { VerificationGate } from 'layer2/verification-gate.js';
 
 /**
  * Mock AgentExecutor

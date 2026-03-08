@@ -8,10 +8,10 @@
  *     Determines system prompt, tool list, and max turns per role.
  */
 
-import type { Logger } from '../core/logger.js';
-import type { AgentName, Result } from '../core/types.js';
-import { ok } from '../core/types.js';
-import type { AgentConfig } from './types.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentName, Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import type { AgentConfig } from 'layer2/types.js';
 
 // ── 역할별 도구 정의 / Per-role tool definitions ─────────────────
 

@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ConfigCommand } from '../../../src/cli/commands/config.js';
-import { getNestedValue, parseConfigValue, setNestedValue } from '../../../src/cli/commands/config.js';
-import type { CliOptions } from '../../../src/cli/types.js';
-import { DEFAULT_CONFIG } from '../../../src/core/config.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { ConfigCommand } from 'cli/commands/config.js';
+import { getNestedValue, parseConfigValue, setNestedValue } from 'cli/commands/config.js';
+import type { CliOptions } from 'cli/types.js';
+import { DEFAULT_CONFIG } from 'core/config.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 / Test Helpers ────────────────────────────────
 

@@ -11,15 +11,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { AuthProvider } from '../../../src/auth/types.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { AgentName } from '../../../src/core/types.js';
+import type { AuthProvider } from 'auth/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { AgentName } from 'core/types.js';
 import {
   V2SessionExecutor,
   type V2SessionExecutorOptions,
   type V2SessionFactory,
-} from '../../../src/layer2/v2-session-executor.js';
-import type { AgentConfig, AgentEvent } from '../../../src/layer2/types.js';
+} from 'layer2/v2-session-executor.js';
+import type { AgentConfig, AgentEvent } from 'layer2/types.js';
 
 // ── Mock 타입 / Mock types ──────────────────────────────────────
 type MockV2SessionEvent = {

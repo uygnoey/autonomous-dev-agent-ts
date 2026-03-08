@@ -10,17 +10,17 @@
  *     Uses topological sort (Kahn's algorithm) for cyclic dependency detection.
  */
 
-import { ContractError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
+import { ContractError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 import type {
   ContractSchema,
   FeatureSpec,
   HandoffPackage,
   TestTypeDefinition,
   VerificationMatrix,
-} from './types.js';
+} from 'layer1/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

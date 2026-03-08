@@ -6,7 +6,7 @@
  * VectorRepository 인터페이스를 정의한다.
  */
 
-import type { AdevError } from './errors.js';
+import type { AdevError } from 'core/errors.js';
 
 // ── Result 패턴 ──────────────────────────────────────────────
 

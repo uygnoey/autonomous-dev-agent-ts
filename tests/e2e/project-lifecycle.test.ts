@@ -10,14 +10,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { InitCommand } from '../../src/cli/commands/init.js';
-import { ConfigCommand } from '../../src/cli/commands/config.js';
-import { ProjectCommand } from '../../src/cli/commands/project.js';
-import { StartCommand } from '../../src/cli/commands/start.js';
-import { CommandRouter } from '../../src/cli/main.js';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import type { CliOptions } from '../../src/cli/types.js';
-import { loadRegistry } from '../../src/cli/commands/project.js';
+import { InitCommand } from 'cli/commands/init.js';
+import { ConfigCommand } from 'cli/commands/config.js';
+import { ProjectCommand } from 'cli/commands/project.js';
+import { StartCommand } from 'cli/commands/start.js';
+import { CommandRouter } from 'cli/main.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { CliOptions } from 'cli/types.js';
+import { loadRegistry } from 'cli/commands/project.js';
 
 const logger = new ConsoleLogger('error');
 

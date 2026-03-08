@@ -12,14 +12,14 @@
  *     verification and 4-phase verification, requests user confirmation and returns to Layer3.
  */
 
-import { type AdevError, AgentError } from '../core/errors.js';
-import { ConsoleLogger, type Logger } from '../core/logger.js';
-import type { Phase, Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { FailureHandler } from '../layer2/failure-handler.js';
-import type { IntegrationTester } from '../layer2/integration-tester.js';
-import type { TeamLeader } from '../layer2/team-leader.js';
-import type { BugReport, BugSeverity, TestExecutionReport, TestFailure } from './types.js';
+import { type AdevError, AgentError } from 'core/errors.js';
+import { ConsoleLogger, type Logger } from 'core/logger.js';
+import type { Phase, Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { FailureHandler } from 'layer2/failure-handler.js';
+import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { TeamLeader } from 'layer2/team-leader.js';
+import type { BugReport, BugSeverity, TestExecutionReport, TestFailure } from 'layer3/types.js';
 
 /**
  * 지속 E2E 테스트 결과 (단일 실패) / Continuous E2E test result (single failure)

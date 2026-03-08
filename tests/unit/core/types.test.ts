@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { AdevError } from '../../../src/core/errors.js';
-import { err, ok } from '../../../src/core/types.js';
+import { AdevError } from 'core/errors.js';
+import { err, ok } from 'core/types.js';
 import type {
   AgentName,
   DesignDecision,
@@ -10,7 +10,7 @@ import type {
   MemoryType,
   Phase,
   Result,
-} from '../../../src/core/types.js';
+} from 'core/types.js';
 
 describe('ok()', () => {
   it('ok: true와 value를 포함한다', () => {

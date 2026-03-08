@@ -9,9 +9,9 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { ConfigError } from './errors.js';
-import { err, ok } from './types.js';
-import type { Result } from './types.js';
+import { ConfigError } from 'core/errors.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── 타입 정의 ────────────────────────────────────────────────
 

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { MemoryRepository } from '../../../src/core/memory.js';
-import type { MemoryRecord } from '../../../src/core/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { MemoryRepository } from 'core/memory.js';
+import type { MemoryRecord } from 'core/types.js';
 
 function createTestRecord(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
   return {

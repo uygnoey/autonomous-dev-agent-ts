@@ -8,12 +8,12 @@
  *     Currently simple curl-based implementation (can be extended with API keys).
  */
 
-import { AdevError } from '../../../core/errors.js';
-import type { Logger } from '../../../core/logger.js';
-import type { ProcessExecutor } from '../../../core/process-executor.js';
-import { err, ok } from '../../../core/types.js';
-import type { Result } from '../../../core/types.js';
-import type { McpTool } from '../../types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { McpTool } from 'mcp/types.js';
 
 // ── 타입 / Types ────────────────────────────────────────────
 

@@ -6,11 +6,11 @@
  * EN: Creates and validates a detailed design document from plan and feature specs.
  */
 
-import { AdevError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { FeatureSpec } from './types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { FeatureSpec } from 'layer1/types.js';
 
 // ── Designer ────────────────────────────────────────────────────
 

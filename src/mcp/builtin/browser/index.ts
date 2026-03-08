@@ -8,16 +8,16 @@
  *     Simple ProcessExecutor-based implementation (can be extended with library).
  */
 
-import type { Logger } from '../../../core/logger.js';
-import type { ProcessExecutor } from '../../../core/process-executor.js';
-import type { Result } from '../../../core/types.js';
-import type { McpServerConfig, McpTool } from '../../types.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
 import {
   BROWSER_TOOLS,
   type BrowserInput,
   type BrowserOutput,
   PlaywrightExecutor,
-} from './playwright-operations.js';
+} from 'mcp/builtin/browser/playwright-operations.js';
+import type { McpServerConfig, McpTool } from 'mcp/types.js';
 
 // ── 서버 설정 / Server Configuration ───────────────────────
 
@@ -29,7 +29,7 @@ import {
  * EN: Self-implemented using ProcessExecutor. No external npx packages needed.
  *
  * @example
- * import { BROWSER_SERVER } from './browser/index.js';
+ * import { BROWSER_SERVER } from 'mcp/builtin/browser/browser/index.js';
  * registry.register(BROWSER_SERVER);
  */
 export const BROWSER_SERVER: McpServerConfig = {
@@ -97,4 +97,4 @@ export {
   BROWSER_TOOLS,
   type BrowserInput,
   type BrowserOutput,
-} from './playwright-operations.js';
+} from 'mcp/builtin/browser/playwright-operations.js';

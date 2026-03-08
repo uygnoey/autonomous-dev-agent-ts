@@ -8,12 +8,12 @@
  *     and provides relevant conversation context through RAG search.
  */
 
-import type { AdevError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { MemoryRepository } from '../core/memory.js';
-import { ok } from '../core/types.js';
-import type { MemoryRecord, Result } from '../core/types.js';
-import type { ConversationMessage } from './types.js';
+import type { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { MemoryRepository } from 'core/memory.js';
+import { ok } from 'core/types.js';
+import type { MemoryRecord, Result } from 'core/types.js';
+import type { ConversationMessage } from 'layer1/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

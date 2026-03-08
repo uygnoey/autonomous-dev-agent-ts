@@ -12,22 +12,22 @@
  *     On VERIFY failure → analyze → rollback to appropriate phase → retry.
  */
 
-import type { Logger } from '../core/logger.js';
-import type { Phase } from '../core/types.js';
-import type { HandoffPackage } from '../layer1/types.js';
-import type { AgentGenerator } from './agent-generator.js';
-import type { AgentSpawner } from './agent-spawner.js';
-import type { BiasDetector } from './bias-detector.js';
-import type { CoderAllocator } from './coder-allocator.js';
-import type { FailureHandler } from './failure-handler.js';
-import type { IntegrationTester } from './integration-tester.js';
-import type { PhaseEngine } from './phase-engine.js';
-import type { ProgressTracker } from './progress-tracker.js';
-import type { SessionManager } from './session-manager.js';
-import type { StreamMonitor } from './stream-monitor.js';
-import type { TokenMonitor } from './token-monitor.js';
-import type { AgentEvent } from './types.js';
-import type { VerificationGate } from './verification-gate.js';
+import type { Logger } from 'core/logger.js';
+import type { Phase } from 'core/types.js';
+import type { HandoffPackage } from 'layer1/types.js';
+import type { AgentGenerator } from 'layer2/agent-generator.js';
+import type { AgentSpawner } from 'layer2/agent-spawner.js';
+import type { BiasDetector } from 'layer2/bias-detector.js';
+import type { CoderAllocator } from 'layer2/coder-allocator.js';
+import type { FailureHandler } from 'layer2/failure-handler.js';
+import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { PhaseEngine } from 'layer2/phase-engine.js';
+import type { ProgressTracker } from 'layer2/progress-tracker.js';
+import type { SessionManager } from 'layer2/session-manager.js';
+import type { StreamMonitor } from 'layer2/stream-monitor.js';
+import type { TokenMonitor } from 'layer2/token-monitor.js';
+import type { AgentEvent } from 'layer2/types.js';
+import type { VerificationGate } from 'layer2/verification-gate.js';
 
 /**
  * 최대 Phase 루프 반복 횟수 / Maximum phase loop iterations

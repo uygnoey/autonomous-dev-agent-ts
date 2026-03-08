@@ -8,10 +8,10 @@
 
 // ── 구현 클래스 ─────────────────────────────────────────────
 
-export { ApiKeyAuth } from './api-key-auth.js';
-export { createAuthProvider } from './auth-manager.js';
-export { SubscriptionAuth } from './subscription-auth.js';
+export { ApiKeyAuth } from 'auth/api-key-auth.js';
+export { createAuthProvider } from 'auth/auth-manager.js';
+export { SubscriptionAuth } from 'auth/subscription-auth.js';
 
 // ── 타입 ────────────────────────────────────────────────────
 
-export type { AuthProvider, Credential, RateLimitStatus } from './types.js';
+export type { AuthProvider, Credential, RateLimitStatus } from 'auth/types.js';

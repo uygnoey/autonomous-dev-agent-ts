@@ -23,35 +23,35 @@ export type {
   TestRatios,
   TestTypeDefinition,
   VerificationMatrix,
-} from './types.js';
+} from 'layer1/types.js';
 
 // ── 대화 관리 ───────────────────────────────────────────────────
 
-export { ConversationManager } from './conversation.js';
+export { ConversationManager } from 'layer1/conversation.js';
 
 // ── 기획 ────────────────────────────────────────────────────────
 
-export { Planner } from './planner.js';
+export { Planner } from 'layer1/planner.js';
 
 // ── 설계 ────────────────────────────────────────────────────────
 
-export { Designer } from './designer.js';
+export { Designer } from 'layer1/designer.js';
 
 // ── 스펙 빌더 ───────────────────────────────────────────────────
 
-export { SpecBuilder } from './spec-builder.js';
+export { SpecBuilder } from 'layer1/spec-builder.js';
 
 // ── 테스트 타입 설계 ────────────────────────────────────────────
 
-export { TestTypeDesigner } from './test-type-designer.js';
+export { TestTypeDesigner } from 'layer1/test-type-designer.js';
 
 // ── Contract 빌더 ───────────────────────────────────────────────
 
-export { ContractBuilder } from './contract-builder.js';
+export { ContractBuilder } from 'layer1/contract-builder.js';
 
 // ── 검증기 ──────────────────────────────────────────────────────
 
-export { Layer1Verifier } from './verifier.js';
+export { Layer1Verifier } from 'layer1/verifier.js';
 
 // ── Claude API ──────────────────────────────────────────────────
 
@@ -62,4 +62,4 @@ export {
   type ClaudeApiResponseMetadata,
   type ClaudeStreamEvent,
   type StreamCallback,
-} from './claude-api.js';
+} from 'layer1/claude-api.js';

@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { HandoffReceiver } from '../../../src/layer2/handoff-receiver.js';
-import type { ContractSchema, HandoffPackage } from '../../../src/layer1/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { HandoffReceiver } from 'layer2/handoff-receiver.js';
+import type { ContractSchema, HandoffPackage } from 'layer1/types.js';
 
 /**
  * 유효한 Contract를 생성한다 / Creates a valid contract

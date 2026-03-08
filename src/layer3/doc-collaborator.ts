@@ -13,20 +13,20 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { ClaudeApi } from '../layer1/claude-api.js';
-import type { AgentSpawner } from '../layer2/agent-spawner.js';
-import type { AgentConfig } from '../layer2/types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { ClaudeApi } from 'layer1/claude-api.js';
+import type { AgentSpawner } from 'layer2/agent-spawner.js';
+import type { AgentConfig } from 'layer2/types.js';
 import type {
   BusinessDeliverableType,
   CollaborativeDocOptions,
   CollaborativeDocResult,
   DocumentFragment,
   ProjectDocumentType,
-} from './types.js';
+} from 'layer3/types.js';
 
 // ── 타입 정의 ───────────────────────────────────────────────
 

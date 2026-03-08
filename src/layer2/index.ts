@@ -8,23 +8,23 @@
 
 // ── 구현 클래스 / Implementation classes ────────────────────────
 
-export { AgentGenerator } from './agent-generator.js';
-export { AgentSpawner } from './agent-spawner.js';
-export { BiasDetector } from './bias-detector.js';
-export { CleanEnvManager } from './clean-env-manager.js';
-export { CoderAllocator } from './coder-allocator.js';
-export { FailureHandler } from './failure-handler.js';
-export { HandoffReceiver } from './handoff-receiver.js';
-export { IntegrationTester } from './integration-tester.js';
-export { PhaseEngine } from './phase-engine.js';
-export { ProgressTracker } from './progress-tracker.js';
-export { SessionManager } from './session-manager.js';
-export { StreamMonitor } from './stream-monitor.js';
-export { TeamLeader } from './team-leader.js';
-export { TokenMonitor } from './token-monitor.js';
-export { UserCheckpoint } from './user-checkpoint.js';
-export { V2SessionExecutor } from './v2-session-executor.js';
-export { VerificationGate } from './verification-gate.js';
+export { AgentGenerator } from 'layer2/agent-generator.js';
+export { AgentSpawner } from 'layer2/agent-spawner.js';
+export { BiasDetector } from 'layer2/bias-detector.js';
+export { CleanEnvManager } from 'layer2/clean-env-manager.js';
+export { CoderAllocator } from 'layer2/coder-allocator.js';
+export { FailureHandler } from 'layer2/failure-handler.js';
+export { HandoffReceiver } from 'layer2/handoff-receiver.js';
+export { IntegrationTester } from 'layer2/integration-tester.js';
+export { PhaseEngine } from 'layer2/phase-engine.js';
+export { ProgressTracker } from 'layer2/progress-tracker.js';
+export { SessionManager } from 'layer2/session-manager.js';
+export { StreamMonitor } from 'layer2/stream-monitor.js';
+export { TeamLeader } from 'layer2/team-leader.js';
+export { TokenMonitor } from 'layer2/token-monitor.js';
+export { UserCheckpoint } from 'layer2/user-checkpoint.js';
+export { V2SessionExecutor } from 'layer2/v2-session-executor.js';
+export { VerificationGate } from 'layer2/verification-gate.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
 
@@ -51,8 +51,8 @@ export type {
   SessionState,
   VerificationPhase,
   VerificationResult,
-} from './types.js';
+} from 'layer2/types.js';
 
-export type { TeamLeaderDeps } from './team-leader.js';
-export type { CheckpointData, UserDecision } from './user-checkpoint.js';
-export type { V2SessionExecutorOptions } from './v2-session-executor.js';
+export type { TeamLeaderDeps } from 'layer2/team-leader.js';
+export type { CheckpointData, UserDecision } from 'layer2/user-checkpoint.js';
+export type { V2SessionExecutorOptions } from 'layer2/v2-session-executor.js';

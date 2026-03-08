@@ -7,10 +7,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { ClaudeApi } from '../../../src/layer1/claude-api.js';
-import type { AuthProvider } from '../../../src/auth/types.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { AgentError } from '../../../src/core/errors.js';
+import { ClaudeApi } from 'layer1/claude-api.js';
+import type { AuthProvider } from 'auth/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { AgentError } from 'core/errors.js';
 
 // ── Mock AuthProvider ────────────────────────────────────────
 

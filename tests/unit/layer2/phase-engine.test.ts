@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { PhaseEngine } from '../../../src/layer2/phase-engine.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { PhaseEngine } from 'layer2/phase-engine.js';
 
 describe('PhaseEngine', () => {
   let engine: PhaseEngine;

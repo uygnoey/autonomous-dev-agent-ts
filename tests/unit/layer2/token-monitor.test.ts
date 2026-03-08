@@ -3,11 +3,11 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { AuthProvider, RateLimitStatus } from '../../../src/auth/types.js';
-import type { Result } from '../../../src/core/types.js';
-import { ok } from '../../../src/core/types.js';
-import { TokenMonitor } from '../../../src/layer2/token-monitor.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
+import type { Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import { TokenMonitor } from 'layer2/token-monitor.js';
 
 /**
  * AuthProvider 모의 객체 / Mock AuthProvider

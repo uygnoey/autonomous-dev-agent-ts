@@ -8,17 +8,17 @@
  *     Simple implementation using ProcessExecutor + curl.
  */
 
-import type { Logger } from '../../../core/logger.js';
-import type { ProcessExecutor } from '../../../core/process-executor.js';
-import type { Result } from '../../../core/types.js';
-import type { McpServerConfig, McpTool } from '../../types.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
 import {
   type FetchInput,
   SearchExecutor,
   type SearchInput,
   type SearchOutput,
   WEB_SEARCH_TOOLS,
-} from './search-operations.js';
+} from 'mcp/builtin/web-search/search-operations.js';
+import type { McpServerConfig, McpTool } from 'mcp/types.js';
 
 // ── 서버 설정 / Server Configuration ───────────────────────
 
@@ -30,7 +30,7 @@ import {
  * EN: Self-implemented using ProcessExecutor. No external npx packages needed.
  *
  * @example
- * import { WEB_SEARCH_SERVER } from './web-search/index.js';
+ * import { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/web-search/index.js';
  * registry.register(WEB_SEARCH_SERVER);
  */
 export const WEB_SEARCH_SERVER: McpServerConfig = {
@@ -100,4 +100,4 @@ export {
   type SearchInput,
   type FetchInput,
   type SearchOutput,
-} from './search-operations.js';
+} from 'mcp/builtin/web-search/search-operations.js';

@@ -13,11 +13,11 @@
  *     Recommends rollback to appropriate phase based on failure type.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Phase, Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { FailureReport, FailureType, RecoveryAction } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Phase, Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { FailureReport, FailureType, RecoveryAction } from 'layer2/types.js';
 
 /**
  * 실패 유형별 키워드 매핑 / Keyword mapping per failure type

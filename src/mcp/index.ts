@@ -13,12 +13,12 @@ export type {
   McpServerInstance,
   McpServerStatus,
   McpTool,
-} from './types.js';
+} from 'mcp/types.js';
 
 // ── 클래스 ───────────────────────────────────────────────────
-export { McpLoader } from './loader.js';
-export { McpManager } from './mcp-manager.js';
-export { McpRegistry } from './registry.js';
+export { McpLoader } from 'mcp/loader.js';
+export { McpManager } from 'mcp/mcp-manager.js';
+export { McpRegistry } from 'mcp/registry.js';
 
 // ── 내장 서버 ────────────────────────────────────────────────
 export {
@@ -27,4 +27,4 @@ export {
   GIT_SERVER,
   OS_CONTROL_SERVER,
   WEB_SEARCH_SERVER,
-} from './builtin/index.js';
+} from 'mcp/builtin/index.js';

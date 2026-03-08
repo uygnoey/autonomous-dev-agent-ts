@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { SessionManager } from '../../../src/layer2/session-manager.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { SessionManager } from 'layer2/session-manager.js';
 
 describe('SessionManager', () => {
   let manager: SessionManager;

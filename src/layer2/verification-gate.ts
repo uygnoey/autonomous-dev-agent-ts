@@ -8,11 +8,11 @@
  *     Collects results per stage and determines overall pass/fail.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { VerificationPhase, VerificationResult } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { VerificationPhase, VerificationResult } from 'layer2/types.js';
 
 /**
  * 4중 검증 순서 / 4-layer verification order

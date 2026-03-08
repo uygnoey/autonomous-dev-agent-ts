@@ -12,13 +12,13 @@
  *     Fail-Fast: stops immediately on first failure.
  */
 
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { ProcessExecutor } from '../core/process-executor.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { CleanEnvManager } from './clean-env-manager.js';
-import type { IntegrationStepResult } from './types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { ProcessExecutor } from 'core/process-executor.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { CleanEnvManager } from 'layer2/clean-env-manager.js';
+import type { IntegrationStepResult } from 'layer2/types.js';
 
 /**
  * 유효한 통합 테스트 단계 / Valid integration test steps

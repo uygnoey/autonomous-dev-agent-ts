@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { McpLoader } from '../../../src/mcp/loader.js';
-import { McpManager } from '../../../src/mcp/mcp-manager.js';
-import { McpRegistry } from '../../../src/mcp/registry.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { McpLoader } from 'mcp/loader.js';
+import { McpManager } from 'mcp/mcp-manager.js';
+import { McpRegistry } from 'mcp/registry.js';
 
 describe('McpManager', () => {
   let tempDir: string;

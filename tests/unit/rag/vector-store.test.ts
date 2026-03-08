@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { CodeRecord } from '../../../src/core/types.js';
-import { CodeVectorStore } from '../../../src/rag/vector-store.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { CodeRecord } from 'core/types.js';
+import { CodeVectorStore } from 'rag/vector-store.js';
 
 function createTestCodeRecord(overrides: Partial<CodeRecord> = {}): CodeRecord {
   return {

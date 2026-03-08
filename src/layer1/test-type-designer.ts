@@ -8,16 +8,16 @@
  *     and generates sample tests and ratios.
  */
 
-import type { Logger } from '../core/logger.js';
-import { ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
+import type { Logger } from 'core/logger.js';
+import { ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 import type {
   FeatureSpec,
   SampleTest,
   TestCategory,
   TestRatios,
   TestTypeDefinition,
-} from './types.js';
+} from 'layer1/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

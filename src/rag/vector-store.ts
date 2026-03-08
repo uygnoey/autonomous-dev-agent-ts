@@ -10,11 +10,11 @@
 
 import * as lancedb from '@lancedb/lancedb';
 import type { Table as LanceTable } from '@lancedb/lancedb';
-import { RagError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { CodeRecord, Result, VectorRepository } from '../core/types.js';
-import type { SearchResult } from './types.js';
+import { RagError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { CodeRecord, Result, VectorRepository } from 'core/types.js';
+import type { SearchResult } from 'rag/types.js';
 
 // ── flat 레코드 (LanceDB 저장용) / Flat record for LanceDB ─────
 

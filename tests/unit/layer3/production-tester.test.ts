@@ -7,10 +7,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import type { IntegrationTester } from '../../../src/layer2/integration-tester.js';
-import { ProductionTester } from '../../../src/layer3/production-tester.js';
-import type { E2ETestRun } from '../../../src/layer3/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { IntegrationTester } from 'layer2/integration-tester.js';
+import { ProductionTester } from 'layer3/production-tester.js';
+import type { E2ETestRun } from 'layer3/types.js';
 
 /**
  * Mock IntegrationTester for testing

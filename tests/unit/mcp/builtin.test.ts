@@ -5,8 +5,8 @@ import {
   GIT_SERVER,
   OS_CONTROL_SERVER,
   WEB_SEARCH_SERVER,
-} from '../../../src/mcp/builtin/index.js';
-import type { McpServerConfig } from '../../../src/mcp/types.js';
+} from 'mcp/builtin/index.js';
+import type { McpServerConfig } from 'mcp/types.js';
 
 describe('Built-in MCP Servers', () => {
   // ── 개별 설정 검증 ─────────────────────────────────────────

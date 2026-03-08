@@ -12,5 +12,31 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "model": "sonnet"
+  "model": "sonnet",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/load-context.sh",
+            "timeout": 10,
+            "statusMessage": "프로젝트 컨텍스트 로딩..."
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/load-context.sh",
+            "timeout": 10,
+            "statusMessage": "compact 전 컨텍스트 재주입..."
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { ConsoleLogger, maskSensitiveData } from '../../../src/core/logger.js';
-import type { Logger } from '../../../src/core/logger.js';
+import { ConsoleLogger, maskSensitiveData } from 'core/logger.js';
+import type { Logger } from 'core/logger.js';
 
 // ── maskSensitiveData ────────────────────────────────────────
 

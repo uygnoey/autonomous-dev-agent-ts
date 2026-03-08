@@ -9,11 +9,11 @@
  */
 
 import { type FeatureExtractionPipeline, pipeline } from '@huggingface/transformers';
-import { RagError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { EmbeddingProvider, EmbeddingTier } from './types.js';
+import { RagError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { EmbeddingProvider, EmbeddingTier } from 'rag/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

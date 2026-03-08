@@ -8,7 +8,7 @@
  *     Document templates, deliverable types, bug reports, continuous E2E config.
  */
 
-import type { Phase } from '../core/types.js';
+import type { Phase } from 'core/types.js';
 
 // ── 문서 템플릿 / Document Template ─────────────────────────────
 

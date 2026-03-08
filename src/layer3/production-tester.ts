@@ -20,13 +20,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { AdevError } from '../core/errors.js';
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { err, ok } from '../core/types.js';
-import type { IntegrationTester } from '../layer2/integration-tester.js';
-import type { E2ETestRun, TestExecutionReport, TestFailure } from './types.js';
+import type { AdevError } from 'core/errors.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
+import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { E2ETestRun, TestExecutionReport, TestFailure } from 'layer3/types.js';
 
 // ── 타입 정의 / Type Definitions ────────────────────────────────
 

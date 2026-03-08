@@ -6,13 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { promises as fs, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { DeliverableBuilder } from '../../../src/layer3/deliverable-builder.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { DeliverableBuilder } from 'layer3/deliverable-builder.js';
 import type {
   DeliverableBuildOptions,
   DeliverableMetadata,
   DocumentTemplate,
-} from '../../../src/layer3/types.js';
+} from 'layer3/types.js';
 
 describe('DeliverableBuilder', () => {
   let builder: DeliverableBuilder;

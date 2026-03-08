@@ -9,11 +9,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { ClaudeApi } from '../../src/layer1/claude-api.js';
-import { ApiKeyAuth } from '../../src/auth/api-key-auth.js';
-import { SubscriptionAuth } from '../../src/auth/subscription-auth.js';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import type { AuthProvider } from '../../src/auth/types.js';
+import { ClaudeApi } from 'layer1/claude-api.js';
+import { ApiKeyAuth } from 'auth/api-key-auth.js';
+import { SubscriptionAuth } from 'auth/subscription-auth.js';
+import { ConsoleLogger } from 'core/logger.js';
+import type { AuthProvider } from 'auth/types.js';
 
 // ── Mock Anthropic SDK (통합 테스트용) ───────────────────────
 

@@ -8,14 +8,14 @@
  *     based on environment variables.
  */
 
-import { loadEnvironment } from '../core/config.js';
-import { AuthError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import { ApiKeyAuth } from './api-key-auth.js';
-import { SubscriptionAuth } from './subscription-auth.js';
-import type { AuthProvider } from './types.js';
+import { ApiKeyAuth } from 'auth/api-key-auth.js';
+import { SubscriptionAuth } from 'auth/subscription-auth.js';
+import type { AuthProvider } from 'auth/types.js';
+import { loadEnvironment } from 'core/config.js';
+import { AuthError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── createAuthProvider ──────────────────────────────────────
 

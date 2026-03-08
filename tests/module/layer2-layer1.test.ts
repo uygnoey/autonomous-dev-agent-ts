@@ -11,22 +11,22 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
-import { ContractBuilder } from '../../src/layer1/index.js';
+import { ConsoleLogger } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
+import { ContractBuilder } from 'layer1/index.js';
 import type {
   AcceptanceCriterion,
   FeatureSpec,
   HandoffPackage,
   TestTypeDefinition,
-} from '../../src/layer1/types.js';
+} from 'layer1/types.js';
 import {
   HandoffReceiver,
   PhaseEngine,
   ProgressTracker,
   VerificationGate,
-} from '../../src/layer2/index.js';
-import type { VerificationResult } from '../../src/layer2/types.js';
+} from 'layer2/index.js';
+import type { VerificationResult } from 'layer2/types.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

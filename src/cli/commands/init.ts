@@ -10,13 +10,13 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
+import type { AuthMethod, CliOptions, ProjectInfo, ProjectRegistry } from 'cli/types.js';
+import { loadEnvironment } from 'core/config.js';
+import { ConfigError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { err, ok } from 'core/types.js';
 import inquirer from 'inquirer';
-import { loadEnvironment } from '../../core/config.js';
-import { ConfigError } from '../../core/errors.js';
-import type { Logger } from '../../core/logger.js';
-import type { Result } from '../../core/types.js';
-import { err, ok } from '../../core/types.js';
-import type { AuthMethod, CliOptions, ProjectInfo, ProjectRegistry } from '../types.js';
 
 /**
  * Init 명령어 핸들러 인터페이스 / Init command handler interface

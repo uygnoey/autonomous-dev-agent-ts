@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { AdevError } from '../../../src/core/errors.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { ok } from '../../../src/core/types.js';
-import type { Result } from '../../../src/core/types.js';
-import { CommandRouter } from '../../../src/cli/main.js';
-import type { CliCommand, CliOptions } from '../../../src/cli/types.js';
+import { AdevError } from 'core/errors.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import { CommandRouter } from 'cli/main.js';
+import type { CliCommand, CliOptions } from 'cli/types.js';
 
 // ── 테스트 헬퍼 / Test Helpers ────────────────────────────────
 

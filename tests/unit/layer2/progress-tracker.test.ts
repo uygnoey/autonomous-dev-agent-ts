@@ -3,9 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { ProgressTracker } from '../../../src/layer2/progress-tracker.js';
-import type { VerificationResult } from '../../../src/layer2/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProgressTracker } from 'layer2/progress-tracker.js';
+import type { VerificationResult } from 'layer2/types.js';
 
 describe('ProgressTracker', () => {
   let tracker: ProgressTracker;

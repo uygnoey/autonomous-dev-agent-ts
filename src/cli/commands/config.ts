@@ -19,13 +19,13 @@
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { DEFAULT_CONFIG, validateConfig } from '../../core/config.js';
-import type { ConfigSchema, DeepPartial } from '../../core/config.js';
-import { AdevError, type ConfigError } from '../../core/errors.js';
-import type { Logger } from '../../core/logger.js';
-import { err, ok } from '../../core/types.js';
-import type { Result } from '../../core/types.js';
-import type { CliOptions, GlobalCliOptions } from '../types.js';
+import type { CliOptions, GlobalCliOptions } from 'cli/types.js';
+import { DEFAULT_CONFIG, validateConfig } from 'core/config.js';
+import type { ConfigSchema, DeepPartial } from 'core/config.js';
+import { AdevError, type ConfigError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── ConfigCommand ──────────────────────────────────────────────
 

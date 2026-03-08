@@ -12,16 +12,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger, MemoryRepository } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
-import type { CodeRecord, MemoryRecord } from '../../src/core/types.js';
+import { ConsoleLogger, MemoryRepository } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
+import type { CodeRecord, MemoryRecord } from 'core/types.js';
 import {
   ChunkSplitter,
   CodeIndexer,
   CodeVectorStore,
   RagSearcher,
   createTransformersEmbeddingProvider,
-} from '../../src/rag/index.js';
+} from 'rag/index.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

@@ -8,19 +8,19 @@
  *     All implemented with ProcessExecutor, no external dependencies.
  */
 
-import type { McpServerConfig } from '../types.js';
+import type { McpServerConfig } from 'mcp/types.js';
 
 // ── 서버 설정 / Server Configurations ──────────────────────
 
-export { OS_CONTROL_SERVER } from './os-control/index.js';
-export { BROWSER_SERVER } from './browser/index.js';
-export { WEB_SEARCH_SERVER } from './web-search/index.js';
-export { GIT_SERVER } from './git/index.js';
+export { OS_CONTROL_SERVER } from 'mcp/builtin/os-control/index.js';
+export { BROWSER_SERVER } from 'mcp/builtin/browser/index.js';
+export { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/index.js';
+export { GIT_SERVER } from 'mcp/builtin/git/index.js';
 
-import { BROWSER_SERVER } from './browser/index.js';
-import { GIT_SERVER } from './git/index.js';
-import { OS_CONTROL_SERVER } from './os-control/index.js';
-import { WEB_SEARCH_SERVER } from './web-search/index.js';
+import { BROWSER_SERVER } from 'mcp/builtin/browser/index.js';
+import { GIT_SERVER } from 'mcp/builtin/git/index.js';
+import { OS_CONTROL_SERVER } from 'mcp/builtin/os-control/index.js';
+import { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/index.js';
 
 /**
  * 모든 내장 MCP 서버 설정 배열 / Array of all built-in MCP server configurations
@@ -45,17 +45,17 @@ export const BUILTIN_SERVERS: readonly McpServerConfig[] = [
 
 // ── 서버 인스턴스 / Server Instances ───────────────────────
 
-export { OsControlServer } from './os-control/index.js';
-export { BrowserServer } from './browser/index.js';
-export { WebSearchServer } from './web-search/index.js';
-export { GitServer } from './git/index.js';
+export { OsControlServer } from 'mcp/builtin/os-control/index.js';
+export { BrowserServer } from 'mcp/builtin/browser/index.js';
+export { WebSearchServer } from 'mcp/builtin/web-search/index.js';
+export { GitServer } from 'mcp/builtin/git/index.js';
 
 // ── 도구 목록 / Tool Lists ─────────────────────────────────
 
-export { OS_CONTROL_TOOLS } from './os-control/index.js';
-export { BROWSER_TOOLS } from './browser/index.js';
-export { WEB_SEARCH_TOOLS } from './web-search/index.js';
-export { GIT_TOOLS } from './git/index.js';
+export { OS_CONTROL_TOOLS } from 'mcp/builtin/os-control/index.js';
+export { BROWSER_TOOLS } from 'mcp/builtin/browser/index.js';
+export { WEB_SEARCH_TOOLS } from 'mcp/builtin/web-search/index.js';
+export { GIT_TOOLS } from 'mcp/builtin/git/index.js';
 
 // ── 타입 / Types ───────────────────────────────────────────
 
@@ -65,14 +65,14 @@ export type {
   ProcessInput,
   ProcessOutput,
   SystemInfoOutput,
-} from './os-control/index.js';
+} from 'mcp/builtin/os-control/index.js';
 
-export type { BrowserInput, BrowserOutput } from './browser/index.js';
+export type { BrowserInput, BrowserOutput } from 'mcp/builtin/browser/index.js';
 
 export type {
   SearchInput,
   FetchInput,
   SearchOutput,
-} from './web-search/index.js';
+} from 'mcp/builtin/web-search/index.js';
 
-export type { GitInput, GitOutput } from './git/index.js';
+export type { GitInput, GitOutput } from 'mcp/builtin/git/index.js';

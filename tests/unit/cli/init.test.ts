@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { InitCommand } from '../../../src/cli/commands/init.js';
-import type { CliOptions } from '../../../src/cli/types.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { InitCommand } from 'cli/commands/init.js';
+import type { CliOptions } from 'cli/types.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 테스트 헬퍼 / Test Helpers ────────────────────────────────
 

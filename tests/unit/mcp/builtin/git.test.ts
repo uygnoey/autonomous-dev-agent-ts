@@ -9,9 +9,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../../src/core/logger.js';
-import { ProcessExecutor } from '../../../../src/core/process-executor.js';
-import { GitServer, GIT_SERVER } from '../../../../src/mcp/builtin/git/index.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
+import { GitServer, GIT_SERVER } from 'mcp/builtin/git/index.js';
 
 let logger: ConsoleLogger;
 let executor: ProcessExecutor;

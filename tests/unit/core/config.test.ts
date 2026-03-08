@@ -8,8 +8,8 @@ import {
   loadConfig,
   loadEnvironment,
   validateConfig,
-} from '../../../src/core/config.js';
-import type { ConfigSchema } from '../../../src/core/config.js';
+} from 'core/config.js';
+import type { ConfigSchema } from 'core/config.js';
 
 // ── loadEnvironment ──────────────────────────────────────────
 

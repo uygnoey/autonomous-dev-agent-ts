@@ -11,11 +11,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { McpLoader } from '../../src/mcp/loader.js';
-import { McpRegistry } from '../../src/mcp/registry.js';
-import { McpManager } from '../../src/mcp/mcp-manager.js';
-import type { McpServerConfig } from '../../src/mcp/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { McpLoader } from 'mcp/loader.js';
+import { McpRegistry } from 'mcp/registry.js';
+import { McpManager } from 'mcp/mcp-manager.js';
+import type { McpServerConfig } from 'mcp/types.js';
 
 const logger = new ConsoleLogger('error');
 

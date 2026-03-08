@@ -6,11 +6,11 @@
  * EN: Registers CLI commands, parses arguments, and routes to the appropriate command.
  */
 
-import { AdevError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { CliCommand, CliOptions } from './types.js';
+import type { CliCommand, CliOptions } from 'cli/types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── 타입 / Types ───────────────────────────────────────────────
 

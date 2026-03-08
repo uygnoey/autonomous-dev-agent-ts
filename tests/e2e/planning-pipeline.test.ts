@@ -7,14 +7,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../src/core/logger.js';
-import { Planner } from '../../src/layer1/planner.js';
-import { Designer } from '../../src/layer1/designer.js';
-import { SpecBuilder } from '../../src/layer1/spec-builder.js';
-import { TestTypeDesigner } from '../../src/layer1/test-type-designer.js';
-import { ContractBuilder } from '../../src/layer1/contract-builder.js';
-import { HandoffReceiver } from '../../src/layer2/handoff-receiver.js';
-import type { ConversationMessage, FeatureSpec } from '../../src/layer1/types.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { Planner } from 'layer1/planner.js';
+import { Designer } from 'layer1/designer.js';
+import { SpecBuilder } from 'layer1/spec-builder.js';
+import { TestTypeDesigner } from 'layer1/test-type-designer.js';
+import { ContractBuilder } from 'layer1/contract-builder.js';
+import { HandoffReceiver } from 'layer2/handoff-receiver.js';
+import type { ConversationMessage, FeatureSpec } from 'layer1/types.js';
 
 const logger = new ConsoleLogger('error');
 

@@ -8,10 +8,10 @@
  *     agent spawn throttling and pause decisions.
  */
 
-import type { AuthProvider, RateLimitStatus } from '../auth/types.js';
-import type { Logger } from '../core/logger.js';
-import type { Result } from '../core/types.js';
-import { ok } from '../core/types.js';
+import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
+import type { Logger } from 'core/logger.js';
+import type { Result } from 'core/types.js';
+import { ok } from 'core/types.js';
 
 /**
  * 스로틀 임계값: 잔여량이 전체의 20% 이하일 때 / Throttle when remaining <= 20% of limit

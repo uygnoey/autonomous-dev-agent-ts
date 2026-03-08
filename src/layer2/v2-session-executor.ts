@@ -50,11 +50,11 @@ type V2PromptOptions = {
   tools?: string[];
   environment?: Record<string, string>;
 };
-import type { AuthProvider } from '../auth/types.js';
-import { AgentError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { type AgentName, type Result, err, ok } from '../core/types.js';
-import type { AgentConfig, AgentEvent, AgentEventType, AgentExecutor } from './types.js';
+import type { AuthProvider } from 'auth/types.js';
+import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { type AgentName, type Result, err, ok } from 'core/types.js';
+import type { AgentConfig, AgentEvent, AgentEventType, AgentExecutor } from 'layer2/types.js';
 
 // WHY: SDK가 programmatic API를 export하지 않으므로 스텁 함수로 대체.
 //      SDK가 unstable_v2_createSession을 export하면 이 스텁을 제거하고 import로 교체한다.

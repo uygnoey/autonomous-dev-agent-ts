@@ -16,15 +16,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { access, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ConsoleLogger } from '../../src/core/index.js';
-import type { Logger } from '../../src/core/logger.js';
+import { ConsoleLogger } from 'core/index.js';
+import type { Logger } from 'core/logger.js';
 import {
   CommandRouter,
   ConfigCommand,
   InitCommand,
   ProjectCommand,
   StartCommand,
-} from '../../src/cli/index.js';
+} from 'cli/index.js';
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 

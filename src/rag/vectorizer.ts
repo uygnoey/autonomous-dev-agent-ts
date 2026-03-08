@@ -8,17 +8,17 @@
  *     Provides initialize → index → search workflow through a single entry point.
  */
 
-import type { EmbeddingConfig } from '../core/config.js';
-import { RagError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { CodeRecord, Result } from '../core/types.js';
-import { ChunkSplitter } from './chunk-splitter.js';
-import { CodeIndexer } from './code-indexer.js';
-import { createTransformersEmbeddingProvider } from './embeddings.js';
-import { RagSearcher } from './search.js';
-import type { EmbeddingProvider, IndexDirectoryOptions, SearchResult } from './types.js';
-import { CodeVectorStore } from './vector-store.js';
+import type { EmbeddingConfig } from 'core/config.js';
+import { RagError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { CodeRecord, Result } from 'core/types.js';
+import { ChunkSplitter } from 'rag/chunk-splitter.js';
+import { CodeIndexer } from 'rag/code-indexer.js';
+import { createTransformersEmbeddingProvider } from 'rag/embeddings.js';
+import { RagSearcher } from 'rag/search.js';
+import type { EmbeddingProvider, IndexDirectoryOptions, SearchResult } from 'rag/types.js';
+import { CodeVectorStore } from 'rag/vector-store.js';
 
 // ── Vectorizer ──────────────────────────────────────────────────
 

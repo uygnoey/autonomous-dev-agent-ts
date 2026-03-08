@@ -8,7 +8,7 @@
  *     4-Phase FSM, agent spawning, session management, token monitoring, verification gates.
  */
 
-import type { AgentName, FeatureStatus, Phase } from '../core/types.js';
+import type { AgentName, FeatureStatus, Phase } from 'core/types.js';
 
 // ── 에이전트 설정 / Agent Configuration ─────────────────────────
 

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createAuthProvider } from '../../../src/auth/auth-manager.js';
-import { ApiKeyAuth } from '../../../src/auth/api-key-auth.js';
-import { SubscriptionAuth } from '../../../src/auth/subscription-auth.js';
-import { ConsoleLogger } from '../../../src/core/logger.js';
+import { createAuthProvider } from 'auth/auth-manager.js';
+import { ApiKeyAuth } from 'auth/api-key-auth.js';
+import { SubscriptionAuth } from 'auth/subscription-auth.js';
+import { ConsoleLogger } from 'core/logger.js';
 
 // ── 환경변수 백업/복원 헬퍼 ─────────────────────────────────
 

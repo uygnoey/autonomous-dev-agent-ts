@@ -10,11 +10,11 @@
  *     and estimates subscription limits using a 5-hour rolling window.
  */
 
-import type { AuthMode } from '../core/config.js';
-import type { Logger } from '../core/logger.js';
-import { ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { AuthProvider, RateLimitStatus } from './types.js';
+import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
+import type { AuthMode } from 'core/config.js';
+import type { Logger } from 'core/logger.js';
+import { ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 
 // ── 상수 ────────────────────────────────────────────────────
 

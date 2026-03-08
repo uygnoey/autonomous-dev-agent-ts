@@ -8,18 +8,18 @@
  *     Performs yargs-based command parsing, global option handling, and error handling.
  */
 
+import type { CliCommandHandler, CliResult } from 'cli/types.js';
+import { EXIT_CODES } from 'cli/types.js';
+import { isAdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 // WHY: package.json에서 버전을 동적으로 읽어 단일 소스 유지
 import packageJson from '../../package.json' with { type: 'json' };
-import { isAdevError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import type { CliCommandHandler, CliResult } from './types.js';
-import { EXIT_CODES } from './types.js';
 
 // WHY: 테스트 및 외부에서 main.ts를 통해 CommandRouter에 접근할 수 있도록 re-export
-export { CommandRouter } from './command-router.js';
-export type { ParsedArgs, RoutableCommand } from './command-router.js';
+export { CommandRouter } from 'cli/command-router.js';
+export type { ParsedArgs, RoutableCommand } from 'cli/command-router.js';
 
 /**
  * CLI 애플리케이션 버전 / CLI application version
@@ -170,7 +170,7 @@ export class CliApp implements ICliApp {
 
       if (!command) {
         this.logger.error('명령어가 지정되지 않음');
-        console.error('Error: No command specified. Use --help for usage information.');
+        process.stderr.write('Error: No command specified. Use --help for usage information.\n');
         return EXIT_CODES.INVALID_USAGE;
       }
 
@@ -179,7 +179,9 @@ export class CliApp implements ICliApp {
 
       if (!handler) {
         this.logger.error('알 수 없는 명령어', { command });
-        console.error(`Error: Unknown command '${command}'. Use --help for available commands.`);
+        process.stderr.write(
+          `Error: Unknown command '${command}'. Use --help for available commands.\n`,
+        );
         return EXIT_CODES.INVALID_USAGE;
       }
 
@@ -190,12 +192,12 @@ export class CliApp implements ICliApp {
       // WHY: 결과 출력
       if (result.success) {
         if (result.message) {
-          console.log(result.message);
+          process.stdout.write(`${result.message}\n`);
         }
         this.logger.info('명령어 실행 완료', { command, exitCode: result.exitCode });
       } else {
         if (result.message) {
-          console.error(result.message);
+          process.stderr.write(`${result.message}\n`);
         }
         this.logger.error('명령어 실행 실패', { command, exitCode: result.exitCode });
       }
@@ -209,7 +211,7 @@ export class CliApp implements ICliApp {
           message: error.message,
           cause: error.cause,
         });
-        console.error(`Error: ${error.message}`);
+        process.stderr.write(`Error: ${error.message}\n`);
 
         // WHY: 에러 코드에 따라 적절한 종료 코드 매핑
         if (error.code.startsWith('auth_')) {
@@ -223,7 +225,7 @@ export class CliApp implements ICliApp {
 
       // WHY: 예상치 못한 에러
       this.logger.error('예상치 못한 에러', { error: String(error) });
-      console.error('An unexpected error occurred. Please check logs for details.');
+      process.stderr.write('An unexpected error occurred. Please check logs for details.\n');
       return EXIT_CODES.GENERAL_ERROR;
     }
   }
@@ -279,13 +281,13 @@ adev - Claude Code Agent Development CLI
   https://github.com/uygnoey/autonomous-dev-agent-ts
 `;
 
-    console.log(help.trim());
+    process.stdout.write(`${help.trim()}\n`);
   }
 
   /**
    * 버전을 표시한다 / Show version
    */
   showVersion(): void {
-    console.log(`adev v${CLI_VERSION}`);
+    process.stdout.write(`adev v${CLI_VERSION}\n`);
   }
 }

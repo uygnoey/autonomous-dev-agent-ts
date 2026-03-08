@@ -3,7 +3,7 @@ import {
   ChunkSplitter,
   detectLanguage,
   extractModule,
-} from '../../../src/rag/chunk-splitter.js';
+} from 'rag/chunk-splitter.js';
 
 describe('ChunkSplitter', () => {
   const splitter = new ChunkSplitter();

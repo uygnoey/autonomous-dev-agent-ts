@@ -6,10 +6,10 @@
  * EN: Detects confirmation bias, infinite loops, deadlocks, and scope creep in agent behavior.
  */
 
-import type { Logger } from '../core/logger.js';
-import type { AgentName, Result } from '../core/types.js';
-import { ok } from '../core/types.js';
-import type { BiasAlert, BiasSeverity, HookEvent } from './types.js';
+import type { Logger } from 'core/logger.js';
+import type { AgentName, Result } from 'core/types.js';
+import { ok } from 'core/types.js';
+import type { BiasAlert, BiasSeverity, HookEvent } from 'layer2/types.js';
 
 /**
  * 확인 편향 임계값: 같은 쿼리 반복 횟수 / Confirmation bias threshold: same query repetition count

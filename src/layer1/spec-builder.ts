@@ -7,11 +7,11 @@
  *     and validates its completeness.
  */
 
-import { AdevError } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { err, ok } from '../core/types.js';
-import type { Result } from '../core/types.js';
-import type { FeatureSpec } from './types.js';
+import { AdevError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+import type { FeatureSpec } from 'layer1/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
 

@@ -18,12 +18,12 @@ export {
   McpError,
   PhaseError,
   RagError,
-} from './errors.js';
-export type { RetryPolicy } from './errors.js';
+} from 'core/errors.js';
+export type { RetryPolicy } from 'core/errors.js';
 
 // ── 타입 + 헬퍼 ──────────────────────────────────────────────
 
-export { err, ok } from './types.js';
+export { err, ok } from 'core/types.js';
 export type {
   AgentName,
   CodeMetadata,
@@ -37,7 +37,7 @@ export type {
   Phase,
   Result,
   VectorRepository,
-} from './types.js';
+} from 'core/types.js';
 
 // ── 설정 ─────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export {
   loadConfig,
   loadEnvironment,
   validateConfig,
-} from './config.js';
+} from 'core/config.js';
 export type {
   AuthMode,
   ConfigSchema,
@@ -56,23 +56,23 @@ export type {
   LogConfig,
   TestingConfig,
   VerificationConfig,
-} from './config.js';
+} from 'core/config.js';
 
 // ── 로거 ─────────────────────────────────────────────────────
 
-export { ConsoleLogger, maskSensitiveData } from './logger.js';
-export type { LogEntry, Logger, LogLevel } from './logger.js';
+export { ConsoleLogger, maskSensitiveData } from 'core/logger.js';
+export type { LogEntry, Logger, LogLevel } from 'core/logger.js';
 
 // ── 메모리 ───────────────────────────────────────────────────
 
-export { MemoryRepository } from './memory.js';
+export { MemoryRepository } from 'core/memory.js';
 
 // ── 플러그인 ─────────────────────────────────────────────────
 
-export { DefaultPluginLoader } from './plugin-loader.js';
-export type { Plugin, PluginLoader, PluginManifest } from './plugin-loader.js';
+export { DefaultPluginLoader } from 'core/plugin-loader.js';
+export type { Plugin, PluginLoader, PluginManifest } from 'core/plugin-loader.js';
 
 // ── 프로세스 실행 ─────────────────────────────────────────────
 
-export { ProcessExecutor } from './process-executor.js';
-export type { ProcessOptions, ProcessResult } from './process-executor.js';
+export { ProcessExecutor } from 'core/process-executor.js';
+export type { ProcessOptions, ProcessResult } from 'core/process-executor.js';

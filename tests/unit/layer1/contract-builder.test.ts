@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { ContractBuilder } from '../../../src/layer1/contract-builder.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { ContractBuilder } from 'layer1/contract-builder.js';
 import type {
   ContractSchema,
   FeatureSpec,
   TestTypeDefinition,
   VerificationMatrix,
-} from '../../../src/layer1/types.js';
+} from 'layer1/types.js';
 
 function createFeature(overrides: Partial<FeatureSpec> = {}): FeatureSpec {
   return {

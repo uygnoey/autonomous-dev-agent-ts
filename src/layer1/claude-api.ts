@@ -14,10 +14,10 @@ import type {
   MessageCreateParamsStreaming,
 } from '@anthropic-ai/sdk/resources/messages';
 import type { Message, MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages';
-import type { AuthProvider } from '../auth/types.js';
-import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from '../core/errors.js';
-import type { Logger } from '../core/logger.js';
-import { type Result, err, ok } from '../core/types.js';
+import type { AuthProvider } from 'auth/types.js';
+import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
+import { type Result, err, ok } from 'core/types.js';
 
 // ── 상수 ────────────────────────────────────────────────────
 
@@ -48,6 +48,8 @@ export interface ClaudeApiRequestOptions {
   readonly temperature?: number;
   /** 타임아웃 (밀리초) / Timeout (milliseconds) */
   readonly timeoutMs?: number;
+  /** 시스템 프롬프트 / System prompt */
+  readonly system?: string;
 }
 
 /**
@@ -178,6 +180,7 @@ export class ClaudeApi {
       max_tokens: maxTokens,
       temperature,
       messages,
+      ...(options.system ? { system: options.system } : {}),
     };
 
     return this.withRetry(async () => {
@@ -245,6 +248,7 @@ export class ClaudeApi {
       temperature,
       messages,
       stream: true,
+      ...(options.system ? { system: options.system } : {}),
     };
 
     return this.withRetry(async () => {

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger } from '../../../src/core/logger.js';
-import { McpLoader } from '../../../src/mcp/loader.js';
+import { ConsoleLogger } from 'core/logger.js';
+import { McpLoader } from 'mcp/loader.js';
 
 describe('McpLoader', () => {
   let tempDir: string;
