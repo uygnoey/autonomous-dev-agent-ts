@@ -6,7 +6,7 @@ import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
-import { getFailureRate, isHealthy, runE2E } from 'layer3/e2e-runner.js';
+import { executeE2E, getFailureRate, isHealthy, runE2E } from 'layer3/e2e-runner.js';
 import type {
   ContinuousE2EConfig,
   ContinuousE2ESession,
@@ -204,13 +204,32 @@ export class ProductionTester implements IProductionTester {
   }
 
   /**
-   * 간단한 E2E 테스트를 실행한다 (동기) / Run simple E2E tests synchronously.
+   * 간단한 E2E 테스트를 실행한다 (동기 시뮬레이션) / Run simple E2E tests synchronously (simulation).
    *
    * @param projectId - 프로젝트 ID
    * @param testCommands - 테스트 명령어 목록
    */
   runE2E(projectId: string, testCommands: readonly string[]): Result<TestExecutionReport> {
     return runE2E(projectId, testCommands, this.logger);
+  }
+
+  /**
+   * E2E 테스트를 실제로 실행한다 (비동기) / Actually execute E2E tests (async).
+   *
+   * @description
+   * KR: Bun.spawn으로 각 명령어를 실제 실행한다. Fail-Fast 원칙 적용.
+   * EN: Executes each command via Bun.spawn. Applies Fail-Fast principle.
+   *
+   * @param projectId - 프로젝트 ID
+   * @param testCommands - 실행할 명령어 목록
+   * @param cwd - 작업 디렉토리 (기본: 현재 디렉토리)
+   */
+  async executeE2E(
+    projectId: string,
+    testCommands: readonly string[],
+    cwd = process.cwd(),
+  ): Promise<Result<TestExecutionReport>> {
+    return executeE2E(projectId, testCommands, cwd, this.logger);
   }
 
   /**
