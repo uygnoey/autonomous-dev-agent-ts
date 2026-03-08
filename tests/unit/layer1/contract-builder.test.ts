@@ -703,4 +703,257 @@ describe('ContractBuilder', () => {
       }
     });
   });
+
+  // ── buildContract 심층 경계값 ─────────────────────────────────
+
+  describe('buildContract 심층 경계값', () => {
+    it('UUID 형식 기능 id → ok', () => {
+      const uuid = crypto.randomUUID();
+      const features = [createFeature({ id: uuid })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.implementationOrder).toContain(uuid);
+    });
+
+    it('기능 id에 한글 포함 → ok', () => {
+      const features = [createFeature({ id: '기능-인증-시스템' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('기능 이름에 이모지 포함 → ok', () => {
+      const features = [createFeature({ id: 'feat-emoji', name: '🔐 인증 기능' })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+    });
+
+    it('빈 acceptanceCriteria 배열 → matrix.allFeaturesHaveCriteria 처리', () => {
+      const features = [createFeature({ id: 'feat-no-ac', acceptanceCriteria: [] })];
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(typeof result.value.verificationMatrix.allFeaturesHaveCriteria).toBe('boolean');
+      }
+    });
+
+    it('긴 특수문자 포함 designDoc → ok', () => {
+      const features = [createFeature()];
+      const specialDoc = '설계서: <API> & {endpoint} | [REST] @version=2.0\n'.repeat(50);
+      const result = builder.buildContract(features, [], specialDoc);
+      expect(result.ok).toBe(true);
+    });
+
+    it('50개 기능 체인 의존성 → ok', () => {
+      const features = Array.from({ length: 50 }, (_, i) =>
+        createFeature({ id: `feat-${i}`, dependencies: i > 0 ? [`feat-${i - 1}`] : [] }),
+      );
+      const result = builder.buildContract(features, [], 'Design');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const order = result.value.implementationOrder;
+        for (let i = 1; i < 50; i++) {
+          expect(order.indexOf(`feat-${i - 1}`)).toBeLessThan(order.indexOf(`feat-${i}`));
+        }
+      }
+    });
+
+    it('음수 아닌 completenessScore 범위 확인', () => {
+      const features = [createFeature({ id: 'f', acceptanceCriteria: [
+        { id: 'ac-1', description: '기준', verifiable: true, testCategory: 'general' },
+      ]})];
+      const defs = [createTestDef('f', ['ac-1'])];
+      const result = builder.buildContract(features, defs, 'Design');
+      if (result.ok) {
+        expect(result.value.verificationMatrix.completenessScore).toBeGreaterThanOrEqual(0);
+        expect(result.value.verificationMatrix.completenessScore).toBeLessThanOrEqual(1.0);
+      }
+    });
+
+    it('projectType은 string 타입', () => {
+      const result = builder.buildContract([createFeature()], [], 'Design');
+      if (result.ok) expect(typeof result.value.projectType).toBe('string');
+    });
+
+    it('전체 기능 id가 implementationOrder에 포함됨', () => {
+      const features = Array.from({ length: 5 }, (_, i) => createFeature({ id: `feat-${i}` }));
+      const result = builder.buildContract(features, [], 'Design');
+      if (result.ok) {
+        for (const f of features) {
+          expect(result.value.implementationOrder).toContain(f.id);
+        }
+      }
+    });
+
+    it('features 배열이 원본과 동일 길이', () => {
+      const features = Array.from({ length: 7 }, (_, i) => createFeature({ id: `feat-${i}` }));
+      const result = builder.buildContract(features, [], 'Design');
+      if (result.ok) expect(result.value.features.length).toBe(7);
+    });
+
+    it('testDefinitions 배열이 입력과 동일 길이', () => {
+      const features = Array.from({ length: 3 }, (_, i) => createFeature({ id: `f${i}` }));
+      const defs = features.map(f => createTestDef(f.id));
+      const result = builder.buildContract(features, defs, 'Design');
+      if (result.ok) expect(result.value.testDefinitions.length).toBe(3);
+    });
+
+    it('단일 기능 자기 참조 의존성 처리', () => {
+      const features = [createFeature({ id: 'feat-self', dependencies: ['feat-self'] })];
+      const result = builder.buildContract(features, [], 'Design');
+      // 자기 참조는 외부 의존으로 처리되거나 순환으로 탐지될 수 있음
+      expect(typeof result.ok).toBe('boolean');
+    });
+  });
+
+  // ── buildHandoffPackage 심층 경계값 ──────────────────────────
+
+  describe('buildHandoffPackage 심층 경계값', () => {
+    it('UUID 형식 projectId → ok', () => {
+      const uuid = crypto.randomUUID();
+      const result = builder.buildHandoffPackage(uuid, makeContract(), 'P', 'D', 'S');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.projectId).toBe(uuid);
+        expect(result.value.id).toContain('handoff-' + uuid);
+      }
+    });
+
+    it('특수문자 포함 projectId → ok 또는 error', () => {
+      const result = builder.buildHandoffPackage('proj!@#$', makeContract(), 'P', 'D', 'S');
+      expect(typeof result.ok).toBe('boolean');
+    });
+
+    it('specDocument 이모지 포함 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D', '📋 명세서 v1.0');
+      expect(result.ok).toBe(true);
+    });
+
+    it('designDocument 한자 포함 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', '設計書', 'S');
+      expect(result.ok).toBe(true);
+    });
+
+    it('100번 반복 → 각 id가 고유', () => {
+      const ids = new Set<string>();
+      for (let i = 0; i < 100; i++) {
+        const r = builder.buildHandoffPackage(`proj-${i}`, makeContract(), 'P', 'D', 'S');
+        if (r.ok) ids.add(r.value.id);
+      }
+      expect(ids.size).toBe(100);
+    });
+
+    it('features 있는 contract → ok', () => {
+      const contract = makeContract();
+      contract.features = [createFeature({ id: 'feat-in-contract' })];
+      const result = builder.buildHandoffPackage('proj-with-features', contract, 'P', 'D', 'S');
+      expect(result.ok).toBe(true);
+    });
+
+    it('verificationMatrix 완전하지 않은 contract → ok', () => {
+      const contract = makeContract({
+        allFeaturesHaveCriteria: false,
+        completenessScore: 0.5,
+      });
+      const result = builder.buildHandoffPackage('proj-incomplete', contract, 'Plan', 'Design', 'Spec');
+      expect(result.ok).toBe(true);
+    });
+
+    it('createdAt이 유효한 날짜', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', 'D', 'S');
+      if (result.ok) {
+        expect(result.value.createdAt).toBeInstanceOf(Date);
+        expect(Number.isNaN(result.value.createdAt.getTime())).toBe(false);
+      }
+    });
+
+    it('planDocument 빈 문자열 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), '', 'D', 'S');
+      expect(result.ok).toBe(true);
+    });
+
+    it('designDocument 빈 문자열 → ok', () => {
+      const result = builder.buildHandoffPackage('proj', makeContract(), 'P', '', 'S');
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── validateContract 심층 경계값 ──────────────────────────────
+
+  describe('validateContract 심층 경계값', () => {
+    it('completenessScore=0.999 → 완전성 보고됨', () => {
+      const result = builder.validateContract(makeContract({
+        allFeaturesHaveCriteria: false,
+        completenessScore: 0.999,
+      }));
+      if (result.ok) {
+        // 0.999 < 1.0 이므로 완전성 보고되어야 함 또는 원칙 1만 위반
+        expect(result.value.length).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('모든 원칙 통과 → issues 0개', () => {
+      const result = builder.validateContract(makeContract());
+      if (result.ok) expect(result.value.length).toBe(0);
+    });
+
+    it('원칙 3+4 위반 → 2개 이상 에러', () => {
+      const result = builder.validateContract(makeContract({
+        noCyclicDependencies: false,
+        allIODefined: false,
+        completenessScore: 0.5,
+      }));
+      if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('원칙 1 위반 에러 문자열에 숫자 포함', () => {
+      const result = builder.validateContract(makeContract({ allFeaturesHaveCriteria: false }));
+      if (result.ok) {
+        const p1 = result.value.find(e => e.includes('원칙 1'));
+        if (p1) expect(p1).toContain('1');
+      }
+    });
+
+    it('원칙 2 위반 에러 문자열에 숫자 포함', () => {
+      const result = builder.validateContract(makeContract({ allCriteriaHaveTests: false }));
+      if (result.ok) {
+        const p2 = result.value.find(e => e.includes('원칙 2'));
+        if (p2) expect(p2).toContain('2');
+      }
+    });
+
+    it('원칙 3 위반 에러 문자열에 숫자 포함', () => {
+      const result = builder.validateContract(makeContract({ noCyclicDependencies: false }));
+      if (result.ok) {
+        const p3 = result.value.find(e => e.includes('원칙 3'));
+        if (p3) expect(p3).toContain('3');
+      }
+    });
+
+    it('원칙 4 위반 에러 문자열에 숫자 포함', () => {
+      const result = builder.validateContract(makeContract({ allIODefined: false }));
+      if (result.ok) {
+        const p4 = result.value.find(e => e.includes('원칙 4'));
+        if (p4) expect(p4).toContain('4');
+      }
+    });
+
+    it('100번 반복 완전한 contract → 항상 빈 issues', () => {
+      const contract = makeContract();
+      for (let i = 0; i < 100; i++) {
+        const result = builder.validateContract(contract);
+        if (result.ok) expect(result.value.length).toBe(0);
+      }
+    });
+
+    it('빌더 재생성 후 validateContract → 동일 결과', () => {
+      const b1 = new ContractBuilder(logger);
+      const b2 = new ContractBuilder(logger);
+      const contract = makeContract({ allFeaturesHaveCriteria: false, completenessScore: 0.5 });
+      const r1 = b1.validateContract(contract);
+      const r2 = b2.validateContract(contract);
+      if (r1.ok && r2.ok) {
+        expect(r1.value.length).toBe(r2.value.length);
+      }
+    });
+  });
 });

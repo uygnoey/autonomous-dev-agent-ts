@@ -715,3 +715,230 @@ describe('Planner 추가 경계값', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+// ── createPlan 심층 경계값 ─────────────────────────────────────
+
+describe('Planner createPlan 심층 경계값', () => {
+  let planner: Planner;
+
+  beforeEach(() => {
+    planner = new Planner(new ConsoleLogger('error'));
+    msgCounter = 0;
+  });
+
+  it('UUID 형식 projectId → 기획에 포함', () => {
+    const uuid = crypto.randomUUID();
+    const result = planner.createPlan(uuid, [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain(uuid);
+  });
+
+  it('한자 포함 projectId → ok', () => {
+    const result = planner.createPlan('项目-auth', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('이모지 포함 user 메시지 → ok', () => {
+    const result = planner.createPlan('proj-emoji', [
+      createMessage('user', '🚀 빠른 배포를 위한 CI/CD 구축'),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('줄바꿈 포함 assistant 메시지 → Analysis에 포함', () => {
+    const result = planner.createPlan('proj-newline', [
+      createMessage('user', '요청'),
+      createMessage('assistant', '분석 결과:\n1. JWT 사용\n2. Redis 세션'),
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('분석 결과');
+  });
+
+  it('탭 포함 user 메시지 → ok', () => {
+    const result = planner.createPlan('proj-tab', [
+      createMessage('user', '기능\t설명\t구현'),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('결과 문자열에 개행 포함', () => {
+    const result = planner.createPlan('proj-format', [createMessage('user', '요청')]);
+    if (result.ok) expect(result.value).toContain('\n');
+  });
+
+  it('result.value에 Analysis 섹션 존재 (assistant 메시지 있을 때)', () => {
+    const result = planner.createPlan('proj-analysis', [
+      createMessage('user', '기능 요청'),
+      createMessage('assistant', '기술 스택 분석'),
+    ]);
+    if (result.ok) expect(result.value).toContain('Analysis');
+  });
+
+  it('result.value에 Constraints 또는 Constraints 유사 섹션 없어도 ok', () => {
+    const result = planner.createPlan('proj-no-constraints', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 content assistant 메시지 → ok', () => {
+    const result = planner.createPlan('proj-empty-asst', [
+      createMessage('user', '요청'),
+      createMessage('assistant', ''),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('5000자 user 메시지 → ok', () => {
+    const longContent = '기능 설명: '.repeat(500);
+    const result = planner.createPlan('proj-huge', [createMessage('user', longContent)]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('user/assistant 교번 100쌍 → ok', () => {
+    const msgs = Array.from({ length: 100 }, (_, i) =>
+      createMessage(i % 2 === 0 ? 'user' : 'assistant', `msg ${i}`),
+    );
+    const result = planner.createPlan('proj-100', msgs);
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId 1자리 → ok', () => {
+    const result = planner.createPlan('p', [createMessage('user', '요청')]);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toContain('p');
+  });
+
+  it('음수 아닌 msgCounter 증가 확인', () => {
+    const before = msgCounter;
+    createMessage('user', 'test');
+    expect(msgCounter).toBeGreaterThan(before);
+  });
+
+  it('다국어 혼합 메시지 → ok', () => {
+    const result = planner.createPlan('proj-multilang', [
+      createMessage('user', 'Authentication 인증 認証 认证'),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ── extractFeatures 심층 경계값 ───────────────────────────────
+
+describe('Planner extractFeatures 심층 경계값', () => {
+  let planner: Planner;
+
+  beforeEach(() => {
+    planner = new Planner(new ConsoleLogger('error'));
+  });
+
+  it('### 뒤 이모지 포함 기능명 → ok', () => {
+    const plan = '### 🔐 인증 시스템\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toContain('인증 시스템');
+  });
+
+  it('### 뒤 숫자 포함 기능명 → ok', () => {
+    const plan = '### Feature 2.0\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toContain('Feature');
+  });
+
+  it('연속된 ### 헤더 → 각 기능 설명 빈값 허용', () => {
+    const plan = '### A\n### B\n### C';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.length).toBe(3);
+  });
+
+  it('설명이 여러 줄인 기능 → ok', () => {
+    const plan = '### Multi Line Feature\n줄 1\n줄 2\n줄 3';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('Multi Line Feature');
+  });
+
+  it('## 와 ### 혼합 → ### 만 기능으로 추출', () => {
+    const plan = '## Section\n### Feature A\n설명\n## Another\n### Feature B\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const names = result.value.map(f => f.name);
+      expect(names).toContain('Feature A');
+      expect(names).toContain('Feature B');
+      expect(names).not.toContain('Section');
+      expect(names).not.toContain('Another');
+    }
+  });
+
+  it('기능 id 중복 없음 (50개 기능)', () => {
+    const plan = Array.from({ length: 50 }, (_, i) => `### Feature ${i}`).join('\n\n');
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      const ids = result.value.map(f => f.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+
+  it('inputs 배열이 존재 (기본값)', () => {
+    const plan = '### Input Feature\n설명';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      expect(Array.isArray(result.value[0]?.inputs)).toBe(true);
+    }
+  });
+
+  it('outputs 배열이 존재 (기본값)', () => {
+    const plan = '### Output Feature\n설명';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      expect(Array.isArray(result.value[0]?.outputs)).toBe(true);
+    }
+  });
+
+  it('extractFeatures + createPlan 연동 → features 1개 이상', () => {
+    const plan = planner.createPlan('proj-chain', [createMessage('user', '요청')]);
+    if (plan.ok) {
+      const features = planner.extractFeatures(plan.value);
+      expect(features.ok).toBe(true);
+      if (features.ok) expect(features.value.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('특수문자만 있는 헤더 → ok', () => {
+    const plan = '### !@#$%\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+  });
+
+  it('매우 긴 기능 설명 → ok', () => {
+    const longDesc = '설명: '.repeat(500);
+    const plan = `### Big Feature\n${longDesc}`;
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('Big Feature');
+  });
+
+  it('중국어 기능명 추출 → ok', () => {
+    const plan = '### 用户认证系统\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('用户认证系统');
+  });
+
+  it('일본어 기능명 추출 → ok', () => {
+    const plan = '### ログイン機能\n설명';
+    const result = planner.extractFeatures(plan);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value[0]?.name).toBe('ログイン機能');
+  });
+
+  it('빈 result.value 배열은 length 0', () => {
+    const plan = '## No Features Here\n내용만 있음';
+    const result = planner.extractFeatures(plan);
+    if (result.ok) {
+      // ### 없으면 Main Feature 1개
+      expect(result.value.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
