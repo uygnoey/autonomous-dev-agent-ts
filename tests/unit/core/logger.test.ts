@@ -595,3 +595,246 @@ describe('ConsoleLogger 생성자', () => {
     expect(l1).not.toBe(l2);
   });
 });
+
+// ── 추가 maskSensitiveData 경계값 ─────────────────────────────
+
+describe('maskSensitiveData 추가 경계값', () => {
+  it('탭 문자만 있는 문자열 → 변경 없음', () => {
+    const text = '\t\t\t';
+    expect(maskSensitiveData(text)).toBe(text);
+  });
+
+  it('개행 문자만 있는 문자열 → 변경 없음', () => {
+    const text = '\n\n\n';
+    expect(maskSensitiveData(text)).toBe(text);
+  });
+
+  it('JSON 형식 문자열 (민감정보 없음) → 변경 없음', () => {
+    const text = '{"key":"value","count":42}';
+    expect(maskSensitiveData(text)).toBe(text);
+  });
+
+  it('API 키가 JSON 값으로 포함 → 마스킹됨', () => {
+    const text = '{"api_key":"sk-ant-api01-abcdefghijklmnopqrstuvwxyz"}';
+    const masked = maskSensitiveData(text);
+    expect(masked).not.toContain('sk-ant-api01');
+    expect(masked).toContain('***REDACTED***');
+  });
+
+  it('여러 줄 문자열에서 마스킹', () => {
+    const text = 'line1\nkey=sk-ant-api01-abcdefghijklmnopqrstuvwxyz\nline3';
+    const masked = maskSensitiveData(text);
+    expect(masked).not.toContain('sk-ant-api01');
+  });
+
+  it('API 키 바로 앞뒤에 특수문자 → 마스킹됨', () => {
+    const text = '"sk-ant-api01-abcdefghijklmnopqrstuvwxyz"';
+    const masked = maskSensitiveData(text);
+    expect(masked).not.toContain('sk-ant-api01');
+  });
+
+  it('UTF-8 이모지 포함 문자열 (민감정보 없음) → 변경 없음', () => {
+    const text = '완료됨 ✅ 오류 없음 🎉';
+    expect(maskSensitiveData(text)).toBe(text);
+  });
+
+  it('긴 문자열 중간에 API 키 → 마스킹됨', () => {
+    const prefix = 'a'.repeat(100);
+    const text = `${prefix}sk-ant-api01-abcdefghijklmnopqrstuvwxyz suffix`;
+    const masked = maskSensitiveData(text);
+    expect(masked).not.toContain('sk-ant-api01');
+    expect(masked).toContain(prefix);
+    expect(masked).toContain('***REDACTED***');
+  });
+
+  it('이미 REDACTED 포함 + 추가 API 키 → 추가 키만 마스킹', () => {
+    const text = '***REDACTED*** and sk-ant-api01-abcdefghijklmnopqrstuvwxyz';
+    const masked = maskSensitiveData(text);
+    expect(masked).toContain('***REDACTED***');
+    expect(masked).not.toContain('sk-ant-api01');
+  });
+});
+
+// ── 추가 ConsoleLogger 레벨 필터링 경계값 ─────────────────────
+
+describe('ConsoleLogger 레벨 필터링 추가 경계값', () => {
+  let writeOutput: string[];
+  let originalWrite: typeof process.stderr.write;
+
+  beforeEach(() => {
+    writeOutput = [];
+    originalWrite = process.stderr.write;
+    process.stderr.write = ((chunk: string) => {
+      writeOutput.push(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stderr.write = originalWrite;
+  });
+
+  it('error 레벨 logger → 빈 메시지 error → 출력됨', () => {
+    const logger = new ConsoleLogger('error');
+    logger.error('');
+    expect(writeOutput).toHaveLength(1);
+  });
+
+  it('debug 레벨 → 100번 debug 호출 → 100번 출력', () => {
+    const logger = new ConsoleLogger('debug');
+    for (let i = 0; i < 100; i++) {
+      logger.debug(`msg-${i}`);
+    }
+    expect(writeOutput).toHaveLength(100);
+  });
+
+  it('warn 레벨 → error 10번 → 10번 출력', () => {
+    const logger = new ConsoleLogger('warn');
+    for (let i = 0; i < 10; i++) {
+      logger.error(`err-${i}`);
+    }
+    expect(writeOutput).toHaveLength(10);
+  });
+
+  it('info 레벨 → warn, error만 출력 (2회)', () => {
+    const logger = new ConsoleLogger('info');
+    logger.warn('w');
+    logger.error('e');
+    expect(writeOutput).toHaveLength(2);
+  });
+
+  it('한글 메시지 → 출력됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('한국어 로그 메시지');
+    expect(writeOutput).toHaveLength(1);
+    expect(writeOutput[0]).toContain('한국어 로그 메시지');
+  });
+
+  it('특수문자 메시지 → 출력됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('!@#$%^&*()_+-=[]{}|;:,./<>?');
+    expect(writeOutput).toHaveLength(1);
+  });
+
+  it('출력 내용에 레벨 문자열 포함', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.warn('check level');
+    expect(writeOutput[0]).toContain('warn');
+  });
+
+  it('출력 내용에 타임스탬프 포함', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('ts check');
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.timestamp).toBeDefined();
+    expect(typeof parsed.timestamp).toBe('string');
+  });
+
+  it('연속 호출로 메시지 순서 보장', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('first');
+    logger.info('second');
+    logger.info('third');
+    const p1 = JSON.parse(writeOutput[0]!);
+    const p2 = JSON.parse(writeOutput[1]!);
+    const p3 = JSON.parse(writeOutput[2]!);
+    expect(p1.message).toBe('first');
+    expect(p2.message).toBe('second');
+    expect(p3.message).toBe('third');
+  });
+});
+
+// ── 추가 ConsoleLogger JSON 출력 경계값 ───────────────────────
+
+describe('ConsoleLogger JSON 출력 추가 경계값', () => {
+  let writeOutput: string[];
+  let originalWrite: typeof process.stderr.write;
+
+  beforeEach(() => {
+    writeOutput = [];
+    originalWrite = process.stderr.write;
+    process.stderr.write = ((chunk: string) => {
+      writeOutput.push(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+  });
+
+  afterEach(() => {
+    process.stderr.write = originalWrite;
+  });
+
+  it('null context 값 → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('null val', { key: null });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.key).toBeNull();
+  });
+
+  it('중첩 빈 객체 context → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('nested empty', { nested: {} });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.nested).toEqual({});
+  });
+
+  it('context 문자열 값 → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('str ctx', { name: 'adev' });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.name).toBe('adev');
+  });
+
+  it('UUID 메시지 → 올바르게 출력', () => {
+    const logger = new ConsoleLogger('debug');
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    logger.info(uuid);
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.message).toBe(uuid);
+  });
+
+  it('음수 context 값 → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('negative', { count: -42 });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.count).toBe(-42);
+  });
+
+  it('0 context 값 → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('zero', { count: 0 });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.count).toBe(0);
+  });
+
+  it('빈 배열 context → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('empty arr', { items: [] });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.items).toEqual([]);
+  });
+
+  it('긴 문자열 context → 직렬화됨', () => {
+    const logger = new ConsoleLogger('debug');
+    const longStr = 'x'.repeat(500);
+    logger.info('long', { data: longStr });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.data).toBe(longStr);
+  });
+
+  it('여러 context 필드 → 모두 포함', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('multi', { a: 1, b: 'two', c: true, d: null });
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.context.a).toBe(1);
+    expect(parsed.context.b).toBe('two');
+    expect(parsed.context.c).toBe(true);
+    expect(parsed.context.d).toBeNull();
+  });
+
+  it('JSON 특수문자 포함 메시지 → 올바르게 직렬화', () => {
+    const logger = new ConsoleLogger('debug');
+    logger.info('{"key":"val"}');
+    const parsed = JSON.parse(writeOutput[0]!);
+    expect(parsed.message).toBe('{"key":"val"}');
+  });
+});

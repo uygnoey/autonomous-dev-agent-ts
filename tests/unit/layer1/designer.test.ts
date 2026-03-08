@@ -600,3 +600,221 @@ describe('Designer 복합 시나리오', () => {
     }
   });
 });
+
+// ── 추가 createDesign 경계값 ──────────────────────────────────
+
+describe('Designer createDesign 추가 경계값', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('UUID 기능 ID → 결과에 포함', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ id: uuid })]);
+    if (result.ok) expect(result.value).toContain(uuid);
+  });
+
+  it('특수문자 기능명 → ok', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ name: 'Feature!@#' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 문자열 기능 description → ok', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ description: '' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('긴 기능 description (500자) → ok', () => {
+    const result = designer.createDesign('proj', 'Plan', [
+      createFeature({ description: '설명'.repeat(250) }),
+    ]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('기능 input 타입 number → 결과에 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({
+      inputs: [{ name: 'count', type: 'number', constraints: 'positive', required: true }],
+    })]);
+    if (result.ok) expect(result.value).toContain('count');
+  });
+
+  it('기능 input 타입 boolean → 결과에 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({
+      inputs: [{ name: 'flag', type: 'boolean', constraints: 'none', required: false }],
+    })]);
+    if (result.ok) expect(result.value).toContain('flag');
+  });
+
+  it('output 여러 개 → 모두 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({
+      outputs: [
+        { name: 'token', type: 'string', constraints: 'JWT', required: true },
+        { name: 'expiry', type: 'number', constraints: 'unix ts', required: true },
+      ],
+    })]);
+    if (result.ok) {
+      expect(result.value).toContain('token');
+      expect(result.value).toContain('expiry');
+    }
+  });
+
+  it('수락 기준 verifiable=false → 포함', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({
+      acceptanceCriteria: [{ id: 'ac-nv', description: 'non-verifiable', verifiable: false, testCategory: 'manual' }],
+    })]);
+    if (result.ok) expect(result.value).toContain('non-verifiable');
+  });
+
+  it('의존성 없는 기능들 → Dependencies 섹션 생략 가능', () => {
+    const features = [
+      createFeature({ id: 'feat-a', dependencies: [] }),
+      createFeature({ id: 'feat-b', dependencies: [] }),
+    ];
+    const result = designer.createDesign('proj', 'Plan', features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('projectId에 공백 포함 → ok', () => {
+    const result = designer.createDesign('my project id', 'Plan', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan 내용에 특수문자 → ok', () => {
+    const result = designer.createDesign('proj', '기획!@#$%^&*()\n내용\t탭', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('plan 내용이 단일 문자 → ok', () => {
+    const result = designer.createDesign('proj', 'A', [createFeature()]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('기능 이름이 빈 문자열 → ok', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ name: '' })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('입력/출력 둘 다 여러 개 → ok', () => {
+    const inputs = Array.from({ length: 5 }, (_, i) => ({
+      name: `input${i}`, type: 'string', constraints: 'any', required: true as const,
+    }));
+    const outputs = Array.from({ length: 5 }, (_, i) => ({
+      name: `output${i}`, type: 'string', constraints: 'any', required: true as const,
+    }));
+    const result = designer.createDesign('proj', 'Plan', [createFeature({ inputs, outputs })]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('20개 기능 → createDesign ok', () => {
+    const features = Array.from({ length: 20 }, (_, i) =>
+      createFeature({ id: `feat-${i}`, name: `Feature ${i}` })
+    );
+    const result = designer.createDesign('proj', 'Large plan', features);
+    expect(result.ok).toBe(true);
+  });
+
+  it('result.value는 JSON.stringify 가능한 문자열', () => {
+    const result = designer.createDesign('proj', 'Plan', [createFeature()]);
+    if (result.ok) {
+      const stringified = JSON.stringify(result.value);
+      expect(typeof stringified).toBe('string');
+    }
+  });
+});
+
+// ── 추가 validateDesign 경계값 ────────────────────────────────
+
+describe('Designer validateDesign 추가 경계값', () => {
+  let designer: Designer;
+
+  beforeEach(() => {
+    designer = new Designer(new ConsoleLogger('error'));
+  });
+
+  it('UUID ID가 설계에 포함 → issues 없음', () => {
+    const uuid = '550e8400-e29b-41d4-a716-446655440000';
+    const features = [createFeature({ id: uuid })];
+    const result = designer.validateDesign(`Design contains ${uuid}`, features);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('빈 기능 목록 → issues 없음 (검증할 것 없음)', () => {
+    const result = designer.validateDesign('Any design document', []);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('기능 ID 대소문자 구분 → 대문자 ID 누락 시 issue 포함', () => {
+    const features = [createFeature({ id: 'FEAT-UPPER' })];
+    const result = designer.validateDesign('design with feat-upper (lowercase)', features);
+    if (result.ok) {
+      const hasIssue = result.value.some((i) => i.includes('FEAT-UPPER'));
+      expect(hasIssue).toBe(true);
+    }
+  });
+
+  it('설계 문서가 매우 길면 → ok', () => {
+    const features = [createFeature({ id: 'feat-0' })];
+    const longDesign = `feat-0 ${'x'.repeat(10000)}`;
+    const result = designer.validateDesign(longDesign, features);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('특수문자 포함 ID → 설계에 포함 시 issues 없음', () => {
+    const specialId = 'feat!@#';
+    const features = [createFeature({ id: specialId })];
+    const result = designer.validateDesign(`design ${specialId} present`, features);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('한글 ID → 설계에 포함 시 issues 없음', () => {
+    const korId = '기능-001';
+    const features = [createFeature({ id: korId })];
+    const result = designer.validateDesign(`설계 ${korId} 포함`, features);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('한글 ID → 설계에 없으면 issue 포함', () => {
+    const korId = '기능-없음';
+    const features = [createFeature({ id: korId })];
+    const result = designer.validateDesign('한글 기능 없는 설계', features);
+    if (result.ok) {
+      expect(result.value.some((i) => i.includes(korId))).toBe(true);
+    }
+  });
+
+  it('의존성 있는 기능이 Dependencies 섹션 있는 설계 → issues 없음', () => {
+    const features = [
+      createFeature({ id: 'feat-a', dependencies: ['feat-b'] }),
+      createFeature({ id: 'feat-b', dependencies: [] }),
+    ];
+    const design = 'Design feat-a feat-b Dependencies section included';
+    const result = designer.validateDesign(design, features);
+    if (result.ok) expect(result.value).toHaveLength(0);
+  });
+
+  it('설계가 탭 문자만 → issues non-empty', () => {
+    const features = [createFeature({ id: 'feat-0' })];
+    const result = designer.validateDesign('\t\t\t', features);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(0);
+  });
+
+  it('설계가 숫자만 → issues non-empty', () => {
+    const features = [createFeature({ id: 'feat-0' })];
+    const result = designer.validateDesign('12345', features);
+    if (result.ok) expect(result.value.length).toBeGreaterThan(0);
+  });
+
+  it('createDesign 결과 → 다른 인스턴스 validateDesign 통과', () => {
+    const d2 = new Designer(new ConsoleLogger('error'));
+    const features = [createFeature({ id: 'feat-cross' })];
+    const design = designer.createDesign('proj', 'Plan', features);
+    if (design.ok) {
+      const result = d2.validateDesign(design.value, features);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toHaveLength(0);
+    }
+  });
+});
