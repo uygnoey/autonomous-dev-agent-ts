@@ -772,3 +772,128 @@ describe('InitCommand createAdevDirectory 추가 경계값', () => {
     }
   });
 });
+
+// ── 추가 edge/random 케이스 ──────────────────────────────────
+
+describe('InitCommand 추가 edge 케이스', () => {
+  it('help()가 --auth 포함', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.help()).toContain('--auth');
+  });
+
+  it('help()가 --path 포함', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.help()).toContain('--path');
+  });
+
+  it('aliases가 비어있지 않다', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.aliases.length).toBeGreaterThan(0);
+  });
+
+  it('name이 비어있지 않다', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.name.length).toBeGreaterThan(0);
+  });
+
+  it('description이 비어있지 않다', () => {
+    const cmd = new InitCommand(logger);
+    expect(cmd.description.length).toBeGreaterThan(0);
+  });
+
+  it('selectAuthMethod(false) → value는 api-key 또는 subscription', async () => {
+    const cmd = new InitCommand(logger);
+    const r = await cmd.selectAuthMethod(false);
+    if (r.ok) {
+      expect(['api-key', 'subscription'].includes(r.value)).toBe(true);
+    }
+  });
+
+  it('10개 인스턴스 name 모두 동일', () => {
+    const names = Array.from({ length: 10 }, () => new InitCommand(logger).name);
+    for (const n of names) expect(n).toBe('init');
+  });
+
+  it('10개 인스턴스 aliases 모두 배열', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(Array.isArray(new InitCommand(logger).aliases)).toBe(true);
+    }
+  });
+
+  it('registryDir에 긴 경로 사용 가능', () => {
+    const longPath = join(tmpdir(), 'a'.repeat(50), 'b'.repeat(50));
+    expect(() => new InitCommand(logger, longPath)).not.toThrow();
+  });
+
+  it('createAdevDirectory ok result.ok는 true', async () => {
+    const dir = join(tmpdir(), `adev-edge-ok-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.createAdevDirectory(dir);
+      expect(r.ok).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('checkEnvVar api-key → ok boolean', async () => {
+    const originalKey = process.env['ANTHROPIC_API_KEY'];
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-edge-test';
+    try {
+      const cmd = new InitCommand(logger);
+      const r = await cmd.checkEnvVar('api-key');
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      if (originalKey !== undefined) {
+        process.env['ANTHROPIC_API_KEY'] = originalKey;
+      } else {
+        delete process.env['ANTHROPIC_API_KEY'];
+      }
+    }
+  });
+
+  it('두 번째 execute 에러 code는 string', async () => {
+    const tempDir = join(tmpdir(), `adev-edge-dup-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    const originalKey = process.env['ANTHROPIC_API_KEY'];
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-edge-dup';
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(typeof r.error.code).toBe('string');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      if (originalKey !== undefined) {
+        process.env['ANTHROPIC_API_KEY'] = originalKey;
+      } else {
+        delete process.env['ANTHROPIC_API_KEY'];
+      }
+    }
+  });
+
+  it('두 번째 execute 에러 message는 string', async () => {
+    const tempDir = join(tmpdir(), `adev-edge-msg-${crypto.randomUUID()}`);
+    const registryDir = join(tempDir, '.adev-registry');
+    await mkdir(tempDir, { recursive: true });
+    await mkdir(registryDir, { recursive: true });
+    const originalKey = process.env['ANTHROPIC_API_KEY'];
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-edge-msg';
+    try {
+      const cmd = new InitCommand(logger, registryDir);
+      await cmd.execute([], makeOptions(tempDir));
+      const r = await cmd.execute([], makeOptions(tempDir));
+      if (!r.ok) expect(typeof r.error.message).toBe('string');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+      if (originalKey !== undefined) {
+        process.env['ANTHROPIC_API_KEY'] = originalKey;
+      } else {
+        delete process.env['ANTHROPIC_API_KEY'];
+      }
+    }
+  });
+});

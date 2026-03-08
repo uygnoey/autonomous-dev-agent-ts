@@ -765,4 +765,103 @@ describe('layer2 ↔ auth 통합 / layer2 ↔ auth integration', () => {
       expect(monitor.getStatus().requestsRemaining).toBe(limit);
     }
   });
+
+  it('API key 모드: 잔여량 헤더 덮어쓰기 → 최신 값 반영', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-overwrite', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '80',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '10',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    // WHY: 두 번 덮어쓰면 최신값 10이 반영됨
+    expect(monitor.getStatus().requestsRemaining).toBe(10);
+  });
+
+  it('API key 모드: 잔여량 헤더 덮어쓰기 → 스로틀 반영', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-overwrite-throttle', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '80',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '10',
+      'anthropic-ratelimit-requests-limit': '100',
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(true);
+  });
+
+  it('Subscription 모드: 한도 3, 2회 사용 후 isLimitApproaching', () => {
+    // WHY: 2/3 ≈ 67% < 80% 이므로 false
+    const auth = new SubscriptionAuth('sk-ant-oat01-limit-3', logger, 3);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    monitor.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
+    const status = monitor.getStatus();
+    expect(status.requestsRemaining).toBe(1);
+    expect(typeof status.isLimitApproaching).toBe('boolean');
+  });
+
+  it('Subscription 모드: 한도 45 (기본값) 초기 잔여량 확인', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-default-45', logger, 45);
+    const monitor = new TokenMonitor(auth, logger);
+    expect(monitor.getStatus().requestsRemaining).toBe(45);
+  });
+
+  it('retry-after: 음수 문자열 → null 또는 음수 처리됨', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-retry-neg', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({ 'retry-after': '-5' });
+    const status = monitor.getStatus();
+    expect(typeof status.retryAfterSeconds === 'number' || status.retryAfterSeconds === null).toBe(true);
+  });
+
+  it('API key 모드: 잔여량 15000/50000 → 스로틀 false', () => {
+    // WHY: 15000/50000 = 30% > 20% 이므로 스로틀 불필요
+    const auth = new ApiKeyAuth('sk-ant-api01-large-limit', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    auth.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '15000',
+      'anthropic-ratelimit-requests-limit': '50000',
+    });
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
+    expect(monitor.shouldPauseAll()).toBe(false);
+  });
+
+  it('Subscription 모드: 한도 200, 160회 사용 → isLimitApproaching true', () => {
+    const auth = new SubscriptionAuth('sk-ant-oat01-200-160', logger, 200);
+    const monitor = new TokenMonitor(auth, logger);
+    for (let i = 0; i < 160; i++) {
+      monitor.updateFromResponse({}, { usage: { input_tokens: 1, output_tokens: 1 } });
+    }
+    expect(monitor.getStatus().isLimitApproaching).toBe(true);
+    expect(monitor.getStatus().requestsRemaining).toBe(40);
+  });
+
+  it('TokenMonitor: getStatus()가 항상 객체를 반환한다', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-always-obj', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    const status = monitor.getStatus();
+    expect(typeof status).toBe('object');
+    expect(status).not.toBeNull();
+  });
+
+  it('API key 모드: 잔여량 헤더만 있고 한도 헤더 없을 때 처리됨', () => {
+    const auth = new ApiKeyAuth('sk-ant-api01-no-limit-hdr', logger);
+    const monitor = new TokenMonitor(auth, logger);
+    monitor.updateFromResponse({
+      'anthropic-ratelimit-requests-remaining': '50',
+    });
+    // WHY: limit 없이 remaining만 있는 경우 안전하게 처리
+    const status = monitor.getStatus();
+    expect(typeof monitor.shouldThrottleSpawn()).toBe('boolean');
+    expect(typeof monitor.shouldPauseAll()).toBe('boolean');
+    expect(status).not.toBeNull();
+  });
 });

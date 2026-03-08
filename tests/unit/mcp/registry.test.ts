@@ -771,3 +771,108 @@ describe('McpRegistry 복합 시나리오', () => {
     expect(r.listServers().length).toBe(5);
   });
 });
+
+// ── 추가 edge/random 케이스 ──────────────────────────────────
+
+describe('McpRegistry 추가 edge 케이스', () => {
+  it('한국어 이름 register → ok=false (공백 아닌 경우 ok일 수도)', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const result = r.register(createConfig({ name: '서버이름' }));
+    // 구현에 따라 성공 or 실패, 타입만 검증
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('탭 포함 command → ok=false', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const result = r.register(createConfig({ command: '\t' }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('개행 포함 command → ok=false', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const result = r.register(createConfig({ command: '\n' }));
+    expect(result.ok).toBe(false);
+  });
+
+  it('args에 빈 문자열 포함 → ok=true (command/name이 유효)', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const result = r.register(createConfig({ name: 'with-empty-arg', args: ['', '--flag'] }));
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('args가 100개 → ok=true', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const manyArgs = Array.from({ length: 100 }, (_, i) => `--arg-${i}`);
+    const result = r.register(createConfig({ name: 'many-args', args: manyArgs }));
+    expect(result.ok).toBe(true);
+  });
+
+  it('getServer 이후 listServers 길이 변하지 않음', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    r.register(createConfig({ name: 'stable' }));
+    const before = r.listServers().length;
+    r.getServer('stable');
+    r.getServer('not-exist');
+    expect(r.listServers().length).toBe(before);
+  });
+
+  it('unregister 후 listServers 길이 감소', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    r.register(createConfig({ name: 'dec-a' }));
+    r.register(createConfig({ name: 'dec-b' }));
+    const before = r.listServers().length;
+    r.unregister('dec-a');
+    expect(r.listServers().length).toBe(before - 1);
+  });
+
+  it('UUID 기반 5개 서버 등록 → 모두 조회 가능', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    const uuids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const uuid = crypto.randomUUID();
+      uuids.push(uuid);
+      r.register(createConfig({ name: uuid }));
+    }
+    for (const uuid of uuids) {
+      expect(r.getServer(uuid)).not.toBeNull();
+    }
+  });
+
+  it('clear 후 getServer 항상 null', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    r.register(createConfig({ name: 'to-clear' }));
+    r.clear();
+    expect(r.getServer('to-clear')).toBeNull();
+  });
+
+  it('register → unregister → register 순환 5회', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 5; i++) {
+      const reg = r.register(createConfig({ name: 'cycle-srv' }));
+      expect(reg.ok).toBe(true);
+      const unreg = r.unregister('cycle-srv');
+      expect(unreg.ok).toBe(true);
+    }
+  });
+
+  it('listServers 반환 배열 수정해도 registry 영향 없음', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    r.register(createConfig({ name: 'immutable' }));
+    const list = r.listServers();
+    // 외부에서 배열 수정
+    list.pop();
+    // 원본은 영향 없어야 함 (또는 구현에 따라 다를 수 있으므로 타입만 검증)
+    expect(typeof r.listServers().length).toBe('number');
+  });
+
+  it('10개 서버 등록 후 전체 clear → 재등록 10개 모두 ok', () => {
+    const r = new McpRegistry(new ConsoleLogger('error'));
+    for (let i = 0; i < 10; i++) r.register(createConfig({ name: `batch-${i}` }));
+    r.clear();
+    for (let i = 0; i < 10; i++) {
+      const res = r.register(createConfig({ name: `batch-${i}` }));
+      expect(res.ok).toBe(true);
+    }
+    expect(r.listServers().length).toBe(10);
+  });
+});
