@@ -792,5 +792,136 @@ describe('ClaudeApi', () => {
       const result = await api.createMessage([{ role: 'user', content: 'test' }]);
       if (!result.ok) expect(result.error).toBeInstanceOf(AgentError);
     });
+
+    it('[edge] 한글 에러 메시지 throw → ok=false', async () => {
+      api = makeApi();
+      injectClient(api, mock(async () => { throw new Error('한국어 오류 메시지'); }));
+      const result = await api.createMessage([{ role: 'user', content: 'test' }]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 특수문자 에러 메시지 throw → ok=false', async () => {
+      api = makeApi();
+      injectClient(api, mock(async () => { throw new Error('Error!@#$%^&*()'); }));
+      const result = await api.createMessage([{ role: 'user', content: 'test' }]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 빈 메시지 에러 throw → ok=false', async () => {
+      api = makeApi();
+      injectClient(api, mock(async () => { throw new Error(''); }));
+      const result = await api.createMessage([{ role: 'user', content: 'test' }]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 502 에러 → ok=false', async () => {
+      api = makeApi();
+      injectClient(api, makeErrorClient(502, 'Bad Gateway'));
+      const result = await api.createMessage([{ role: 'user', content: 'test' }]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 404 에러 → ok=false', async () => {
+      api = makeApi();
+      injectClient(api, makeErrorClient(404, 'Not Found'));
+      const result = await api.createMessage([{ role: 'user', content: 'test' }]);
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 에러 후 동일 인스턴스 재사용 → 다시 ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeErrorClient(500));
+      await api.createMessage([{ role: 'user', content: 'fail' }]);
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'retry' }]);
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── 추가 edge/random: createMessage 입력 경계값 ─────────────
+
+  describe('createMessage - 추가 입력 경계값', () => {
+    it('[edge] 한글 content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '안녕하세요 테스트' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 특수문자만 있는 content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '!@#$%^&*()' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 이모지 포함 content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '테스트 😀🔥✨' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 빈 문자열 content → ok=true (mock은 항상 성공)', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 줄바꿈 포함 content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'line1\nline2\nline3' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 탭 포함 content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'col1\tcol2\tcol3' }]);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 10개 메시지 멀티턴 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const messages = Array.from({ length: 10 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: `message ${i}`,
+      }));
+      const result = await api.createMessage(messages);
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] maxTokens 1 → ok=true (mock은 성공)', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'test' }], { maxTokens: 1 });
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] maxTokens 8192 → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: 'test' }], { maxTokens: 8192 });
+      expect(result.ok).toBe(true);
+    });
+
+    it('[edge] 두 번 연속 호출 → 두 번 모두 ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const r1 = await api.createMessage([{ role: 'user', content: 'first' }]);
+      const r2 = await api.createMessage([{ role: 'user', content: 'second' }]);
+      expect(r1.ok).toBe(true);
+      expect(r2.ok).toBe(true);
+    });
+
+    it('[random] UUID content → ok=true', async () => {
+      api = makeApi();
+      injectClient(api, makeOkClient());
+      const result = await api.createMessage([{ role: 'user', content: '550e8400-e29b-41d4-a716-446655440000' }]);
+      expect(result.ok).toBe(true);
+    });
   });
 });

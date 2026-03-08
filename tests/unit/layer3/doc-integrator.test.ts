@@ -788,3 +788,199 @@ describe('DocIntegrator updateDocument - 추가 edge 케이스', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 });
+
+// ── exportAsMarkdown 추가 edge 케이스 ───────────────────────
+
+describe('DocIntegrator exportAsMarkdown - 추가 edge 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  function makeDoc(overrides: Partial<IntegratedDocument> = {}): IntegratedDocument {
+    return {
+      id: overrides.id ?? 'doc-export-edge',
+      projectId: overrides.projectId ?? 'proj-edge',
+      type: overrides.type ?? 'readme',
+      content: overrides.content ?? '# Test',
+      generatedAt: overrides.generatedAt ?? new Date('2026-01-01T00:00:00Z'),
+      version: overrides.version ?? 1,
+      sourceFragments: overrides.sourceFragments ?? ['frag-1'],
+    };
+  }
+
+  it('version 0 문서 → ok', () => {
+    const doc = makeDoc({ version: 0 });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('version 99 문서 → content에 99 포함', () => {
+    const doc = makeDoc({ version: 99 });
+    const result = integrator.exportAsMarkdown(doc);
+    if (result.ok) expect(result.value).toContain('99');
+  });
+
+  it('한글 content → ok', () => {
+    const doc = makeDoc({ content: '# 한국어 제목\n내용입니다.' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 content → content에 한글 포함', () => {
+    const doc = makeDoc({ content: '# 한국어\n내용' });
+    const result = integrator.exportAsMarkdown(doc);
+    if (result.ok) expect(result.value).toContain('한국어');
+  });
+
+  it('빈 content → ok', () => {
+    const doc = makeDoc({ content: '' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('type=api-reference → ok', () => {
+    const doc = makeDoc({ type: 'api-reference' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('type=changelog → ok', () => {
+    const doc = makeDoc({ type: 'changelog' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('10개 sourceFragments → ok', () => {
+    const frags = Array.from({ length: 10 }, (_, i) => `frag-${i}`);
+    const doc = makeDoc({ sourceFragments: frags });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('5번 반복 호출 → 항상 ok', () => {
+    for (let i = 0; i < 5; i++) {
+      const result = integrator.exportAsMarkdown(makeDoc());
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('result.value가 --- 두 번 포함', () => {
+    const doc = makeDoc();
+    const result = integrator.exportAsMarkdown(doc);
+    if (result.ok) {
+      const count = (result.value.match(/---/g) ?? []).length;
+      expect(count).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('UUID id → ok', () => {
+    const doc = makeDoc({ id: '550e8400-e29b-41d4-a716-446655440099' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 projectId → ok', () => {
+    const doc = makeDoc({ projectId: 'proj!@#' });
+    const result = integrator.exportAsMarkdown(doc);
+    expect(result.ok).toBe(true);
+  });
+
+  it('아주 긴 content → result가 string', () => {
+    const longContent = 'A'.repeat(5000);
+    const doc = makeDoc({ content: longContent });
+    const result = integrator.exportAsMarkdown(doc);
+    if (result.ok) expect(typeof result.value).toBe('string');
+  });
+});
+
+// ── generateAll 추가 edge 케이스 ─────────────────────────────
+
+describe('DocIntegrator generateAll - 추가 edge 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('UUID projectId → ok', async () => {
+    const result = await integrator.generateAll('550e8400-e29b-41d4-a716-446655440000', '.adev/docs');
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 projectId → ok', async () => {
+    const result = await integrator.generateAll('한국-프로젝트', '.adev/docs');
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 projectId → ok', async () => {
+    const result = await integrator.generateAll('proj!@#$', '.adev/docs');
+    expect(result.ok).toBe(true);
+  });
+
+  it('최소 길이 projectId(1글자) → ok', async () => {
+    const result = await integrator.generateAll('x', '.adev/docs');
+    expect(result.ok).toBe(true);
+  });
+
+  it('긴 projectId → ok', async () => {
+    const longId = 'proj-'.repeat(20).slice(0, 100);
+    const result = await integrator.generateAll(longId, '.adev/docs');
+    expect(result.ok).toBe(true);
+  });
+
+  it('빈 outputDir → ok (구현에 따름)', async () => {
+    const result = await integrator.generateAll('proj-1', '');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('5번 반복 호출 → 항상 ok', async () => {
+    for (let i = 0; i < 5; i++) {
+      const result = await integrator.generateAll(`proj-${i}`, '.adev/docs');
+      expect(result.ok).toBe(true);
+    }
+  });
+});
+
+// ── collectFragments 추가 edge 케이스 ────────────────────────
+
+describe('DocIntegrator collectFragments - 추가 edge 케이스', () => {
+  let integrator: DocIntegrator;
+
+  beforeEach(() => {
+    integrator = new DocIntegrator(new ConsoleLogger('error'));
+  });
+
+  it('UUID projectId → ok', async () => {
+    const result = await integrator.collectFragments('550e8400-e29b-41d4-a716-446655440000', '**/*.md');
+    expect(result.ok).toBe(true);
+  });
+
+  it('한글 projectId → ok', async () => {
+    const result = await integrator.collectFragments('한국-프로젝트', '**/*.md');
+    expect(result.ok).toBe(true);
+  });
+
+  it('특수문자 포함 projectId → ok', async () => {
+    const result = await integrator.collectFragments('proj!@#', '**/*.md');
+    expect(result.ok).toBe(true);
+  });
+
+  it('공백 projectId → ok=false', async () => {
+    const result = await integrator.collectFragments('  ', '**/*.md');
+    expect(result.ok).toBe(false);
+  });
+
+  it('탭 문자만 있는 projectId → ok=false', async () => {
+    const result = await integrator.collectFragments('\t', '**/*.md');
+    expect(result.ok).toBe(false);
+  });
+
+  it('5번 반복 호출 → 일관성', async () => {
+    for (let i = 0; i < 5; i++) {
+      const result = await integrator.collectFragments('proj-1', '**/*.md');
+      expect(result.ok).toBe(true);
+    }
+  });
+});
