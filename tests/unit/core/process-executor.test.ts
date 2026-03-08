@@ -862,3 +862,217 @@ describe('ProcessExecutor - 추가 Edge Cases', () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// 추가 경계값 및 랜덤 케이스 시리즈 2
+// ══════════════════════════════════════════════════════════════════
+
+describe('ProcessExecutor - 추가 경계값 케이스 2', () => {
+  it('exit code 0 → result.ok true이고 exitCode 0', async () => {
+    const result = await executor.execute('sh', ['-c', 'exit 0']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.exitCode).toBe(0);
+  });
+
+  it('exit code 100 → result.ok true이고 exitCode 100', async () => {
+    const result = await executor.execute('sh', ['-c', 'exit 100']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.exitCode).toBe(100);
+  });
+
+  it('sh -c "echo $?" → 이전 명령이 0이면 0 출력', async () => {
+    const result = await executor.execute('sh', ['-c', 'true; echo $?']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('0');
+  });
+
+  it('sh -c "echo $?" → 이전 명령이 실패면 0 아님', async () => {
+    const result = await executor.execute('sh', ['-c', 'false; echo $?']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).not.toBe('0');
+  });
+
+  it('빈 stdin 전달 후 cat → 빈 stdout', async () => {
+    const result = await executor.execute('cat', [], { stdin: '' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout).toBe('');
+  });
+
+  it('stdin에 개행만 → stdout에 개행', async () => {
+    const result = await executor.execute('cat', [], { stdin: '\n\n\n' });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout).toBe('\n\n\n');
+  });
+
+  it('환경변수 키에 숫자 포함 → 정상 전달', async () => {
+    const result = await executor.execute('sh', ['-c', 'echo "$VAR_123"'], {
+      env: { VAR_123: 'numeric-key-ok' },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('numeric-key-ok');
+  });
+
+  it('환경변수 값이 빈 문자열 → 셸에서 빈 값으로 확인', async () => {
+    const result = await executor.execute('sh', ['-c', '[ -z "$EMPTY_K" ] && echo "yes" || echo "no"'], {
+      env: { EMPTY_K: '' },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('yes');
+  });
+
+  it('stdout과 stderr 순서 독립성 검증', async () => {
+    const result = await executor.execute('sh', [
+      '-c',
+      'echo "stdout-first"; echo "stderr-second" >&2',
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.stdout.trim()).toBe('stdout-first');
+      expect(result.value.stderr.trim()).toBe('stderr-second');
+    }
+  });
+
+  it('echo 공백 문자열 → 공백 포함 stdout', async () => {
+    const result = await executor.execute('echo', ['  spaces  ']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('spaces');
+  });
+
+  it('sh -c with subshell → 서브셸 exit 코드 전달', async () => {
+    const result = await executor.execute('sh', ['-c', '(exit 3)']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.exitCode).toBe(3);
+  });
+
+  it('sh -c pipeline → 마지막 exit code 반환', async () => {
+    const result = await executor.execute('sh', ['-c', 'echo "foo" | cat']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.exitCode).toBe(0);
+      expect(result.value.stdout.trim()).toBe('foo');
+    }
+  });
+
+  it('execute 반환값 ok는 true 또는 false만', async () => {
+    const result = await executor.execute('echo', ['bool-contract']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('성공 시 value.exitCode는 정수', async () => {
+    const result = await executor.execute('sh', ['-c', 'exit 7']);
+    if (result.ok) {
+      expect(Number.isInteger(result.value.exitCode)).toBe(true);
+      expect(result.value.exitCode).toBe(7);
+    }
+  });
+
+  it('성공 시 value.durationMs는 0 이상', async () => {
+    const result = await executor.execute('true');
+    if (result.ok) expect(result.value.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('실패 시 error.code는 빈 문자열이 아님', async () => {
+    const result = await executor.execute('nonexistent_cmd_abc_xyz_000');
+    if (!result.ok) {
+      expect(result.error.code.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('실패 시 error.message는 빈 문자열이 아님', async () => {
+    const result = await executor.execute('nonexistent_cmd_abc_xyz_111');
+    if (!result.ok) {
+      expect(result.error.message.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('타임아웃 에러는 ok=false', async () => {
+    const result = await executor.execute('sleep', ['10'], { timeoutMs: 50 });
+    expect(result.ok).toBe(false);
+  });
+
+  it('타임아웃 에러의 code는 process_timeout', async () => {
+    const result = await executor.execute('sleep', ['10'], { timeoutMs: 50 });
+    if (!result.ok) expect(result.error.code).toBe('process_timeout');
+  });
+
+  it('미존재 명령 에러 code는 process_execution_error', async () => {
+    const result = await executor.execute('zxcvbnm_not_a_cmd_at_all');
+    if (!result.ok) expect(result.error.code).toBe('process_execution_error');
+  });
+
+  it('cwd 잘못된 경우 에러 code는 process_execution_error', async () => {
+    const result = await executor.execute('echo', ['x'], { cwd: '/no/such/path/xyz/abc' });
+    if (!result.ok) expect(result.error.code).toBe('process_execution_error');
+  });
+
+  it('10회 병렬 true 실행 → 모두 exitCode 0', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => executor.execute('true')),
+    );
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.exitCode).toBe(0);
+    }
+  });
+
+  it('10회 병렬 false 실행 → 모두 exitCode 1', async () => {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => executor.execute('false')),
+    );
+    for (const r of results) {
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.exitCode).toBe(1);
+    }
+  });
+
+  it('랜덤 UUID를 환경변수로 전달 → 일치 확인', async () => {
+    const uuid = crypto.randomUUID();
+    const result = await executor.execute('sh', ['-c', 'echo "$THE_UUID"'], {
+      env: { THE_UUID: uuid },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe(uuid);
+  });
+
+  it('sh -c echo with redirect > /dev/null → stdout empty', async () => {
+    const result = await executor.execute('sh', ['-c', 'echo "hidden" > /dev/null']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout).toBe('');
+  });
+
+  it('sh -c : (noop) → exitCode 0, stdout empty', async () => {
+    const result = await executor.execute('sh', ['-c', ':']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.exitCode).toBe(0);
+      expect(result.value.stdout).toBe('');
+    }
+  });
+
+  it('wc -l stdin 라인 수 계산', async () => {
+    const lines = 'a\nb\nc\nd\ne\n';
+    const result = await executor.execute('wc', ['-l'], { stdin: lines });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const count = Number.parseInt(result.value.stdout.trim(), 10);
+      expect(count).toBe(5);
+    }
+  });
+
+  it('tr 명령으로 소문자→대문자 변환', async () => {
+    const result = await executor.execute('sh', ['-c', 'echo "hello" | tr a-z A-Z']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.stdout.trim()).toBe('HELLO');
+  });
+
+  it('두 executor가 동시에 다른 cwd에서 실행 → 각자 독립', async () => {
+    const ex1 = new ProcessExecutor(new ConsoleLogger('error'));
+    const ex2 = new ProcessExecutor(new ConsoleLogger('error'));
+    const [r1, r2] = await Promise.all([
+      ex1.execute('sh', ['-c', 'echo "ex1"']),
+      ex2.execute('sh', ['-c', 'echo "ex2"']),
+    ]);
+    if (r1.ok) expect(r1.value.stdout.trim()).toBe('ex1');
+    if (r2.ok) expect(r2.value.stdout.trim()).toBe('ex2');
+  });
+});
