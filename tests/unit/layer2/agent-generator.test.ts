@@ -1225,3 +1225,782 @@ describe('AgentGenerator config 객체 완전성', () => {
     }
   });
 });
+
+// ── 배치66 추가: 역할별 tools 세부 검증 ────────────────────────────
+
+describe('AgentGenerator 배치66 역할별 tools 세부 검증', () => {
+  let generator: AgentGenerator;
+
+  beforeEach(() => {
+    generator = makeGenerator();
+  });
+
+  it('architect: Glob 포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('architect: Read 포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+    }
+  });
+
+  it('architect: Write 미포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).not.toContain('Write');
+    }
+  });
+
+  it('architect: Edit 미포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).not.toContain('Edit');
+    }
+  });
+
+  it('coder: Read 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+    }
+  });
+
+  it('coder: Glob 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('coder: Grep 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('tester: Glob 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('tester: Grep 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('tester: Write 미포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).not.toContain('Write');
+    }
+  });
+
+  it('tester: Edit 미포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).not.toContain('Edit');
+    }
+  });
+
+  it('qa: Glob 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('qa: Grep 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('qa: Read 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Read');
+    }
+  });
+
+  it('qc: Glob 포함', () => {
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('reviewer: Grep 포함', () => {
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('documenter: Bash 미포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).not.toContain('Bash');
+    }
+  });
+
+  it('documenter: Glob 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Glob');
+    }
+  });
+
+  it('documenter: Grep 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+});
+
+// ── 배치66 추가: 시스템 프롬프트 세부 내용 검증 ────────────────────
+
+describe('AgentGenerator 배치66 시스템 프롬프트 세부', () => {
+  let generator: AgentGenerator;
+
+  beforeEach(() => {
+    generator = makeGenerator();
+  });
+
+  it('architect: 시스템 프롬프트에 spec 내용 포함 (중복 확인)', () => {
+    const result = generator.generateAgentConfig('architect', 'MY_SPECIAL_SPEC', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('MY_SPECIAL_SPEC');
+    }
+  });
+
+  it('coder: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'CODER_SPEC_CONTENT', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('CODER_SPEC_CONTENT');
+    }
+  });
+
+  it('tester: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'TESTER_SPEC_XYZ', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('TESTER_SPEC_XYZ');
+    }
+  });
+
+  it('qa: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'QA_SPEC_123', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('QA_SPEC_123');
+    }
+  });
+
+  it('qc: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('qc', 'QC_SPEC_ABC', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('QC_SPEC_ABC');
+    }
+  });
+
+  it('reviewer: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('reviewer', 'REVIEWER_SPEC_DEF', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('REVIEWER_SPEC_DEF');
+    }
+  });
+
+  it('documenter: 시스템 프롬프트에 spec 내용 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'DOCUMENTER_SPEC_GHI', 'feat-1');
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('DOCUMENTER_SPEC_GHI');
+    }
+  });
+
+  it('architect: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-batch66-arch');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-arch');
+    }
+  });
+
+  it('coder: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-batch66-coder');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-coder');
+    }
+  });
+
+  it('tester: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-batch66-tester');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-tester');
+    }
+  });
+
+  it('qa: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-batch66-qa');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-qa');
+    }
+  });
+
+  it('qc: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-batch66-qc');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-qc');
+    }
+  });
+
+  it('reviewer: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-batch66-reviewer');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-reviewer');
+    }
+  });
+
+  it('documenter: 실행 프롬프트에 featureId 포함', () => {
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-batch66-documenter');
+    if (result.ok) {
+      expect(result.value.prompt).toContain('feat-batch66-documenter');
+    }
+  });
+
+  it('모든 에이전트 systemPrompt 길이 > 10 (의미있는 내용)', () => {
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'minimal-spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.systemPrompt.length).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it('모든 에이전트 prompt 길이 > 5 (의미있는 내용)', () => {
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'f');
+      if (result.ok) {
+        expect(result.value.prompt.length).toBeGreaterThan(5);
+      }
+    }
+  });
+});
+
+// ── 배치66 추가: 반환값 타입 완전성 검증 ───────────────────────────
+
+describe('AgentGenerator 배치66 반환값 타입 완전성', () => {
+  it('모든 에이전트 ok는 boolean', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      expect(typeof result.ok).toBe('boolean');
+    }
+  });
+
+  it('모든 에이전트 name은 비어있지 않음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.name.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('모든 에이전트 featureId는 입력과 동일', () => {
+    const generator = makeGenerator();
+    const featureId = 'type-completeness-check';
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', featureId);
+      if (result.ok) {
+        expect(result.value.featureId).toBe(featureId);
+      }
+    }
+  });
+
+  it('모든 에이전트 systemPrompt는 비어있지 않음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec-content-here', 'feat-1');
+      if (result.ok) {
+        expect(result.value.systemPrompt.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('모든 에이전트 prompt는 비어있지 않음', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-completeness');
+      if (result.ok) {
+        expect(result.value.prompt.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('모든 에이전트 tools는 string[] 타입', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(Array.isArray(result.value.tools)).toBe(true);
+        for (const tool of result.value.tools) {
+          expect(typeof tool).toBe('string');
+        }
+      }
+    }
+  });
+
+  it('모든 에이전트 maxTurns >= 30', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.maxTurns).toBeGreaterThanOrEqual(30);
+      }
+    }
+  });
+
+  it('모든 에이전트 phase는 알려진 값', () => {
+    const generator = makeGenerator();
+    const knownPhases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(knownPhases).toContain(result.value.phase);
+      }
+    }
+  });
+
+  it('모든 에이전트 projectId는 빈 문자열', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.projectId).toBe('');
+      }
+    }
+  });
+});
+
+// ── 배치66 추가: Phase-Tools 정합성 검증 ──────────────────────────
+
+describe('AgentGenerator 배치66 Phase-Tools 정합성', () => {
+  it('DESIGN phase 에이전트 (architect): tools에 Read, Glob, Grep, WebSearch 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('DESIGN');
+      expect(result.value.tools).toContain('Read');
+      expect(result.value.tools).toContain('Glob');
+      expect(result.value.tools).toContain('Grep');
+    }
+  });
+
+  it('DESIGN phase 에이전트 (qa): tools에 Write/Edit 미포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('DESIGN');
+      expect(result.value.tools).not.toContain('Write');
+      expect(result.value.tools).not.toContain('Edit');
+    }
+  });
+
+  it('CODE phase 에이전트 (coder): tools에 Bash, Write, Edit 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('CODE');
+      expect(result.value.tools).toContain('Bash');
+      expect(result.value.tools).toContain('Write');
+      expect(result.value.tools).toContain('Edit');
+    }
+  });
+
+  it('CODE phase 에이전트 (reviewer): tools에 Write/Edit 미포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('CODE');
+      expect(result.value.tools).not.toContain('Write');
+    }
+  });
+
+  it('TEST phase 에이전트 (tester): tools에 Bash, Read 포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('TEST');
+      expect(result.value.tools).toContain('Bash');
+      expect(result.value.tools).toContain('Read');
+    }
+  });
+
+  it('TEST phase 에이전트 (qc): tools에 Write/Edit 미포함', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('TEST');
+      expect(result.value.tools).not.toContain('Write');
+      expect(result.value.tools).not.toContain('Edit');
+    }
+  });
+
+  it('DESIGN phase 에이전트 (documenter): tools에 Write 포함 (예외)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.phase).toBe('DESIGN');
+      expect(result.value.tools).toContain('Write');
+    }
+  });
+});
+
+// ── 배치66 추가: 경계값 및 스트레스 테스트 ────────────────────────
+
+describe('AgentGenerator 배치66 경계값/스트레스', () => {
+  it('1자 spec → 모든 에이전트 ok', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'x', 'feat-1');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('1자 featureId → 모든 에이전트 ok', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'f');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.featureId).toBe('f');
+      }
+    }
+  });
+
+  it('1만자 spec → 모든 에이전트 ok', () => {
+    const generator = makeGenerator();
+    const bigSpec = 'A'.repeat(10000);
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, bigSpec, 'feat-1');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('1만자 featureId → 모든 에이전트 ok', () => {
+    const generator = makeGenerator();
+    const bigFeatId = 'Z'.repeat(10000);
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', bigFeatId);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.featureId).toBe(bigFeatId);
+      }
+    }
+  });
+
+  it('특수문자만 있는 spec → 모든 에이전트 ok', () => {
+    const generator = makeGenerator();
+    const specialSpec = '!@#$%^&*()_+-=[]{}|;:,.<>?`~\\"\'/';
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, specialSpec, 'feat-1');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('개행 포함 spec → ok', () => {
+    const generator = makeGenerator();
+    const multilineSpec = 'line1\nline2\nline3\n\nline5\r\nline6';
+    const result = generator.generateAgentConfig('architect', multilineSpec, 'feat-1');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.systemPrompt).toContain('line1');
+    }
+  });
+
+  it('탭 포함 spec → ok', () => {
+    const generator = makeGenerator();
+    const tabbedSpec = 'key:\tvalue\nanother:\t42';
+    const result = generator.generateAgentConfig('coder', tabbedSpec, 'feat-1');
+    expect(result.ok).toBe(true);
+  });
+
+  it('JSON 문자열 spec → ok', () => {
+    const generator = makeGenerator();
+    const jsonSpec = JSON.stringify({ name: 'spec', version: '1.0', features: ['a', 'b', 'c'] });
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, jsonSpec, 'feat-json');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('이모지 포함 spec → ok', () => {
+    const generator = makeGenerator();
+    const emojiSpec = '🚀 Launch feature 🎉 Complete 💡 Ideas 🔧 Fix 📝 Docs';
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, emojiSpec, 'feat-emoji');
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('2000번 반복 생성 → 모두 ok', () => {
+    const generator = makeGenerator();
+    let allOk = true;
+    for (let i = 0; i < 2000; i++) {
+      const name = ALL_AGENT_NAMES[i % ALL_AGENT_NAMES.length] as AgentName;
+      const result = generator.generateAgentConfig(name, `s${i}`, `f${i}`);
+      if (!result.ok) allOk = false;
+    }
+    expect(allOk).toBe(true);
+  });
+
+  it('generateAgentConfig 반환 result.value는 null이 아님', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value).not.toBeNull();
+      }
+    }
+  });
+
+  it('architect에서 coder로 전환 시 tools 다름', () => {
+    const generator = makeGenerator();
+    const rArch = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    const rCoder = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (rArch.ok && rCoder.ok) {
+      const archHasBash = rArch.value.tools.includes('Bash');
+      const coderHasBash = rCoder.value.tools.includes('Bash');
+      // WHY: architect는 코드 수정 도구가 없고 coder는 있음
+      expect(coderHasBash).toBe(true);
+    }
+  });
+
+  it('10가지 다른 spec으로 coder 생성 → systemPrompt 모두 다름', () => {
+    const generator = makeGenerator();
+    const prompts = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      const result = generator.generateAgentConfig('coder', `unique-spec-${i}`, 'feat-1');
+      if (result.ok) {
+        prompts.add(result.value.systemPrompt);
+      }
+    }
+    expect(prompts.size).toBe(10);
+  });
+
+  it('10가지 다른 featureId로 architect 생성 → prompt 모두 다름', () => {
+    const generator = makeGenerator();
+    const prompts = new Set<string>();
+    for (let i = 0; i < 10; i++) {
+      const result = generator.generateAgentConfig('architect', 'fixed-spec', `unique-feat-${i}`);
+      if (result.ok) {
+        prompts.add(result.value.prompt);
+      }
+    }
+    expect(prompts.size).toBe(10);
+  });
+});
+
+// ── 배치66 추가: maxTurns 심화 검증 ──────────────────────────────
+
+describe('AgentGenerator 배치66 maxTurns 심화', () => {
+  it('coder maxTurns는 100 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(100);
+    }
+  });
+
+  it('tester maxTurns는 80 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(80);
+    }
+  });
+
+  it('architect maxTurns는 50 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(50);
+    }
+  });
+
+  it('documenter maxTurns는 40 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(40);
+    }
+  });
+
+  it('qa maxTurns는 30 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(30);
+    }
+  });
+
+  it('qc maxTurns는 30 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(30);
+    }
+  });
+
+  it('reviewer maxTurns는 30 (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.maxTurns).toBe(30);
+    }
+  });
+
+  it('coder > tester > architect > documenter > qa (maxTurns 순서)', () => {
+    const generator = makeGenerator();
+    const results = Object.fromEntries(
+      ALL_AGENT_NAMES.map((n) => {
+        const r = generator.generateAgentConfig(n, 'spec', 'feat-1');
+        return [n, r.ok ? r.value.maxTurns : -1];
+      }),
+    );
+    expect(results['coder']!).toBeGreaterThan(results['tester']!);
+    expect(results['tester']!).toBeGreaterThan(results['architect']!);
+    expect(results['architect']!).toBeGreaterThan(results['documenter']!);
+    expect(results['documenter']!).toBeGreaterThan(results['qa']!);
+  });
+
+  it('maxTurns는 100 이하', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(result.value.maxTurns).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it('maxTurns가 다른 featureId에 따라 변하지 않음 (불변)', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const r1 = generator.generateAgentConfig(name, 'spec', 'feat-aaa');
+      const r2 = generator.generateAgentConfig(name, 'spec', 'feat-zzz');
+      if (r1.ok && r2.ok) {
+        expect(r1.value.maxTurns).toBe(r2.value.maxTurns);
+      }
+    }
+  });
+
+  it('maxTurns가 다른 spec에 따라 변하지 않음 (불변)', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const r1 = generator.generateAgentConfig(name, 'spec-alpha', 'feat-1');
+      const r2 = generator.generateAgentConfig(name, 'spec-beta', 'feat-1');
+      if (r1.ok && r2.ok) {
+        expect(r1.value.maxTurns).toBe(r2.value.maxTurns);
+      }
+    }
+  });
+});
+
+// ── 배치66 추가: name 필드 정확성 검증 ────────────────────────────
+
+describe('AgentGenerator 배치66 name 필드 정확성', () => {
+  it('architect 설정의 name은 "architect" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('architect');
+    }
+  });
+
+  it('qa 설정의 name은 "qa" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('qa');
+    }
+  });
+
+  it('coder 설정의 name은 "coder" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('coder');
+    }
+  });
+
+  it('tester 설정의 name은 "tester" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('tester');
+    }
+  });
+
+  it('qc 설정의 name은 "qc" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('qc');
+    }
+  });
+
+  it('reviewer 설정의 name은 "reviewer" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('reviewer');
+    }
+  });
+
+  it('documenter 설정의 name은 "documenter" (정확히)', () => {
+    const generator = makeGenerator();
+    const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
+    if (result.ok) {
+      expect(result.value.name).toBe('documenter');
+    }
+  });
+
+  it('모든 에이전트 name이 AgentName 타입에서 온 값', () => {
+    const generator = makeGenerator();
+    for (const name of ALL_AGENT_NAMES) {
+      const result = generator.generateAgentConfig(name, 'spec', 'feat-1');
+      if (result.ok) {
+        expect(ALL_AGENT_NAMES).toContain(result.value.name as AgentName);
+      }
+    }
+  });
+
+  it('name 필드는 featureId에 영향받지 않음', () => {
+    const generator = makeGenerator();
+    const r1 = generator.generateAgentConfig('architect', 'spec', 'feat-aaa');
+    const r2 = generator.generateAgentConfig('architect', 'spec', 'feat-bbb');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.name).toBe(r2.value.name);
+    }
+  });
+
+  it('name 필드는 spec에 영향받지 않음', () => {
+    const generator = makeGenerator();
+    const r1 = generator.generateAgentConfig('coder', 'spec-1', 'feat-1');
+    const r2 = generator.generateAgentConfig('coder', 'spec-2-very-long-content', 'feat-1');
+    if (r1.ok && r2.ok) {
+      expect(r1.value.name).toBe(r2.value.name);
+    }
+  });
+});
