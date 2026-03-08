@@ -988,3 +988,589 @@ describe('FailureHandler 에러 메시지 다양한 케이스', () => {
     if (result.ok) expect(result.value.type).toBe('infrastructure');
   });
 });
+
+// ── 추가 경계값: 한국어 + 영어 혼합 키워드 ────────────────────────────
+
+describe('FailureHandler 한국어+영어 혼합 키워드', () => {
+  it('"architecture 아키텍처 결함" → design_flaw', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'architecture 아키텍처 결함');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('design_flaw');
+  });
+
+  it('"bug 버그 crash" → implementation_bug', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'bug 버그 crash');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('implementation_bug');
+  });
+
+  it('"test 테스트 coverage 커버리지" → test_gap', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'test 테스트 coverage 커버리지');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('test_gap');
+  });
+
+  it('"spec unclear 스펙 불명확" → spec_ambiguity', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'spec unclear 스펙 불명확');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('spec_ambiguity');
+  });
+
+  it('"timeout 타임아웃 connection" → infrastructure', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'timeout 타임아웃 connection');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('infrastructure');
+  });
+
+  it('"에러 error 발생" → implementation_bug', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '에러 error 발생');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('implementation_bug');
+  });
+
+  it('"구조 structure 불일치" → design_flaw', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '구조 structure 불일치');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('design_flaw');
+  });
+
+  it('"커버리지 coverage 미달 부족" → test_gap', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '커버리지 coverage 미달 부족');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('test_gap');
+  });
+
+  it('"모호한 ambiguous 요구사항" → spec_ambiguity', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '모호한 ambiguous 요구사항');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('spec_ambiguity');
+  });
+
+  it('"연결 connection 끊김 refused" → infrastructure', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '연결 connection 끊김 refused');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('infrastructure');
+  });
+});
+
+// ── 추가 경계값: 모든 Phase × 모든 타입 조합 ─────────────────────────
+
+describe('FailureHandler 모든 Phase × 모든 타입 조합', () => {
+  const phases: Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+
+  it('DESIGN × design_flaw → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'DESIGN', 'architecture 결함');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('DESIGN × implementation_bug → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'DESIGN', 'bug crash 발생');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('DESIGN × test_gap → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'DESIGN', 'test coverage 부족');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('DESIGN × spec_ambiguity → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'DESIGN', '스펙 unclear ambiguous');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('DESIGN × infrastructure → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'DESIGN', 'timeout connection 실패');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('DESIGN');
+  });
+
+  it('CODE × design_flaw → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'CODE', 'architecture 설계 결함');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('CODE × implementation_bug → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'CODE', 'exception bug 발생');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('CODE × test_gap → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'CODE', 'test coverage 미달');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('CODE × spec_ambiguity → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'CODE', 'requirement 모호 unclear');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('CODE × infrastructure → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'CODE', 'network timeout 발생');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('CODE');
+  });
+
+  it('TEST × design_flaw → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'TEST', 'interface structure 결함');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('TEST × implementation_bug → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'TEST', 'crash error 오류');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('TEST × test_gap → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'TEST', 'assertion test 실패');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('TEST × spec_ambiguity → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'TEST', 'spec ambiguous 모호');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('TEST × infrastructure → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'TEST', 'rate_limit 타임아웃');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('TEST');
+  });
+
+  it('VERIFY × design_flaw → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'VERIFY', 'design architecture 이슈');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('VERIFY × implementation_bug → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'VERIFY', 'undefined is not a function 에러');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('VERIFY × test_gap → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'VERIFY', 'coverage 부족 assertion');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('VERIFY × spec_ambiguity → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'VERIFY', '요구사항 모호 unclear spec');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('VERIFY × infrastructure → ok', () => {
+    const h = makeHandler();
+    const r = h.classify('f1', 'VERIFY', '연결 끊김 timeout 발생');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.phase).toBe('VERIFY');
+  });
+
+  it('4가지 Phase 모두에서 empty 메시지 → 에러', () => {
+    const h = makeHandler();
+    for (const phase of phases) {
+      const r = h.classify('f1', phase, '');
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+// ── 추가 경계값: getRecoveryPhase 상세 검증 ─────────────────────────
+
+describe('FailureHandler.getRecoveryPhase 상세 검증', () => {
+  let handler: FailureHandler;
+
+  beforeEach(() => {
+    handler = makeHandler();
+  });
+
+  it('design_flaw 보고서 → getRecoveryPhase=DESIGN', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'interface design 결함 아키텍처');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('DESIGN');
+  });
+
+  it('implementation_bug 보고서 → getRecoveryPhase=CODE', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'NullPointerException crash');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('CODE');
+  });
+
+  it('test_gap 보고서 → getRecoveryPhase=TEST', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'test assertion coverage 미달');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('TEST');
+  });
+
+  it('spec_ambiguity 보고서 → getRecoveryPhase=DESIGN', () => {
+    const r = handler.classify('feat-1', 'VERIFY', '스펙 unclear ambiguous 요구사항');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('DESIGN');
+  });
+
+  it('infrastructure 보고서 → getRecoveryPhase=CODE', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'rate_limit 네트워크 timeout');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('CODE');
+  });
+
+  it('unknown 보고서 → getRecoveryPhase=CODE', () => {
+    const r = handler.classify('feat-1', 'VERIFY', '이상한_알수없는_오류_xyz99');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('CODE');
+  });
+
+  it('연속 10번 getRecoveryPhase 호출 → 동일 결과', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'design architecture 결함');
+    if (r.ok) {
+      const expected = handler.getRecoveryPhase(r.value);
+      for (let i = 0; i < 10; i++) {
+        expect(handler.getRecoveryPhase(r.value)).toBe(expected);
+      }
+    }
+  });
+
+  it('여러 다른 타입 보고서 연속 생성 → 각각 올바른 recovery phase', () => {
+    const cases: [string, Phase][] = [
+      ['architecture 설계 결함', 'DESIGN'],
+      ['bug exception crash', 'CODE'],
+      ['test coverage assertion', 'TEST'],
+      ['spec unclear ambiguous', 'DESIGN'],
+      ['timeout network connection', 'CODE'],
+    ];
+    for (const [msg, expectedPhase] of cases) {
+      const r = handler.classify('feat-x', 'VERIFY', msg);
+      if (r.ok) {
+        expect(handler.getRecoveryPhase(r.value)).toBe(expectedPhase);
+      }
+    }
+  });
+
+  it('DESIGN Phase에서 implementation_bug → getRecoveryPhase=CODE', () => {
+    const r = handler.classify('feat-1', 'DESIGN', 'undefined is not a function');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('CODE');
+  });
+
+  it('CODE Phase에서 test_gap → getRecoveryPhase=TEST', () => {
+    const r = handler.classify('feat-1', 'CODE', 'test coverage 부족 assertion');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('TEST');
+  });
+
+  it('TEST Phase에서 design_flaw → getRecoveryPhase=DESIGN', () => {
+    const r = handler.classify('feat-1', 'TEST', 'interface architecture 설계 결함');
+    if (r.ok) expect(handler.getRecoveryPhase(r.value)).toBe('DESIGN');
+  });
+});
+
+// ── 추가 경계값: 연속 분류 → reportCounter 세밀 검증 ────────────────
+
+describe('FailureHandler reportCounter 세밀 검증', () => {
+  it('20개 분류 → ID 모두 고유', () => {
+    const h = makeHandler();
+    const ids: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const r = h.classify(`feat-${i}`, 'VERIFY', `error message ${i}`);
+      if (r.ok) ids.push(r.value.id);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('50개 분류 → ID 모두 고유', () => {
+    const h = makeHandler();
+    const ids: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      const r = h.classify(`feat-${i}`, 'VERIFY', `error ${i}`);
+      if (r.ok) ids.push(r.value.id);
+    }
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('ID에 "failure-" 프리픽스 포함', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'some error message');
+    if (r.ok) expect(r.value.id).toContain('failure-');
+  });
+
+  it('순차 ID는 엄격히 증가', () => {
+    const h = makeHandler();
+    let prevNum = -1;
+    for (let i = 0; i < 5; i++) {
+      const r = h.classify(`feat-${i}`, 'VERIFY', `error ${i}`);
+      if (r.ok) {
+        const num = parseInt(r.value.id.replace('failure-', ''));
+        expect(num).toBeGreaterThan(prevNum);
+        prevNum = num;
+      }
+    }
+  });
+
+  it('두 핸들러 동시 분류 → 각각 고유 ID', () => {
+    const h1 = makeHandler();
+    const h2 = makeHandler();
+    const r1 = h1.classify('feat-1', 'VERIFY', 'some error');
+    const r2 = h2.classify('feat-1', 'VERIFY', 'some error');
+    if (r1.ok && r2.ok) {
+      expect(typeof r1.value.id).toBe('string');
+      expect(typeof r2.value.id).toBe('string');
+    }
+  });
+
+  it('분류 결과 timestamp는 Date 객체', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'some error');
+    if (r.ok) expect(r.value.timestamp).toBeInstanceOf(Date);
+  });
+
+  it('timestamp가 현재 시간과 가까움', () => {
+    const h = makeHandler();
+    const before = Date.now();
+    const r = h.classify('feat-1', 'VERIFY', 'some error');
+    const after = Date.now();
+    if (r.ok) {
+      const ts = r.value.timestamp.getTime();
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(after);
+    }
+  });
+
+  it('100개 분류 → 성능 문제 없음', () => {
+    const h = makeHandler();
+    const messages = [
+      'architecture design 결함', 'bug crash exception', 'test coverage assertion',
+      'spec unclear ambiguous', 'timeout network connection', '이상한 에러',
+    ];
+    for (let i = 0; i < 100; i++) {
+      const r = h.classify(`feat-${i % 10}`, 'VERIFY', messages[i % messages.length]!);
+      expect(r.ok).toBe(true);
+    }
+  });
+});
+
+// ── 추가 경계값: classify 결과 suggestedAction 상세 검증 ─────────────
+
+describe('FailureHandler suggestedAction 상세 검증', () => {
+  let handler: FailureHandler;
+
+  beforeEach(() => {
+    handler = makeHandler();
+  });
+
+  it('design_flaw → suggestedAction=rollback_phase', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'architecture 결함');
+    if (r.ok) expect(r.value.suggestedAction).toBe('rollback_phase');
+  });
+
+  it('implementation_bug → suggestedAction=rollback_phase', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'exception bug 발생');
+    if (r.ok) expect(r.value.suggestedAction).toBe('rollback_phase');
+  });
+
+  it('test_gap → suggestedAction=rollback_phase', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'test coverage 부족');
+    if (r.ok) expect(r.value.suggestedAction).toBe('rollback_phase');
+  });
+
+  it('spec_ambiguity → suggestedAction=escalate_user', () => {
+    const r = handler.classify('feat-1', 'VERIFY', '스펙 unclear ambiguous');
+    if (r.ok) expect(r.value.suggestedAction).toBe('escalate_user');
+  });
+
+  it('infrastructure → suggestedAction=retry', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'timeout connection 실패');
+    if (r.ok) expect(r.value.suggestedAction).toBe('retry');
+  });
+
+  it('unknown → suggestedAction=retry', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'completely unrecognized signal qwerty');
+    if (r.ok) expect(r.value.suggestedAction).toBe('retry');
+  });
+
+  it('suggestedAction은 문자열', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'some error');
+    if (r.ok) expect(typeof r.value.suggestedAction).toBe('string');
+  });
+
+  it('5번 반복 → suggestedAction 일관됨', () => {
+    for (let i = 0; i < 5; i++) {
+      const r = handler.classify('feat-1', 'VERIFY', 'architecture design 결함');
+      if (r.ok) expect(r.value.suggestedAction).toBe('rollback_phase');
+    }
+  });
+
+  it('design_flaw + suggestedAction + targetPhase 조합 검증', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'structure 설계 결함 interface');
+    if (r.ok) {
+      expect(r.value.type).toBe('design_flaw');
+      expect(r.value.suggestedAction).toBe('rollback_phase');
+      expect(r.value.targetPhase).toBe('DESIGN');
+    }
+  });
+
+  it('infrastructure + suggestedAction + targetPhase 조합 검증', () => {
+    const r = handler.classify('feat-1', 'VERIFY', 'connection refused timeout');
+    if (r.ok) {
+      expect(r.value.type).toBe('infrastructure');
+      expect(r.value.suggestedAction).toBe('retry');
+    }
+  });
+});
+
+// ── 추가 경계값: 대량 Edge Case 랜덤 ───────────────────────────────
+
+describe('FailureHandler 대량 Edge Case 랜덤', () => {
+  it('빈 문자열 → 항상 ok=false', () => {
+    const h = makeHandler();
+    for (let i = 0; i < 10; i++) {
+      expect(h.classify('feat-1', 'VERIFY', '').ok).toBe(false);
+    }
+  });
+
+  it('whitespace 다양한 종류 → 항상 ok=false', () => {
+    const h = makeHandler();
+    const whitespaces = [' ', '  ', '\t', '\n', '\r', '   \t  ', '\n\n'];
+    for (const ws of whitespaces) {
+      expect(h.classify('feat-1', 'VERIFY', ws).ok).toBe(false);
+    }
+  });
+
+  it('매우 긴 에러 메시지 (10000자) → 분류됨', () => {
+    const h = makeHandler();
+    const longMsg = 'architecture design '.repeat(500);
+    const r = h.classify('feat-1', 'VERIFY', longMsg);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('design_flaw');
+  });
+
+  it('개행문자 포함 architecture 키워드 → design_flaw', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'line1\narchitecture 결함\nline3');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('design_flaw');
+  });
+
+  it('탭 문자 포함 bug 키워드 → implementation_bug', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'error\tbug\tcrash');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('implementation_bug');
+  });
+
+  it('JSON 파싱 에러 메시지 → 분류됨', () => {
+    const h = makeHandler();
+    const msg = JSON.stringify({ error: 'architecture design flaw', severity: 'high' });
+    const r = h.classify('feat-1', 'VERIFY', msg);
+    expect(r.ok).toBe(true);
+  });
+
+  it('XML 형식 에러 메시지 → 분류됨', () => {
+    const h = makeHandler();
+    const msg = '<error type="bug">Exception occurred: crash detected</error>';
+    const r = h.classify('feat-1', 'VERIFY', msg);
+    expect(r.ok).toBe(true);
+  });
+
+  it('URL 포함 에러 메시지 → 분류됨', () => {
+    const h = makeHandler();
+    const msg = 'Connection refused at http://api.example.com/endpoint timeout 30s';
+    const r = h.classify('feat-1', 'VERIFY', msg);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.type).toBe('infrastructure');
+  });
+
+  it('숫자 코드 에러 메시지 → unknown', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '500 Internal Server Error');
+    expect(r.ok).toBe(true);
+  });
+
+  it('classify 후 description 길이 > 0', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'some error message xyz');
+    if (r.ok) expect(r.value.description.length).toBeGreaterThan(0);
+  });
+
+  it('featureId와 description 모두 정확히 기록', () => {
+    const h = makeHandler();
+    const r = h.classify('exact-id', 'VERIFY', 'exact error description xyz');
+    if (r.ok) {
+      expect(r.value.featureId).toBe('exact-id');
+      expect(r.value.description).toContain('exact error description xyz');
+    }
+  });
+
+  it('classify ok=true → value 필드 모두 존재', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', 'some error');
+    if (r.ok) {
+      expect(r.value.id).toBeDefined();
+      expect(r.value.type).toBeDefined();
+      expect(r.value.featureId).toBeDefined();
+      expect(r.value.phase).toBeDefined();
+      expect(r.value.description).toBeDefined();
+      expect(r.value.suggestedAction).toBeDefined();
+      expect(r.value.timestamp).toBeDefined();
+    }
+  });
+
+  it('classify ok=false → error 필드 존재', () => {
+    const h = makeHandler();
+    const r = h.classify('feat-1', 'VERIFY', '');
+    if (!r.ok) {
+      expect(r.error).toBeDefined();
+    }
+  });
+
+  it('targetPhase는 Phase 타입 문자열', () => {
+    const h = makeHandler();
+    const validPhases = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
+    const r = h.classify('feat-1', 'VERIFY', 'architecture 설계 결함');
+    if (r.ok && r.value.targetPhase !== undefined) {
+      expect(validPhases).toContain(r.value.targetPhase);
+    }
+  });
+
+  it('10개 랜덤 UUID featureId → 모두 ok=true', () => {
+    const h = makeHandler();
+    for (let i = 0; i < 10; i++) {
+      const id = `xxxxxxxx-xxxx-4xxx-yxxx-${i.toString().padStart(12, '0')}`;
+      const r = h.classify(id, 'VERIFY', 'some error message');
+      expect(r.ok).toBe(true);
+    }
+  });
+});

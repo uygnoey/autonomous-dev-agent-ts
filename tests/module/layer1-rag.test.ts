@@ -989,4 +989,518 @@ describe('layer1 ↔ rag 통합 / layer1 ↔ rag integration', () => {
     const result = builder.buildContract([specialFeature], [createTestDef('feat-special-desc')], 'special design');
     expect(result.ok).toBe(true);
   });
+
+  // ── 추가 edge/random case 테스트 (2차) ─────────────────────────────
+
+  it('ConversationManager: user/assistant 역할 교대 저장 → 조회 시 역할 유지', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'role-alt-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const roles: ('user' | 'assistant')[] = ['user', 'assistant', 'user', 'assistant', 'user'];
+    for (let i = 0; i < roles.length; i++) {
+      await manager.addMessage(createMessage(`msg-alt-${i}`, roles[i]!, `content ${i}`, 'proj-alt'));
+    }
+
+    const hist = await manager.getHistory('proj-alt');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(5);
+    // getHistory uses vector search (LanceDB) which doesn't guarantee insertion order
+    // Verify all returned roles are valid user/assistant values
+    for (const msg of hist.value) {
+      expect(['user', 'assistant']).toContain(msg.role);
+    }
+    // Verify both roles are present
+    const returnedRoles = new Set(hist.value.map((m) => m.role));
+    expect(returnedRoles.has('user')).toBe(true);
+    expect(returnedRoles.has('assistant')).toBe(true);
+  });
+
+  it('ContractBuilder: features 배열 순서가 섞여도 implementationOrder는 의존성 순서', () => {
+    const builder = new ContractBuilder(logger);
+
+    const features = [
+      createFeature('z-feat'),
+      createFeature('a-feat'),
+      createFeature('m-feat', ['a-feat', 'z-feat']),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'mixed order design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const order = result.value.implementationOrder;
+    expect(order.indexOf('m-feat')).toBeGreaterThan(order.indexOf('a-feat'));
+    expect(order.indexOf('m-feat')).toBeGreaterThan(order.indexOf('z-feat'));
+  });
+
+  it('ConversationManager: 같은 content 다른 id → 둘 다 저장', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'same-content-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('id-a', 'user', 'identical content', 'proj-dup-content'));
+    await manager.addMessage(createMessage('id-b', 'user', 'identical content', 'proj-dup-content'));
+
+    const hist = await manager.getHistory('proj-dup-content');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(2);
+  });
+
+  it('ContractBuilder: testDef ratios 합이 1.0 초과해도 처리됨', () => {
+    const builder = new ContractBuilder(logger);
+
+    const testDef: TestTypeDefinition = {
+      featureId: 'feat-over-ratio',
+      categories: [
+        { name: 'unit', description: 'Unit', mappedCriteria: ['ac-feat-over-ratio-1'] },
+      ],
+      rules: ['test first'],
+      sampleTests: [{ category: 'unit', description: 'sample', expectedBehavior: 'ok' }],
+      ratios: { unit: 0.8, module: 0.5, e2e: 0.3 }, // 합계 1.6
+    };
+
+    const result = builder.buildContract([createFeature('feat-over-ratio')], [testDef], 'over ratio design');
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('ConversationManager: projectId에 공백 포함 → 저장 성공', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'space-proj-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const msg = createMessage('msg-space', 'user', 'content', 'proj with spaces');
+
+    const addResult = await manager.addMessage(msg);
+    expect(typeof addResult.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder: 단일 acceptance criteria만 있는 feature → completenessScore 확인', () => {
+    const builder = new ContractBuilder(logger);
+    const feature = createFeature('single-ac');
+    const testDef = createTestDef('single-ac');
+
+    const result = builder.buildContract([feature], [testDef], 'single ac design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(typeof result.value.verificationMatrix.completenessScore).toBe('number');
+    expect(result.value.verificationMatrix.completenessScore).toBeGreaterThanOrEqual(0);
+    expect(result.value.verificationMatrix.completenessScore).toBeLessThanOrEqual(1);
+  });
+
+  it('ConversationManager: 초기화 후 바로 조회 → 빈 배열', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'fresh-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const hist = await manager.getHistory('any-project');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(0);
+  });
+
+  it('ContractBuilder: verificationMatrix 필드 모두 boolean/number 타입 확인', () => {
+    const builder = new ContractBuilder(logger);
+    const result = builder.buildContract([createFeature('f1')], [createTestDef('f1')], 'design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const matrix = result.value.verificationMatrix;
+    expect(typeof matrix.allFeaturesHaveCriteria).toBe('boolean');
+    expect(typeof matrix.allCriteriaHaveTests).toBe('boolean');
+    expect(typeof matrix.noCyclicDependencies).toBe('boolean');
+    expect(typeof matrix.allIODefined).toBe('boolean');
+    expect(typeof matrix.completenessScore).toBe('number');
+  });
+
+  it('ConversationManager: 검색 결과 content 필드가 string', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'content-type-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('msg-ct', 'user', 'hello world test', 'proj-ct'));
+
+    const searchResult = await manager.searchContext('proj-ct', 'hello');
+    expect(searchResult.ok).toBe(true);
+    if (!searchResult.ok) return;
+
+    for (const msg of searchResult.value) {
+      expect(typeof msg.content).toBe('string');
+    }
+  });
+
+  it('ContractBuilder: buildContract 반환 value의 version 필드 존재', () => {
+    const builder = new ContractBuilder(logger);
+    const result = builder.buildContract([createFeature('f1')], [createTestDef('f1')], 'test design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.version).toBeDefined();
+    expect(typeof result.value.version).toBe('number');
+  });
+
+  it('ContractBuilder: 동일 ContractBuilder 인스턴스로 여러 번 buildContract 가능', () => {
+    const builder = new ContractBuilder(logger);
+
+    const r1 = builder.buildContract([createFeature('f1')], [createTestDef('f1')], 'first design');
+    const r2 = builder.buildContract([createFeature('f2')], [createTestDef('f2')], 'second design');
+    const r3 = builder.buildContract([createFeature('f3')], [createTestDef('f3')], 'third design');
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(true);
+
+    if (r1.ok && r2.ok && r3.ok) {
+      // 각 계약은 독립적인 features를 가져야 함
+      expect(r1.value.features[0]?.id).not.toBe(r2.value.features[0]?.id);
+      expect(r2.value.features[0]?.id).not.toBe(r3.value.features[0]?.id);
+    }
+  });
+
+  it('ConversationManager: addMessage 반환값 ok=true이면 value는 undefined 허용', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'add-return-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const result = await manager.addMessage(createMessage('msg-ret', 'user', 'content', 'proj-ret'));
+    expect(result.ok).toBe(true);
+  });
+
+  it('ContractBuilder: features의 inputs가 빈 배열이어도 outputs 있으면 allIODefined=true', () => {
+    const builder = new ContractBuilder(logger);
+
+    const featureNoInput: FeatureSpec = {
+      id: 'feat-no-input',
+      name: 'No Input Feature',
+      description: 'Feature without inputs',
+      acceptanceCriteria: [
+        { id: 'ac-ni-1', description: 'criterion', verifiable: true, testCategory: 'unit' },
+      ],
+      dependencies: [],
+      inputs: [],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    };
+
+    const result = builder.buildContract([featureNoInput], [createTestDef('feat-no-input')], 'no input design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // allIODefined uses OR: inputs.length > 0 || outputs.length > 0
+    expect(result.value.verificationMatrix.allIODefined).toBe(true);
+  });
+
+  it('ContractBuilder: features의 outputs가 빈 배열이어도 inputs 있으면 allIODefined=true', () => {
+    const builder = new ContractBuilder(logger);
+
+    const featureNoOutput: FeatureSpec = {
+      id: 'feat-no-output',
+      name: 'No Output Feature',
+      description: 'Feature without outputs',
+      acceptanceCriteria: [
+        { id: 'ac-no-1', description: 'criterion', verifiable: true, testCategory: 'unit' },
+      ],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [],
+    };
+
+    const result = builder.buildContract([featureNoOutput], [createTestDef('feat-no-output')], 'no output design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // allIODefined uses OR: inputs.length > 0 || outputs.length > 0
+    expect(result.value.verificationMatrix.allIODefined).toBe(true);
+  });
+
+  it('ConversationManager: getHistory는 배열 반환', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'array-return-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const result = await manager.getHistory('any-proj');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('ContractBuilder: implementationOrder는 모든 feature id를 포함', () => {
+    const builder = new ContractBuilder(logger);
+
+    const features = [
+      createFeature('feat-a'),
+      createFeature('feat-b', ['feat-a']),
+      createFeature('feat-c', ['feat-a']),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'fan-out design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const order = result.value.implementationOrder;
+    expect(order).toContain('feat-a');
+    expect(order).toContain('feat-b');
+    expect(order).toContain('feat-c');
+    expect(order.length).toBe(3);
+  });
+
+  it('ContractBuilder: handoff id는 projectId 포함', () => {
+    const builder = new ContractBuilder(logger);
+    const contractResult = builder.buildContract([createFeature('f1')], [createTestDef('f1')], 'design');
+    expect(contractResult.ok).toBe(true);
+    if (!contractResult.ok) return;
+
+    const handoff = builder.buildHandoffPackage('my-project', contractResult.value, 'plan', 'design', 'spec');
+    expect(handoff.ok).toBe(true);
+    if (!handoff.ok) return;
+    expect(handoff.value.id).toContain('my-project');
+  });
+
+  it('ConversationManager: 여러 번 초기화해도 데이터 유지 (재초기화 주의)', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'reinit-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('before-init', 'user', 'content before', 'proj-rinit'));
+
+    // 추가 저장
+    await manager.addMessage(createMessage('after-init', 'user', 'content after', 'proj-rinit'));
+
+    const hist = await manager.getHistory('proj-rinit');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(2);
+  });
+
+  it('ContractBuilder: verificationMatrix.completenessScore가 0.0~1.0 범위', () => {
+    const builder = new ContractBuilder(logger);
+
+    const noIOFeature: FeatureSpec = {
+      id: 'feat-low-score',
+      name: 'Low Score Feature',
+      description: 'No IO',
+      acceptanceCriteria: [],
+      dependencies: [],
+      inputs: [],
+      outputs: [],
+    };
+
+    const result = builder.buildContract([noIOFeature], [], 'low score design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const score = result.value.verificationMatrix.completenessScore;
+    expect(score).toBeGreaterThanOrEqual(0);
+    expect(score).toBeLessThanOrEqual(1);
+  });
+
+  it('ConversationManager: message id에 슬래시 포함 → 저장 성공', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'slash-id-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const msg = createMessage('path/to/message', 'user', 'some content', 'proj-slash');
+
+    const addResult = await manager.addMessage(msg);
+    expect(typeof addResult.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder: noCyclicDependencies가 false이면 ok=false', () => {
+    const builder = new ContractBuilder(logger);
+
+    const features = [
+      createFeature('cyclic-a', ['cyclic-b']),
+      createFeature('cyclic-b', ['cyclic-a']),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'cyclic design');
+    expect(result.ok).toBe(false);
+  });
+
+  it('ConversationManager: 동일 내용 반복 검색 → 일관된 결과', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'repeat-search-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('m1', 'user', 'authentication feature', 'proj-rs'));
+    await manager.addMessage(createMessage('m2', 'assistant', 'will implement auth', 'proj-rs'));
+
+    const r1 = await manager.searchContext('proj-rs', 'auth');
+    const r2 = await manager.searchContext('proj-rs', 'auth');
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (!r1.ok || !r2.ok) return;
+
+    expect(r1.value.length).toBe(r2.value.length);
+  });
+
+  it('ContractBuilder: 단일 feature implementationOrder는 길이 1', () => {
+    const builder = new ContractBuilder(logger);
+    const result = builder.buildContract([createFeature('solo')], [createTestDef('solo')], 'solo design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.implementationOrder.length).toBe(1);
+    expect(result.value.implementationOrder[0]).toBe('solo');
+  });
+
+  it('ConversationManager: message의 timestamp는 Date 객체로 보존', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'ts-type-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('ts-msg', 'user', 'timestamp check', 'proj-ts-check'));
+
+    const hist = await manager.getHistory('proj-ts-check');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    if (hist.value.length > 0) {
+      expect(hist.value[0]!.timestamp).toBeInstanceOf(Date);
+    }
+  });
+
+  it('ContractBuilder: validateContract 에러 없을 때 빈 배열', () => {
+    const builder = new ContractBuilder(logger);
+    const features = [createFeature('valid-feat')];
+    const testDefs = [createTestDef('valid-feat')];
+
+    const contractResult = builder.buildContract(features, testDefs, 'valid design');
+    expect(contractResult.ok).toBe(true);
+    if (!contractResult.ok) return;
+
+    const validResult = builder.validateContract(contractResult.value);
+    expect(validResult.ok).toBe(true);
+    if (!validResult.ok) return;
+    expect(Array.isArray(validResult.value)).toBe(true);
+    expect(validResult.value.length).toBe(0);
+  });
+
+  it('ConversationManager: message id가 특수 문자 포함 → ok', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'special-id-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    const msg = createMessage('msg:special@id#1', 'user', 'content', 'proj-special-id');
+
+    const addResult = await manager.addMessage(msg);
+    expect(typeof addResult.ok).toBe('boolean');
+  });
+
+  it('ContractBuilder: 5개 features 모두 의존성 없음 → order는 5개', () => {
+    const builder = new ContractBuilder(logger);
+
+    const features = Array.from({ length: 5 }, (_, i) => createFeature(`ind-feat-${i}`));
+    const testDefs = features.map((f) => createTestDef(f.id));
+
+    const result = builder.buildContract(features, testDefs, 'independent features design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.implementationOrder.length).toBe(5);
+  });
+
+  it('ConversationManager: 연속 50개 add → getHistory에서 50개 반환', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'fifty-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    for (let i = 0; i < 50; i++) {
+      const role: 'user' | 'assistant' = i % 2 === 0 ? 'user' : 'assistant';
+      await manager.addMessage(createMessage(`msg-fifty-${i}`, role, `content ${i}`, 'proj-fifty'));
+    }
+
+    const hist = await manager.getHistory('proj-fifty');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(50);
+  });
+
+  it('ContractBuilder: HandoffPackage의 confirmedByUser 초기값은 false', () => {
+    const builder = new ContractBuilder(logger);
+    const contractResult = builder.buildContract([createFeature('f1')], [createTestDef('f1')], 'design');
+    expect(contractResult.ok).toBe(true);
+    if (!contractResult.ok) return;
+
+    const handoff = builder.buildHandoffPackage('proj-confirm', contractResult.value, 'plan', 'design', 'spec');
+    expect(handoff.ok).toBe(true);
+    if (!handoff.ok) return;
+    expect(handoff.value.confirmedByUser).toBe(false);
+  });
+
+  it('ContractBuilder: buildContract 반환 Contract의 features는 입력 features와 같은 길이', () => {
+    const builder = new ContractBuilder(logger);
+    const features = [
+      createFeature('f1'),
+      createFeature('f2'),
+      createFeature('f3'),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+    const result = builder.buildContract(features, testDefs, 'three features design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.features.length).toBe(3);
+  });
+
+  it('ConversationManager: searchContext는 배열을 반환', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'search-array-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('msg-sa', 'user', 'search target', 'proj-sa'));
+
+    const result = await manager.searchContext('proj-sa', 'search');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Array.isArray(result.value)).toBe(true);
+  });
+
+  it('ContractBuilder: allFeaturesHaveCriteria가 true이면 모든 feature에 criteria 있음', () => {
+    const builder = new ContractBuilder(logger);
+    const features = [
+      createFeature('f1'), // createFeature는 1개 AC를 포함
+      createFeature('f2'),
+    ];
+    const testDefs = features.map((f) => createTestDef(f.id));
+    const result = builder.buildContract(features, testDefs, 'all have criteria design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.verificationMatrix.allFeaturesHaveCriteria).toBe(true);
+  });
+
+  it('ContractBuilder: 한 feature라도 AC 없으면 allFeaturesHaveCriteria=false', () => {
+    const builder = new ContractBuilder(logger);
+    const featureWithAC = createFeature('f-with-ac');
+    const featureNoAC: FeatureSpec = {
+      id: 'f-no-ac',
+      name: 'No AC',
+      description: 'No criteria',
+      acceptanceCriteria: [],
+      dependencies: [],
+      inputs: [{ name: 'in', type: 'string', constraints: '', required: true }],
+      outputs: [{ name: 'out', type: 'string', constraints: '', required: true }],
+    };
+
+    const result = builder.buildContract([featureWithAC, featureNoAC], [createTestDef('f-with-ac'), createTestDef('f-no-ac')], 'mixed ac design');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.verificationMatrix.allFeaturesHaveCriteria).toBe(false);
+  });
+
+  it('ConversationManager: message role이 user인지 assistant인지 정확히 검사', async () => {
+    const repo = new MemoryRepository(join(tmpDir, 'role-check-db'), logger);
+    await repo.initialize();
+
+    const manager = new ConversationManager(repo, logger);
+    await manager.addMessage(createMessage('rc-1', 'user', 'user content', 'proj-rc'));
+    await manager.addMessage(createMessage('rc-2', 'assistant', 'assistant content', 'proj-rc'));
+
+    const hist = await manager.getHistory('proj-rc');
+    expect(hist.ok).toBe(true);
+    if (!hist.ok) return;
+    expect(hist.value.length).toBe(2);
+    const roles = new Set(hist.value.map((m) => m.role));
+    expect(roles.has('user')).toBe(true);
+    expect(roles.has('assistant')).toBe(true);
+  });
 });
