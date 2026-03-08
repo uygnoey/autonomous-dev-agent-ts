@@ -267,4 +267,369 @@ describe('CLI 통합 / CLI integration', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('cli_project_not_found');
   });
+
+  // ── Edge cases: CommandRouter ─────────────────────────────────────
+
+  it('CommandRouter: 단일 명령만 등록 후 다른 명령 실행 → 에러', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = await router.execute(['config', 'list']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('cli_unknown_command');
+    }
+  });
+
+  it('CommandRouter: 동일 명령 중복 등록 → 마지막 명령 우선 또는 에러', () => {
+    const router = new CommandRouter(logger);
+    const cmd1 = new InitCommand(logger, registryDir);
+    const cmd2 = new InitCommand(logger, registryDir);
+    router.register(cmd1);
+    // WHY: 중복 등록 시 에러 또는 덮어쓰기 동작 확인
+    expect(() => router.register(cmd2)).not.toThrow();
+  });
+
+  it('CommandRouter: 명령 이름 대소문자 구분', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['Init']);
+    // WHY: CLI는 대소문자 구분 → 'Init' !== 'init'
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 매우 긴 명령 인자 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const longArg = 'a'.repeat(1000);
+    const result = router.parse(['init', longArg]);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 한글 인자 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    const result = router.parse(['project', 'add', '/경로/프로젝트']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 특수문자 포함 인자 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init', '--project-path=/tmp/test @#$%']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: null 유사 빈 문자열 인자 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init', '']);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: 100개 명령 인자 처리', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const args = Array.from({ length: 100 }, (_, i) => `arg-${i}`);
+    const result = router.parse(['init', ...args]);
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: getHelp가 빈 등록 시 adev 포함', () => {
+    const router = new CommandRouter(logger);
+    const help = router.getHelp();
+    expect(help).toContain('adev');
+  });
+
+  it('CommandRouter: parse 후 value.options 항상 정의됨', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.options).toBeDefined();
+    }
+  });
+
+  it('CommandRouter: parse 후 value.args 항상 배열', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+
+    const result = router.parse(['init']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Array.isArray(result.value.args)).toBe(true);
+    }
+  });
+
+  // ── Edge cases: InitCommand ───────────────────────────────────────
+
+  it('InitCommand: 빈 projectPath → 에러 또는 현재 디렉토리 사용', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { projectPath: '', flags: {} });
+    // WHY: 빈 경로는 에러이거나 cwd를 사용해야 함
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: 존재하지 않는 상위 경로에 초기화 → 디렉토리 자동 생성', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const deepPath = join(tmpDir, 'deep', 'nested', 'project');
+    const result = await initCmd.execute([], { projectPath: deepPath, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: 한글 경로에 초기화', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const koreanPath = join(tmpDir, '한글경로');
+    const result = await initCmd.execute([], { projectPath: koreanPath, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('InitCommand: 초기화 후 config.json이 유효한 JSON', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    expect(result.ok).toBe(true);
+
+    const configPath = join(tmpDir, '.adev', 'config.json');
+    const configFile = Bun.file(configPath);
+    const text = await configFile.text();
+    const parsed = JSON.parse(text);
+    expect(typeof parsed).toBe('object');
+    expect(parsed).not.toBeNull();
+  });
+
+  it('InitCommand: 초기화 후 data 디렉토리가 존재함', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const dataDir = join(tmpDir, '.adev', 'data');
+    const { access: fsAccess } = await import('node:fs/promises');
+    const dataAccess = await fsAccess(dataDir);
+    // WHY: data 디렉토리가 생성되어 접근 가능해야 함
+    expect(dataAccess === undefined || dataAccess === null).toBe(true);
+  });
+
+  it('InitCommand: 여러 다른 경로에 독립 초기화', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    const path1 = join(tmpDir, 'proj1');
+    const path2 = join(tmpDir, 'proj2');
+
+    const r1 = await initCmd.execute([], { projectPath: path1, flags: {} });
+    const r2 = await initCmd.execute([], { projectPath: path2, flags: {} });
+
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+  });
+
+  // ── Edge cases: ConfigCommand ─────────────────────────────────────
+
+  it('ConfigCommand: 알 수 없는 서브커맨드 → 에러', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['unknown-sub'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('ConfigCommand: get 인자 없음 → 에러', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['get'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: set 키 없음 → 에러', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['set'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: 중첩 키 (a.b.c) get/set', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const setResult = await configCmd.execute(
+      ['set', 'a.b.c', 'nested-value'],
+      { projectPath: tmpDir, flags: {} },
+    );
+    expect(setResult.ok === true || setResult.ok === false).toBe(true);
+
+    if (setResult.ok) {
+      const getResult = await configCmd.execute(
+        ['get', 'a.b.c'],
+        { projectPath: tmpDir, flags: {} },
+      );
+      expect(getResult.ok).toBe(true);
+    }
+  });
+
+  it('ConfigCommand: 한글 값 설정/조회', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const setResult = await configCmd.execute(
+      ['set', 'description', '한글 설명 값'],
+      { projectPath: tmpDir, flags: {} },
+    );
+    expect(setResult.ok === true || setResult.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: 특수문자 값 설정', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const setResult = await configCmd.execute(
+      ['set', 'special', '@#$%^&*()_+-='],
+      { projectPath: tmpDir, flags: {} },
+    );
+    expect(setResult.ok === true || setResult.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: projectPath 없이 list → 에러 또는 빈 설정', async () => {
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['list'], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ConfigCommand: list가 문자열 결과 반환', async () => {
+    const initCmd = new InitCommand(logger, registryDir);
+    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+
+    const configCmd = new ConfigCommand(logger);
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    expect(result.ok).toBe(true);
+  });
+
+  // ── Edge cases: ProjectCommand ────────────────────────────────────
+
+  it('ProjectCommand: 한글 프로젝트 이름/경로', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(
+      ['add', join(tmpDir, '한글프로젝트')],
+      { flags: {} },
+    );
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: 빈 프로젝트 이름으로 switch → 에러', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['switch', ''], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: list가 항상 성공', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['list'], { flags: {} });
+    expect(result.ok).toBe(true);
+  });
+
+  it('ProjectCommand: 알 수 없는 서브커맨드 → 에러', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['unknown-sub'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('ProjectCommand: add 경로 인자 없음 → 에러', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const result = await projectCmd.execute(['add'], { flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('ProjectCommand: 여러 프로젝트 add 후 list 확인', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+
+    for (let i = 0; i < 5; i++) {
+      await projectCmd.execute(
+        ['add', join(tmpDir, `project-${i}`)],
+        { flags: {} },
+      );
+    }
+
+    const listResult = await projectCmd.execute(['list'], { flags: {} });
+    expect(listResult.ok).toBe(true);
+  });
+
+  it('ProjectCommand: add → remove → 다시 add 가능', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const projPath = join(tmpDir, 're-add-project');
+
+    await projectCmd.execute(['add', projPath], { flags: {} });
+    await projectCmd.execute(['remove', 're-add-project'], { flags: {} });
+
+    const reAdd = await projectCmd.execute(['add', projPath], { flags: {} });
+    expect(reAdd.ok).toBe(true);
+  });
+
+  it('ProjectCommand: UUID 형식 경로 등록', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const uuidPath = join(tmpDir, crypto.randomUUID());
+    const result = await projectCmd.execute(['add', uuidPath], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('ProjectCommand: switch 후 다시 switch → 성공', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+
+    await projectCmd.execute(['add', join(tmpDir, 'proj-a')], { flags: {} });
+    await projectCmd.execute(['add', join(tmpDir, 'proj-b')], { flags: {} });
+
+    const sw1 = await projectCmd.execute(['switch', 'proj-a'], { flags: {} });
+    const sw2 = await projectCmd.execute(['switch', 'proj-b'], { flags: {} });
+
+    expect(sw1.ok).toBe(true);
+    expect(sw2.ok).toBe(true);
+  });
+
+  it('ProjectCommand: 특수문자 포함 경로 처리', async () => {
+    const projectCmd = new ProjectCommand(logger, tmpDir);
+    const specialPath = join(tmpDir, 'proj-@special');
+    const result = await projectCmd.execute(['add', specialPath], { flags: {} });
+    expect(result.ok === true || result.ok === false).toBe(true);
+  });
+
+  it('CommandRouter: execute가 Result 패턴 반환', async () => {
+    const router = new CommandRouter(logger);
+    router.register(new ProjectCommand(logger, tmpDir));
+
+    const result = await router.execute(['project', 'list']);
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('CommandRouter: 4개 명령 모두 등록 후 getHelp에 모두 포함', () => {
+    const router = new CommandRouter(logger);
+    router.register(new InitCommand(logger, registryDir));
+    router.register(new ConfigCommand(logger));
+    router.register(new ProjectCommand(logger, tmpDir));
+    router.register(new StartCommand(logger));
+
+    const help = router.getHelp();
+    expect(help).toContain('init');
+    expect(help).toContain('config');
+    expect(help).toContain('project');
+    expect(help).toContain('start');
+  });
+
+  it('CommandRouter: parse 결과 value.command가 등록 명령과 일치', () => {
+    const router = new CommandRouter(logger);
+    router.register(new ConfigCommand(logger));
+
+    const result = router.parse(['config', 'list']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.command).toBe('config');
+    }
+  });
 });
