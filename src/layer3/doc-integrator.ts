@@ -13,12 +13,7 @@ import { Layer3Error } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
-import type {
-  DocumentFragment,
-  DocumentTemplate,
-  IntegratedDocument,
-  ProjectDocumentType,
-} from 'layer3/types.js';
+import type { DocumentFragment, DocumentTemplate, IntegratedDocument } from 'layer3/types.js';
 export type { IntegrateOptions, IDocIntegrator } from 'layer3/doc-integrator-types.js';
 import {
   buildMarkdownExport,
@@ -26,8 +21,13 @@ import {
   integrateSync,
   integrateWithOptions,
   parseFragmentFromMarkdown,
-  readTemplateSourceFile,
 } from 'layer3/doc-integrator-fragment.js';
+import {
+  listTemplates as listTemplatesHelper,
+  loadDefaultTemplates,
+  readTemplateSource as readTemplateSourceHelper,
+  registerTemplate as registerTemplateHelper,
+} from 'layer3/doc-integrator-template.js';
 import type { IDocIntegrator, IntegrateOptions } from 'layer3/doc-integrator-types.js';
 
 /**
@@ -48,31 +48,7 @@ export class DocIntegrator implements IDocIntegrator {
    * 기본 템플릿 로드 / Load default templates
    */
   private loadDefaultTemplates(): void {
-    const defaultTypes: readonly ProjectDocumentType[] = [
-      'readme',
-      'api-reference',
-      'architecture',
-      'user-manual',
-      'installation-guide',
-      'test-report',
-      'changelog',
-      'contributing-guide',
-    ];
-
-    for (const type of defaultTypes) {
-      const template: DocumentTemplate = {
-        id: `default-${type}`,
-        name: type,
-        type,
-        templatePath: `templates/project/${type}.hbs`,
-        format: type === 'api-reference' ? 'html' : 'md',
-        description: `Default ${type} template`,
-        custom: false,
-      };
-      this.templateRegistry.set(template.id ?? `default-${type}`, template);
-    }
-
-    this.logger.debug('기본 템플릿 로드 완료', { count: this.templateRegistry.size });
+    loadDefaultTemplates(this.templateRegistry, this.logger);
   }
 
   /**
@@ -234,14 +210,7 @@ export class DocIntegrator implements IDocIntegrator {
   async listTemplates(
     includeCustom = true,
   ): Promise<Result<readonly DocumentTemplate[], Layer3Error>> {
-    try {
-      const allTemplates = Array.from(this.templateRegistry.values());
-      const filtered = includeCustom ? allTemplates : allTemplates.filter((t) => !t.custom);
-      return ok(filtered);
-    } catch (cause) {
-      const error = new Layer3Error('layer3_list_templates_failed', '템플릿 목록 조회 실패', cause);
-      return err(error);
-    }
+    return listTemplatesHelper(this.templateRegistry, includeCustom);
   }
 
   /**
@@ -255,37 +224,7 @@ export class DocIntegrator implements IDocIntegrator {
    * @returns 등록 성공 여부 / Whether registration succeeded
    */
   async registerTemplate(template: DocumentTemplate): Promise<Result<void, Layer3Error>> {
-    try {
-      const templateId = template.id ?? `custom-${Date.now()}`;
-      if (this.templateRegistry.has(templateId)) {
-        return err(
-          new Layer3Error('layer3_template_duplicate', `템플릿 ID가 이미 존재함: ${templateId}`),
-        );
-      }
-
-      // WHY: 커스텀 템플릿의 파일 존재 확인 (Bun.file 사용) — 경고만 로그
-      if (template.custom && template.templatePath) {
-        try {
-          const templateFile = Bun.file(template.templatePath);
-          const exists = await templateFile.exists();
-          if (!exists) {
-            this.logger.warn('템플릿 파일이 존재하지 않음 (런타임 시 기본 템플릿 사용)', {
-              templatePath: template.templatePath,
-            });
-          }
-        } catch {
-          this.logger.warn('템플릿 파일 존재 확인 실패', { templatePath: template.templatePath });
-        }
-      }
-
-      this.templateRegistry.set(templateId, template);
-      this.logger.info('커스텀 템플릿 등록 완료', { templateId, type: template.type });
-      return ok(undefined);
-    } catch (cause) {
-      return err(
-        new Layer3Error('layer3_register_template_failed', '커스텀 템플릿 등록 실패', cause),
-      );
-    }
+    return registerTemplateHelper(this.templateRegistry, template, this.logger);
   }
 
   /**
@@ -295,6 +234,6 @@ export class DocIntegrator implements IDocIntegrator {
    * @returns 템플릿 소스 문자열 / Template source string
    */
   async readTemplateSource(template: DocumentTemplate): Promise<string> {
-    return readTemplateSourceFile(template, this.logger);
+    return readTemplateSourceHelper(template, this.logger);
   }
 }

@@ -1,0 +1,145 @@
+/**
+ * MCP JSON-RPC 핸드셰이크 헬퍼 / MCP JSON-RPC handshake helpers
+ *
+ * @description
+ * KR: MCP 서버와의 JSON-RPC 핸드셰이크 절차를 수행하는 순수 함수 모음.
+ *     initialize → notifications/initialized → tools/list 순서로 진행.
+ * EN: Pure functions for performing the MCP JSON-RPC handshake sequence.
+ *     Progresses through initialize → notifications/initialized → tools/list.
+ */
+
+import type { Subprocess } from 'bun';
+import type { Logger } from 'core/logger.js';
+import type { McpTool } from 'mcp/types.js';
+
+// ── 상수 / Constants ─────────────────────────────────────────────
+
+/** MCP JSON-RPC 핸드셰이크 타임아웃 (ms) / Handshake timeout */
+export const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+/** MCP 프로토콜 버전 / MCP protocol version */
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+
+// ── 내부 타입 / Internal types ───────────────────────────────────
+
+/** Bun.spawn으로 생성된 파이프 프로세스 / Piped subprocess from Bun.spawn */
+type PipedSubprocess = Subprocess<'pipe', 'pipe', 'ignore'>;
+
+// ── 핸드셰이크 / Handshake ────────────────────────────────────────
+
+/**
+ * MCP JSON-RPC 핸드셰이크를 수행한다 / Perform MCP JSON-RPC handshake
+ *
+ * @description
+ * KR: initialize → notifications/initialized → tools/list 순서로 핸드셰이크 진행.
+ * EN: Handshake progresses through initialize → notifications/initialized → tools/list.
+ *
+ * @param proc - Bun.spawn으로 생성된 프로세스 / Process from Bun.spawn
+ * @param name - 서버 이름 (로깅용) / Server name for logging
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @returns 검색된 MCP 도구 배열 / Array of discovered MCP tools
+ */
+export async function performHandshake(
+  proc: PipedSubprocess,
+  name: string,
+  logger: Logger,
+): Promise<McpTool[]> {
+  // WHY: Bun의 ReadableStream<Uint8Array>에서 ArrayBuffer 특정 리더 취득
+  const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>;
+
+  // 1. initialize 요청 전송
+  writeRpc(proc, {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: { name: 'adev', version: '1.0.0' },
+    },
+  });
+
+  // 2. initialize 응답 수신
+  await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+
+  // 3. initialized 알림 전송 (응답 없음)
+  writeRpc(proc, { jsonrpc: '2.0', method: 'notifications/initialized' });
+
+  // 4. tools/list 요청 전송
+  writeRpc(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+
+  // 5. tools/list 응답 수신 및 파싱
+  const toolsRaw = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+  logger.debug('MCP 도구 목록 수신', { name, preview: toolsRaw.slice(0, 200) });
+  return parseToolsResponse(toolsRaw, logger);
+}
+
+// ── 내부 헬퍼 / Internal helpers ─────────────────────────────────
+
+/** JSON-RPC 메시지를 stdin에 작성한다 / Write JSON-RPC message to stdin */
+function writeRpc(proc: PipedSubprocess, message: unknown): void {
+  // WHY: FileSink.write()는 newline 포함 문자열 직접 작성 지원
+  proc.stdin.write(`${JSON.stringify(message)}\n`);
+}
+
+/**
+ * stdout에서 한 줄의 JSON-RPC 응답을 읽는다 / Read one JSON-RPC response line from stdout
+ *
+ * @param reader - ReadableStream 리더 / ReadableStream reader
+ * @param timeoutMs - 타임아웃 (ms) / Timeout in milliseconds
+ */
+async function readRpcLine(
+  reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>,
+  timeoutMs: number,
+): Promise<string> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`MCP 응답 타임아웃: ${timeoutMs}ms 초과`)), timeoutMs),
+  );
+
+  const readLine = async (): Promise<string> => {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error('MCP 서버 스트림이 종료되었습니다 / Stream closed');
+      buffer += decoder.decode(value, { stream: true });
+      const newlineIdx = buffer.indexOf('\n');
+      if (newlineIdx !== -1) {
+        const line = buffer.slice(0, newlineIdx).trim();
+        buffer = buffer.slice(newlineIdx + 1);
+        if (line) return line;
+      }
+    }
+  };
+
+  return Promise.race([readLine(), timeout]);
+}
+
+/**
+ * tools/list 응답을 McpTool 배열로 파싱한다 / Parse tools/list response to McpTool array
+ *
+ * @param raw - 원시 JSON 문자열 / Raw JSON string
+ * @param logger - 로거 인스턴스 / Logger instance
+ */
+function parseToolsResponse(raw: string, logger: Logger): McpTool[] {
+  try {
+    const parsed = JSON.parse(raw) as {
+      result?: {
+        tools?: Array<{
+          name: string;
+          description?: string;
+          inputSchema?: Record<string, unknown>;
+        }>;
+      };
+    };
+    return (parsed.result?.tools ?? []).map((t) => ({
+      name: t.name,
+      description: t.description ?? '',
+      inputSchema: t.inputSchema ?? {},
+    }));
+  } catch {
+    logger.warn('MCP 도구 목록 파싱 실패, 빈 배열 반환');
+    return [];
+  }
+}

@@ -14,16 +14,21 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
-import type { Result } from 'core/types.js';
-import { err, ok } from 'core/types.js';
+import { type Result, err, ok } from 'core/types.js';
 import type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
-import type {
-  BusinessDeliverable,
-  Deliverable,
-  DeliverableBuildOptions,
-  DeliverableMetadata,
+import {
+  generateBusinessContent,
+  generateDeliverableTitle,
+  generateSimpleContent,
+  getDefaultFormat,
+} from 'layer3/deliverable-renderer.js';
+import {
+  type BusinessDeliverable,
+  DEFAULT_BUSINESS_TEMPLATES,
+  type Deliverable,
+  type DeliverableBuildOptions,
+  type DeliverableMetadata,
 } from 'layer3/deliverable-types.js';
-import { DEFAULT_BUSINESS_TEMPLATES } from 'layer3/deliverable-types.js';
 import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type {
   BusinessDeliverableType,
@@ -77,7 +82,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
         name: type,
         type,
         templatePath: `templates/business/${type}.hbs`,
-        format: this.getDefaultFormat(type),
+        format: getDefaultFormat(type),
         description: `Default ${type} template`,
         custom: false,
       };
@@ -86,22 +91,6 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     this.logger.debug('기본 템플릿 로드 완료', {
       count: DEFAULT_BUSINESS_TEMPLATES.length,
     });
-  }
-
-  /**
-   * 산출물 유형별 기본 형식 반환 / Get default format for deliverable type
-   */
-  private getDefaultFormat(type: BusinessDeliverableType): 'pdf' | 'docx' | 'pptx' {
-    switch (type) {
-      case 'portfolio':
-        return 'pdf';
-      case 'business-plan':
-        return 'docx';
-      case 'investment-proposal':
-        return 'pdf';
-      case 'presentation':
-        return 'pptx';
-    }
   }
 
   /**
@@ -151,9 +140,9 @@ export class DeliverableBuilder implements IDeliverableBuilder {
 
     this.logger.info('산출물 생성 시작 (동기)', { projectId, type });
 
-    const content = this.generateDeliverableContent(type, docs);
+    const content = generateSimpleContent(type, docs);
     const format = type === 'portfolio' ? ('html' as const) : ('markdown' as const);
-    const title = this.generateDeliverableTitle(type, projectId);
+    const title = generateDeliverableTitle(type, projectId);
 
     this.deliverableCounter += 1;
     const deliverable: Deliverable = {
@@ -176,40 +165,6 @@ export class DeliverableBuilder implements IDeliverableBuilder {
   }
 
   /**
-   * 유형별 산출물 제목 생성 / Generate deliverable title by type
-   */
-  private generateDeliverableTitle(type: string, projectId: string): string {
-    switch (type) {
-      case 'report':
-        return `[Technical Report] ${projectId}`;
-      case 'portfolio':
-        return `[Portfolio] ${projectId}`;
-      case 'business-plan':
-        return `[Business Plan] ${projectId}`;
-      default:
-        return `[${type}] ${projectId}`;
-    }
-  }
-
-  /**
-   * 유형별 산출물 콘텐츠 생성 (간단 버전) / Generate deliverable content (simple version)
-   */
-  private generateDeliverableContent(type: string, docs: readonly IntegratedDocument[]): string {
-    const docContents = docs.map((d) => d.content).join('\n\n---\n\n');
-
-    switch (type) {
-      case 'report':
-        return `# Technical Report\n\n${docContents}`;
-      case 'portfolio':
-        return `<article>\n<h1>Portfolio</h1>\n${docContents}\n</article>`;
-      case 'business-plan':
-        return `# Business Plan\n\n${docContents}`;
-      default:
-        return `# ${type}\n\n${docContents}`;
-    }
-  }
-
-  /**
    * 비즈니스 산출물을 생성한다 (비동기) / Build a business deliverable (async)
    *
    * @param options - 빌드 옵션 / Build options
@@ -224,8 +179,8 @@ export class DeliverableBuilder implements IDeliverableBuilder {
 
     this.logger.info('산출물 생성 시작', { projectId, type });
 
-    const format = this.getDefaultFormat(type);
-    const content = this.generateContent(type, metadata);
+    const format = getDefaultFormat(type);
+    const content = generateBusinessContent(type, metadata);
 
     this.deliverableCounter += 1;
     const deliverable: BusinessDeliverable = {
@@ -254,14 +209,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return ok(deliverable);
   }
 
-  /**
-   * 모든 기본 산출물을 생성한다 / Build all default deliverables
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @param metadata - 산출물 메타데이터 / Deliverable metadata
-   * @param outputDir - 출력 디렉토리 / Output directory
-   * @returns 생성된 산출물 목록 / Generated deliverables
-   */
+  /** 모든 기본 산출물을 생성한다 / Build all default deliverables */
   async buildAll(
     projectId: string,
     metadata: DeliverableMetadata,
@@ -270,9 +218,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     const results: BusinessDeliverable[] = [];
 
     for (const type of DEFAULT_BUSINESS_TEMPLATES) {
-      const format = this.getDefaultFormat(type);
-      const ext = format;
-      const outputPath = join(outputDir, `${type}.${ext}`);
+      const outputPath = join(outputDir, `${type}.${getDefaultFormat(type)}`);
 
       const result = await this.build({
         projectId,
@@ -291,90 +237,14 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return ok(results);
   }
 
-  /**
-   * 프로젝트별 산출물 목록을 조회한다 / List deliverables for a project
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @returns 산출물 목록 / Deliverable list
-   */
+  /** 프로젝트별 산출물 목록을 조회한다 / List deliverables for a project */
   listDeliverables(projectId: string): (BusinessDeliverable | Deliverable)[] {
     const business = this.deliverables.get(projectId) ?? [];
     const simple = this.simpleDeliverables.get(projectId) ?? [];
     return [...business, ...simple];
   }
 
-  /**
-   * 유형별 산출물 콘텐츠 생성 / Generate deliverable content by type
-   */
-  private generateContent(type: BusinessDeliverableType, metadata: DeliverableMetadata): string {
-    const extraSection = metadata.extra
-      ? Object.entries(metadata.extra)
-          .map(([key, value]) => `- ${key}: ${String(value)}`)
-          .join('\n')
-      : '';
-
-    switch (type) {
-      case 'portfolio':
-        return [
-          `# ${metadata.projectName} 포트폴리오`,
-          '',
-          '## 프로젝트 소개',
-          metadata.projectDescription,
-          '',
-          metadata.targetAudience ? `대상: ${metadata.targetAudience}` : '',
-          metadata.purpose ? `목적: ${metadata.purpose}` : '',
-          extraSection ? `\n## 추가 정보\n${extraSection}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-      case 'business-plan':
-        return [
-          `# 사업 계획서 — ${metadata.projectName}`,
-          '',
-          '## 개요',
-          metadata.projectDescription,
-          '',
-          metadata.targetAudience ? `대상 시장: ${metadata.targetAudience}` : '',
-          metadata.purpose ? `목적: ${metadata.purpose}` : '',
-          extraSection ? `\n## 추가 정보\n${extraSection}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-      case 'investment-proposal':
-        return [
-          `# 투자 제안서 — ${metadata.projectName}`,
-          '',
-          '## 프로젝트 개요',
-          metadata.projectDescription,
-          '',
-          metadata.targetAudience ? `대상 투자자: ${metadata.targetAudience}` : '',
-          metadata.purpose ? `투자 목적: ${metadata.purpose}` : '',
-          extraSection ? `\n## 추가 정보\n${extraSection}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-      case 'presentation':
-        return [
-          `# ${metadata.projectName}`,
-          '',
-          '## Introduction',
-          metadata.projectDescription,
-          '',
-          metadata.targetAudience ? `Audience: ${metadata.targetAudience}` : '',
-          metadata.purpose ? `Purpose: ${metadata.purpose}` : '',
-          extraSection ? `\n## Details\n${extraSection}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n');
-    }
-  }
-
-  /**
-   * 사용 가능한 산출물 템플릿 목록을 조회한다 / List available deliverable templates
-   */
+  /** 사용 가능한 산출물 템플릿 목록을 조회한다 / List available deliverable templates */
   async listTemplates(includeCustom = true): Promise<Result<readonly DocumentTemplate[]>> {
     const templates: DocumentTemplate[] = [];
 
@@ -393,9 +263,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return ok(templates);
   }
 
-  /**
-   * 커스텀 산출물 템플릿을 등록한다 / Register a custom deliverable template
-   */
+  /** 커스텀 산출물 템플릿을 등록한다 / Register a custom deliverable template */
   async registerTemplate(template: DocumentTemplate): Promise<Result<void>> {
     const templateId = template.id ?? `custom-${Date.now()}`;
     if (this.templateRegistry.has(templateId)) {

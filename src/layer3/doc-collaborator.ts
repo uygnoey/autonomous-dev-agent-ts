@@ -19,7 +19,12 @@ import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { ClaudeApi } from 'layer1/claude-api.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
-import type { AgentConfig } from 'layer2/types.js';
+import {
+  callLayer1,
+  callLayer2,
+  generateToc,
+  runCollaborationPipeline,
+} from 'layer3/doc-collaborator-bridge.js';
 import type {
   CollabDocState,
   IDocCollaborator,
@@ -116,39 +121,11 @@ export class DocCollaborator implements IDocCollaborator {
    * @returns 목차 문자열 / Table of contents string
    */
   generateTableOfContents(content: string): Result<string> {
-    if (!content || content.trim() === '') {
-      return err(new AgentError('agent_invalid_input', '문서 내용이 비어 있습니다'));
+    const result = generateToc(content);
+    if (result.ok) {
+      this.logger.info('목차 생성 완료');
     }
-
-    const headingPattern = /^(#{1,6})\s+(.+)$/gm;
-    const headings: { level: number; text: string }[] = [];
-
-    for (
-      let match = headingPattern.exec(content);
-      match !== null;
-      match = headingPattern.exec(content)
-    ) {
-      const level = match[1]?.length ?? 1;
-      const text = match[2]?.trim() ?? '';
-      if (text) {
-        headings.push({ level, text });
-      }
-    }
-
-    if (headings.length === 0) {
-      return ok('## 목차\n\n(내용 없음)');
-    }
-
-    const tocLines = headings.map((h) => {
-      const indent = '  '.repeat(h.level - 1);
-      return `${indent}- ${h.text}`;
-    });
-
-    const toc = `## 목차\n\n${tocLines.join('\n')}`;
-
-    this.logger.info('목차 생성 완료', { headingCount: headings.length });
-
-    return ok(toc);
+    return result;
   }
 
   /**
@@ -182,112 +159,20 @@ export class DocCollaborator implements IDocCollaborator {
    * 1계층에 뼈대 생성 또는 최종 검토를 요청한다 / Request Layer 1 to create structure or review
    */
   async requestLayer1(request: Layer1Request): Promise<Result<Layer1Response>> {
-    try {
-      if (!this.claudeApi) {
-        return err(new AgentError('agent_not_configured', 'Claude API가 설정되지 않았습니다'));
-      }
-
-      let prompt: string;
-
-      if (request.type === 'create-structure') {
-        prompt = `다음 프로젝트의 ${request.docType} 문서 뼈대를 작성해주세요.\n\n컨텍스트: ${request.context}`;
-      } else {
-        if (!request.layer2Details) {
-          return err(
-            new AgentError(
-              'agent_invalid_request',
-              'review-and-refine 요청 시 layer2Details가 필요합니다',
-            ),
-          );
-        }
-        prompt = `다음 문서를 최종 검토하고 다듬어주세요.\n\n${request.layer2Details}`;
-      }
-
-      const result = await this.claudeApi.createMessage([{ role: 'user', content: prompt }], {
-        maxTokens: 8192,
-        temperature: 0.7,
-      });
-
-      if (!result.ok) {
-        return err(
-          new AgentError(
-            'agent_layer1_request_failed',
-            `1계층 요청 실패: ${result.error.message}`,
-            result.error,
-          ),
-        );
-      }
-
-      const responseType = request.type === 'create-structure' ? 'structure' : 'refined';
-      return ok({ type: responseType, content: result.value.content });
-    } catch (error: unknown) {
-      return err(
-        new AgentError(
-          'agent_layer1_request_failed',
-          `1계층 요청 중 예외 발생: ${error instanceof Error ? error.message : String(error)}`,
-          error,
-        ),
-      );
+    if (!this.claudeApi) {
+      return err(new AgentError('agent_not_configured', 'Claude API가 설정되지 않았습니다'));
     }
+    return callLayer1(this.claudeApi, request);
   }
 
   /**
    * 2계층 documenter에 상세 작성을 요청한다 / Request Layer 2 documenter to fill in details
    */
   async requestLayer2(request: Layer2Request): Promise<Result<Layer2Response>> {
-    try {
-      if (!this.documenterSpawner) {
-        return err(
-          new AgentError('agent_not_configured', 'documenter 스포너가 설정되지 않았습니다'),
-        );
-      }
-
-      const fragmentsContext = request.fragments
-        .map((frag) => `[${frag.type}] ${frag.id}:\n${frag.content}`)
-        .join('\n\n---\n\n');
-
-      const prompt = `다음 문서 뼈대에 구현 상세를 채워넣으세요.\n\n## 뼈대:\n\n${request.structure}\n\n## 조각 문서:\n\n${fragmentsContext || '(조각 문서 없음)'}`;
-
-      const agentConfig: AgentConfig = {
-        name: 'documenter',
-        projectId: 'collab-doc',
-        featureId: `doc-${request.docType}`,
-        phase: 'VERIFY',
-        systemPrompt: '당신은 기술 문서 작성 전문가입니다.',
-        prompt,
-        tools: ['read', 'grep', 'glob'],
-        maxTurns: 20,
-      };
-
-      let content = '';
-      for await (const event of this.documenterSpawner.spawn(agentConfig)) {
-        if (event.type === 'message') {
-          content += event.content;
-        }
-      }
-
-      if (!content.trim()) {
-        return err(
-          new AgentError(
-            'agent_layer2_request_failed',
-            '2계층 documenter가 빈 내용을 반환했습니다',
-          ),
-        );
-      }
-
-      const headingMatches = content.match(/^#{1,6}\s+.+$/gm) || [];
-      const filledSections = headingMatches.map((h) => h.trim());
-
-      return ok({ content, filledSections });
-    } catch (error: unknown) {
-      return err(
-        new AgentError(
-          'agent_layer2_request_failed',
-          `2계층 요청 중 예외 발생: ${error instanceof Error ? error.message : String(error)}`,
-          error,
-        ),
-      );
+    if (!this.documenterSpawner) {
+      return err(new AgentError('agent_not_configured', 'documenter 스포너가 설정되지 않았습니다'));
     }
+    return callLayer2(this.documenterSpawner, request);
   }
 
   /**
@@ -306,84 +191,16 @@ export class DocCollaborator implements IDocCollaborator {
   async runCollaboration(
     options: CollaborativeDocOptions,
   ): Promise<Result<CollaborativeDocResult>> {
-    // 1. 상태 초기화 / Initialize state
     const startResult = await this.start(options);
     if (!startResult.ok) return err(startResult.error);
-    const { id: docId } = startResult.value;
-
-    let structure: string;
-    let finalContent: string;
-
-    // 2. Layer1 구조 생성 또는 제공된 구조 사용 / Generate or use provided structure
-    if (this.claudeApi) {
-      const l1StructResult = await this.requestLayer1({
-        type: 'create-structure',
-        docType: options.type,
-        context: options.layer1Structure,
-      });
-      structure = l1StructResult.ok ? l1StructResult.value.content : options.layer1Structure;
-    } else {
-      structure = options.layer1Structure;
-    }
-
-    // WHY: 구조 완료 후 detail 단계로 전환
-    const afterStructure = this.stateStore.get(docId);
-    if (afterStructure) {
-      this.stateStore.set(docId, {
-        ...afterStructure,
-        structure,
-        phase: 'detail',
-        updatedAt: new Date(),
-      });
-    }
-
-    // 3. Layer2 상세 작성 또는 조각 병합 fallback / Fill in details via Layer2 or merge fragments
-    if (this.documenterSpawner) {
-      const l2Result = await this.requestLayer2({
-        docType: options.type,
-        structure,
-        fragments: options.layer2Fragments,
-      });
-
-      if (l2Result.ok) {
-        // 4. Layer1 최종 검토 / Layer1 review and refine
-        if (this.claudeApi) {
-          const l1RefineResult = await this.requestLayer1({
-            type: 'review-and-refine',
-            docType: options.type,
-            context: structure,
-            layer2Details: l2Result.value.content,
-          });
-          finalContent = l1RefineResult.ok ? l1RefineResult.value.content : l2Result.value.content;
-        } else {
-          finalContent = l2Result.value.content;
-        }
-      } else {
-        finalContent = structure;
-      }
-    } else {
-      // WHY: spawner 없을 때 조각 내용을 직접 병합
-      const fragContent = options.layer2Fragments.map((f) => f.content).join('\n\n');
-      finalContent = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
-    }
-
-    // WHY: review 단계와 finalContent 설정 후 complete() 호출 가능
-    const afterDetail = this.stateStore.get(docId);
-    if (afterDetail) {
-      this.stateStore.set(docId, {
-        ...afterDetail,
-        phase: 'review',
-        finalContent,
-        updatedAt: new Date(),
-      });
-    }
-
-    // 5. 완료 / Complete
-    const completeResult = await this.complete(docId);
-    if (!completeResult.ok) return err(completeResult.error);
-
-    // WHY: outputPath를 options에서 주입 — complete()는 빈 문자열을 반환하므로 덮어쓴다
-    return ok({ ...completeResult.value, outputPath: options.outputPath });
+    return runCollaborationPipeline(
+      options,
+      this.claudeApi,
+      this.documenterSpawner,
+      this.stateStore,
+      startResult.value.id,
+      this.logger,
+    );
   }
 
   /**
@@ -415,11 +232,7 @@ export class DocCollaborator implements IDocCollaborator {
       generatedAt: new Date(),
     };
 
-    this.stateStore.set(docId, {
-      ...state,
-      phase: 'complete',
-      updatedAt: new Date(),
-    });
+    this.stateStore.set(docId, { ...state, phase: 'complete', updatedAt: new Date() });
 
     return ok(result);
   }

@@ -1,12 +1,12 @@
 /** ProductionTester - 지속적 E2E 실행 관리 / Continuous E2E session management */
 import { randomUUID } from 'node:crypto';
-import type { AdevError } from 'core/errors.js';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
 import { executeE2E, getFailureRate, isHealthy, runE2E } from 'layer3/e2e-runner.js';
+import { executeOnce } from 'layer3/production-tester-session.js';
 import type {
   ContinuousE2EConfig,
   ContinuousE2ESession,
@@ -110,7 +110,7 @@ export class ProductionTester implements IProductionTester {
 
     // WHY: 백그라운드 타이머 시작 (Bun의 setInterval 사용)
     const timer = setInterval(() => {
-      void this.executeOnce(sessionId);
+      void this._runOnce(sessionId);
     }, session.config.intervalMs);
     this.timers.set(sessionId, timer);
     return ok(session);
@@ -179,7 +179,7 @@ export class ProductionTester implements IProductionTester {
     }
 
     const timer = setInterval(() => {
-      void this.executeOnce(sessionId);
+      void this._runOnce(sessionId);
     }, session.config.intervalMs);
     this.timers.set(sessionId, timer);
     session.status = 'running';
@@ -250,64 +250,17 @@ export class ProductionTester implements IProductionTester {
     return getFailureRate(runs);
   }
 
-  private async executeOnce(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session || session.status !== 'running') return;
-
-    this.logger.debug('E2E 테스트 실행 시작', {
+  /** @internal 세션 단일 실행 위임 / Delegate single-run to extracted helper */
+  private async _runOnce(sessionId: string): Promise<void> {
+    await executeOnce(
       sessionId,
-      execution: session.totalExecutions + 1,
-    });
-    session.totalExecutions += 1;
-    session.lastExecutedAt = new Date();
-
-    try {
-      const result = await this.integrationTester.runIntegrationTests(
-        session.projectId,
-        session.config.testPath,
-      );
-
-      if (!result.ok) {
-        const errorResult = result as { readonly ok: false; readonly error: AdevError };
-        session.failureCount += 1;
-        this.logger.error('E2E 테스트 실행 실패', {
-          sessionId,
-          errorCode: errorResult.error.code,
-          errorMessage: errorResult.error.message,
-        });
-        if (session.config.failFast) {
-          this.logger.error('Fail-Fast 활성화 - 세션 중지', { sessionId });
-          await this.stop(sessionId);
-        }
-        return;
-      }
-
-      const allPassed = result.value.every((r) => r.passed);
-      if (allPassed) {
-        session.successCount += 1;
-        this.logger.info('E2E 테스트 성공', { sessionId, execution: session.totalExecutions });
-      } else {
-        session.failureCount += 1;
-        this.logger.warn('E2E 테스트 실패', {
-          sessionId,
-          execution: session.totalExecutions,
-          failedSteps: result.value.filter((r) => !r.passed).map((r) => r.step),
-        });
-        if (session.config.failFast) {
-          this.logger.error('Fail-Fast 활성화 - 세션 중지', { sessionId });
-          await this.stop(sessionId);
-        }
-      }
-    } catch (error) {
-      session.failureCount += 1;
-      this.logger.error('E2E 테스트 실행 중 예외 발생', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      if (session.config.failFast) {
-        this.logger.error('Fail-Fast 활성화 - 세션 중지', { sessionId });
-        await this.stop(sessionId);
-      }
-    }
+      this.sessions,
+      this.timers,
+      this.integrationTester,
+      this.logger,
+      async (sid) => {
+        await this.stop(sid);
+      },
+    );
   }
 }

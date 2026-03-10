@@ -6,7 +6,7 @@
  * EN: Constructor/normalizeVector edge tests (fast). Model init tests use 60s timeout.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { ConsoleLogger } from 'core/logger.js';
 import {
   TransformersEmbeddingProvider,

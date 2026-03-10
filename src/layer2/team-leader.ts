@@ -14,6 +14,13 @@
 
 import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
+import {
+  createEvent,
+  executePhase,
+  getNextPhase,
+  spawnDocumenter,
+  updateStatusForPhase,
+} from 'layer2/team-leader-helpers.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import type { AgentEvent } from 'layer2/types.js';
 
@@ -110,76 +117,43 @@ export class TeamLeader {
       iteration += 1;
       const currentPhase = this.phaseEngine.currentPhase;
 
-      this.logger.info('Phase 실행', {
-        featureId,
-        phase: currentPhase,
-        iteration,
-      });
+      this.logger.info('Phase 실행', { featureId, phase: currentPhase, iteration });
 
       // WHY: 토큰 모니터를 확인하여 리소스 부족 시 중단
       if (this.tokenMonitor.shouldPauseAll()) {
         this.logger.error('토큰 부족으로 실행 일시 정지', { featureId });
-        yield this.createEvent('error', '토큰 리밋 도달로 실행 일시 정지');
+        yield createEvent('error', '토큰 리밋 도달로 실행 일시 정지');
         return;
       }
 
-      yield* this.executePhase(currentPhase, featureId, handoffPackage);
+      yield* executePhase(
+        {
+          phaseEngine: this.phaseEngine,
+          tokenMonitor: this.tokenMonitor,
+          agentGenerator: this.agentGenerator,
+          sessionManager: this.sessionManager,
+          agentSpawner: this.agentSpawner,
+          streamMonitor: this.streamMonitor,
+          logger: this.logger,
+          ragSearcher: this.ragSearcher,
+        },
+        currentPhase,
+        featureId,
+        handoffPackage,
+      );
 
-      // WHY: VERIFY 완료 후 검증 통과 여부 확인
       if (currentPhase === 'VERIFY') {
-        if (this.verificationGate.isAllPassed(featureId)) {
-          this.progressTracker.updateStatus(featureId, 'complete');
-          this.logger.info('기능 구현 완료 — documenter 트리거', {
-            featureId,
-            iterations: iteration,
-          });
-          yield* this.spawnDocumenter(featureId, handoffPackage);
-          yield this.createEvent('done', `기능 '${featureId}' 구현 완료`);
-          return;
-        }
-
-        // WHY: VERIFY 실패 시 실패 분석 후 롤백
-        const report = this.failureHandler.classify(featureId, 'VERIFY', '4중 검증 실패');
-
-        if (report.ok) {
-          const recoveryPhase = this.failureHandler.getRecoveryPhase(report.value);
-          const transition = this.phaseEngine.transition(
-            recoveryPhase,
-            `검증 실패 롤백: ${report.value.type}`,
-            'adev',
-          );
-
-          if (transition.ok) {
-            this.logger.warn('검증 실패 — Phase 롤백', {
-              featureId,
-              from: 'VERIFY',
-              to: recoveryPhase,
-              failureType: report.value.type,
-            });
-            yield this.createEvent('message', `검증 실패. ${recoveryPhase} Phase로 롤백합니다.`);
-          }
-        }
+        yield* this.handleVerifyResult(featureId, handoffPackage, iteration);
+        // WHY: handleVerifyResult가 done을 yield하면 종료
+        if (this.verificationGate.isAllPassed(featureId)) return;
       } else {
-        // WHY: 순방향 Phase 전환
-        const nextPhase = this.getNextPhase(currentPhase);
-        if (nextPhase) {
-          const transition = this.phaseEngine.transition(
-            nextPhase,
-            `${currentPhase} Phase 완료`,
-            'adev',
-          );
-
-          if (transition.ok) {
-            this.progressTracker.updatePhase(featureId, nextPhase);
-            this.updateStatusForPhase(featureId, nextPhase);
-          }
-        }
+        this.advancePhase(featureId, currentPhase);
       }
     }
 
     this.logger.error('최대 반복 횟수 초과', { featureId, maxIterations: MAX_ITERATIONS });
     this.progressTracker.updateStatus(featureId, 'failed');
-    yield this.createEvent('error', `최대 반복 횟수(${MAX_ITERATIONS}) 초과로 중단`);
+    yield createEvent('error', `최대 반복 횟수(${MAX_ITERATIONS}) 초과로 중단`);
   }
 
   /**
@@ -196,185 +170,73 @@ export class TeamLeader {
   }
 
   /**
-   * Phase를 실행한다 / Executes a phase
+   * VERIFY Phase 결과를 처리한다 / Handles VERIFY phase result
    *
-   * @param phase - 실행할 Phase / Phase to execute
    * @param featureId - 기능 ID / Feature ID
    * @param handoffPackage - 인수 패키지 / Handoff package
+   * @param iteration - 현재 반복 횟수 / Current iteration count
    */
-  private async *executePhase(
-    phase: Phase,
+  private async *handleVerifyResult(
     featureId: string,
     handoffPackage: HandoffPackage,
+    iteration: number,
   ): AsyncIterable<AgentEvent> {
-    const participants = this.phaseEngine.getParticipants(phase);
-    const allAgents = [...participants.lead, ...participants.active];
-
-    for (const agentName of allAgents) {
-      // WHY: 스로틀링 확인
-      if (this.tokenMonitor.shouldThrottleSpawn()) {
-        this.logger.warn('스폰 스로틀링 적용', { agent: agentName });
-        yield this.createEvent('message', `토큰 부족으로 ${agentName} 스폰 지연`);
-        continue;
-      }
-
-      // WHY: RAG 검색으로 과거 설계 결정 / 실패 이력을 컨텍스트로 주입
-      const ragContext = await this.queryRagContext(featureId, agentName);
-
-      const configResult = this.agentGenerator.generateAgentConfig(
-        agentName,
-        handoffPackage.specDocument,
+    if (this.verificationGate.isAllPassed(featureId)) {
+      this.progressTracker.updateStatus(featureId, 'complete');
+      this.logger.info('기능 구현 완료 — documenter 트리거', { featureId, iterations: iteration });
+      yield* spawnDocumenter(
+        this.agentGenerator,
+        this.agentSpawner,
+        this.logger,
         featureId,
-        ragContext,
+        handoffPackage,
       );
-
-      if (!configResult.ok) {
-        this.logger.error('에이전트 설정 생성 실패', {
-          agent: agentName,
-          error: configResult.error.message,
-        });
-        continue;
-      }
-
-      const config = {
-        ...configResult.value,
-        projectId: handoffPackage.projectId,
-        phase,
-      };
-
-      // WHY: 세션 생성
-      this.sessionManager.createSession(agentName, config.projectId, featureId, phase);
-
-      // WHY: 에이전트 스폰 및 이벤트 전달
-      for await (const event of this.agentSpawner.spawn(config)) {
-        // WHY: 스트림 모니터에 이벤트 전달
-        this.streamMonitor.onEvent({
-          type: event.type === 'tool_use' ? 'PreToolUse' : 'PostToolUse',
-          agentName: event.agentName,
-          toolName: event.type === 'tool_use' ? event.content : undefined,
-          data: event.metadata ?? {},
-          timestamp: event.timestamp,
-        });
-
-        yield event;
-      }
-    }
-  }
-
-  /**
-   * 다음 Phase를 반환한다 / Returns next phase
-   *
-   * @param current - 현재 Phase / Current phase
-   * @returns 다음 Phase 또는 null / Next phase or null
-   */
-  private getNextPhase(current: Phase): Phase | null {
-    const order: readonly Phase[] = ['DESIGN', 'CODE', 'TEST', 'VERIFY'];
-    const currentIndex = order.indexOf(current);
-    if (currentIndex < 0 || currentIndex >= order.length - 1) return null;
-    return order[currentIndex + 1] ?? null;
-  }
-
-  /**
-   * Phase에 맞는 상태를 설정한다 / Sets status matching the phase
-   *
-   * @param featureId - 기능 ID / Feature ID
-   * @param phase - Phase / Phase
-   */
-  private updateStatusForPhase(featureId: string, phase: Phase): void {
-    const statusMap: Readonly<Record<Phase, 'designing' | 'coding' | 'testing' | 'verifying'>> = {
-      DESIGN: 'designing',
-      CODE: 'coding',
-      TEST: 'testing',
-      VERIFY: 'verifying',
-    };
-    this.progressTracker.updateStatus(featureId, statusMap[phase]);
-  }
-
-  /**
-   * documenter 에이전트를 스폰한다 / Spawns the documenter agent
-   *
-   * @description
-   * KR: VERIFY 통과 후 자동으로 문서화를 트리거한다.
-   *     설정 생성 실패 시 경고만 남기고 문서화는 생략한다.
-   * EN: Automatically triggers documentation after VERIFY passes.
-   *     On config failure, warns and skips documentation.
-   *
-   * @param featureId - 기능 ID / Feature ID
-   * @param handoffPackage - 인수 패키지 / Handoff package
-   */
-  private async *spawnDocumenter(
-    featureId: string,
-    handoffPackage: HandoffPackage,
-  ): AsyncIterable<AgentEvent> {
-    const configResult = this.agentGenerator.generateAgentConfig(
-      'documenter',
-      handoffPackage.specDocument,
-      featureId,
-    );
-
-    if (!configResult.ok) {
-      this.logger.warn('documenter 설정 생성 실패 — 문서화 생략', {
-        featureId,
-        error: configResult.error.message,
-      });
+      yield createEvent('done', `기능 '${featureId}' 구현 완료`);
       return;
     }
 
-    const config = {
-      ...configResult.value,
-      projectId: handoffPackage.projectId,
-      phase: 'VERIFY' as const,
-    };
+    // WHY: VERIFY 실패 시 실패 분석 후 롤백
+    const report = this.failureHandler.classify(featureId, 'VERIFY', '4중 검증 실패');
 
-    this.logger.info('documenter 트리거 — 문서화 시작', { featureId });
-    for await (const event of this.agentSpawner.spawn(config)) {
-      yield event;
+    if (report.ok) {
+      const recoveryPhase = this.failureHandler.getRecoveryPhase(report.value);
+      const transition = this.phaseEngine.transition(
+        recoveryPhase,
+        `검증 실패 롤백: ${report.value.type}`,
+        'adev',
+      );
+
+      if (transition.ok) {
+        this.logger.warn('검증 실패 — Phase 롤백', {
+          featureId,
+          from: 'VERIFY',
+          to: recoveryPhase,
+          failureType: report.value.type,
+        });
+        yield createEvent('message', `검증 실패. ${recoveryPhase} Phase로 롤백합니다.`);
+      }
     }
-    this.logger.info('documenter 완료', { featureId });
   }
 
   /**
-   * RAG 검색으로 컨텍스트를 조회한다 / Queries RAG context
-   *
-   * @description
-   * KR: RAG 검색 실패해도 에이전트 실행은 계속된다.
-   *     ragSearcher가 없으면 undefined를 반환한다.
-   * EN: Agent execution continues even if RAG search fails.
-   *     Returns undefined if ragSearcher is not provided.
+   * 순방향 Phase 전환을 수행한다 / Advances to the next phase
    *
    * @param featureId - 기능 ID / Feature ID
-   * @param agentName - 에이전트 이름 / Agent name
-   * @returns RAG 컨텍스트 문자열 또는 undefined / RAG context string or undefined
+   * @param currentPhase - 현재 Phase / Current phase
    */
-  private async queryRagContext(featureId: string, agentName: string): Promise<string | undefined> {
-    if (!this.ragSearcher) return undefined;
-    try {
-      const query = `${featureId} ${agentName}`;
-      const result = await this.ragSearcher.searchCode(query, 5);
-      if (!result.ok || result.value.length === 0) return undefined;
-      // WHY: SearchResult 배열을 읽기 쉬운 컨텍스트 문자열로 변환
-      return result.value
-        .map((r, i) => `[${i + 1}] ${r.record.filePath}\n${r.record.chunk}`)
-        .join('\n\n');
-    } catch {
-      // WHY: RAG 검색 실패해도 에이전트 실행은 계속
-      return undefined;
-    }
-  }
+  private advancePhase(featureId: string, currentPhase: Phase): void {
+    const nextPhase = getNextPhase(currentPhase);
+    if (nextPhase) {
+      const transition = this.phaseEngine.transition(
+        nextPhase,
+        `${currentPhase} Phase 완료`,
+        'adev',
+      );
 
-  /**
-   * 이벤트를 생성한다 / Creates an event
-   *
-   * @param type - 이벤트 유형 / Event type
-   * @param content - 이벤트 내용 / Event content
-   * @returns AgentEvent
-   */
-  private createEvent(type: AgentEvent['type'], content: string): AgentEvent {
-    return {
-      type,
-      agentName: 'architect',
-      content,
-      timestamp: new Date(),
-    };
+      if (transition.ok) {
+        this.progressTracker.updatePhase(featureId, nextPhase);
+        updateStatusForPhase(this.progressTracker, featureId, nextPhase);
+      }
+    }
   }
 }
