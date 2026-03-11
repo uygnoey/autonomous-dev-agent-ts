@@ -355,7 +355,7 @@ import {
   type V2Session,
   type V2SessionEvent,
   type V2PromptOptions,
-} from '@anthropic-ai/claude-code';
+} from '@anthropic-ai/claude-agent-sdk';
 ```
 
 ### 3. 타입 스텁 제거 (필수)

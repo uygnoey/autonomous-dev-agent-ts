@@ -13,6 +13,9 @@ import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
+import type { CoderAllocator } from 'layer2/coder-allocator.js';
+import type { GitBranchManager } from 'layer2/git-branch-manager.js';
+import type { ParallelCoderRunner } from 'layer2/parallel-coder-runner.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
 import type { ProgressTracker } from 'layer2/progress-tracker.js';
 import type { SessionManager } from 'layer2/session-manager.js';
@@ -98,6 +101,51 @@ export async function* executePhase(
       });
 
       yield event;
+    }
+  }
+}
+
+/** executeCodePhase에 필요한 의존성 / Deps needed by executeCodePhase */
+export interface ExecuteCodePhaseDeps extends ExecutePhaseDeps {
+  readonly coderAllocator: CoderAllocator;
+  readonly parallelCoderRunner?: ParallelCoderRunner;
+  readonly gitBranchManager?: GitBranchManager;
+}
+
+/**
+ * CODE Phase를 실행한다 / Executes the CODE phase
+ *
+ * @description
+ * KR: parallelCoderRunner가 주입된 경우 병렬 Coder를 실행하고 각 브랜치를 병합한다.
+ *     parallelCoderRunner가 없으면 단일 순차 실행으로 폴백한다.
+ * EN: Runs parallel coders when parallelCoderRunner is injected and merges each branch.
+ *     Falls back to single sequential execution when parallelCoderRunner is absent.
+ *
+ * @param deps - CODE Phase 의존성 / CODE phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @returns 에이전트 이벤트 스트림 / Agent event stream
+ */
+export async function* executeCodePhase(
+  deps: ExecuteCodePhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+): AsyncIterable<AgentEvent> {
+  if (!deps.parallelCoderRunner) {
+    // WHY: parallelCoderRunner 미주입 시 단일 순차 실행으로 폴백
+    yield* executePhase(deps, 'CODE', featureId, handoffPackage);
+    return;
+  }
+
+  // 병렬 Coder 실행
+  yield* deps.parallelCoderRunner.runParallel(featureId, handoffPackage);
+
+  // WHY: 병렬 실행 완료 후 각 coder 브랜치를 main에 병합
+  if (deps.gitBranchManager) {
+    const activeAllocations = deps.coderAllocator.getActiveAllocations();
+    for (const allocation of activeAllocations) {
+      yield* deps.gitBranchManager.mergeBranch(allocation.branchName);
+      deps.coderAllocator.mergeAllocation(allocation.coderId);
     }
   }
 }

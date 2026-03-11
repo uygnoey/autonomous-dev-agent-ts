@@ -10,6 +10,8 @@
  *     and estimates subscription limits using a 5-hour rolling window.
  */
 
+import { OAuthExpiryChecker } from 'auth/oauth-expiry-checker.js';
+import type { OAuthExpiryInfo } from 'auth/oauth-expiry-types.js';
 import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
 import type { AuthMode } from 'core/config.js';
 import type { Logger } from 'core/logger.js';
@@ -79,16 +81,20 @@ export class SubscriptionAuth implements AuthProvider {
   private readonly logger: Logger;
   private readonly estimatedLimit: number;
   private readonly nowFn: () => number;
+  private readonly expiryChecker: OAuthExpiryChecker;
 
   constructor(
     private readonly oauthToken: string,
     logger: Logger,
     estimatedLimit: number = DEFAULT_ESTIMATED_LIMIT,
     nowFn: () => number = () => Date.now(),
+    expiryChecker?: OAuthExpiryChecker,
   ) {
     this.logger = logger.child({ module: 'subscription-auth' });
     this.estimatedLimit = estimatedLimit;
     this.nowFn = nowFn;
+    // WHY: 선택 주입 — 테스트 시 커스텀 checker 주입 가능, 미주입 시 내부 생성
+    this.expiryChecker = expiryChecker ?? new OAuthExpiryChecker(nowFn);
   }
 
   /**
@@ -162,6 +168,37 @@ export class SubscriptionAuth implements AuthProvider {
     }
 
     return ok(undefined);
+  }
+
+  /**
+   * OAuth 토큰이 만료되었는지 확인한다 / Checks whether the OAuth token is expired
+   *
+   * @param token - 확인할 토큰 / Token to check
+   * @returns 만료 시 true, 유효하거나 판단 불가 시 false / true if expired, false if valid or undeterminable
+   *
+   * @example
+   * if (auth.isTokenExpired(token)) {
+   *   console.log('토큰 만료됨 / Token expired');
+   * }
+   */
+  isTokenExpired(token: string): boolean {
+    return this.expiryChecker.check(token).status === 'expired';
+  }
+
+  /**
+   * OAuth 토큰의 만료 정보를 반환한다 / Returns expiry information for the OAuth token
+   *
+   * @param token - 확인할 토큰 / Token to check
+   * @returns 만료 정보 스냅샷 / Expiry info snapshot
+   *
+   * @example
+   * const info = auth.getExpiryInfo(token);
+   * if (info.status === 'expiring_soon') {
+   *   console.log(`${info.daysRemaining}일 후 만료 / Expires in ${info.daysRemaining} days`);
+   * }
+   */
+  getExpiryInfo(token: string): OAuthExpiryInfo {
+    return this.expiryChecker.check(token);
   }
 
   /**

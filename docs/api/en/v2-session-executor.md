@@ -2,9 +2,9 @@
 
 # V2SessionExecutor API Documentation
 
-**Last Updated**: 2025-01-XX
+**Last Updated**: 2026-03-11
 **Version**: v2.4
-**Test Validation**: ✅ 140 tests all passed (Normal 20%, Edge 40%, Error 40%)
+**Test Validation**: ✅ 116 tests all passed (Normal 20%, Edge 40%, Error 40%)
 **Architect Score**: 99/100 (Best Practice)
 **Reviewer Score**: 98/100 (APPROVED)
 
@@ -29,7 +29,7 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │  └──────┘   └──────┘   └──────┘     (SendMessage enabled)  │
 │  Architect    QA      Coder                                 │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=true                                   │
+│  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1                     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,7 +39,7 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │  └──────┘   └──────┘   └──────┘     (SendMessage disabled) │
 │  Coder      Tester      QC                                  │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=false                                  │
+│  (not set — disabled)                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +65,7 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │  │     • Get auth headers from AuthProvider                 │ │
 │  │     • x-api-key → ANTHROPIC_API_KEY conversion           │ │
 │  │     • authorization → CLAUDE_CODE_OAUTH_TOKEN conversion │ │
-│  │     • Check Phase → Set AGENT_TEAMS_ENABLED              │ │
+│  │     • Check Phase → Set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS│ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                           ↓                                    │
 │  ┌──────────────────────────────────────────────────────────┐ │
@@ -76,9 +76,9 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │  └──────────────────────────────────────────────────────────┘ │
 │                           ↓                                    │
 │  ┌──────────────────────────────────────────────────────────┐ │
-│  │  3. session.stream(prompt)                               │ │
+│  │  3. session.send(prompt) + session.stream()              │ │
 │  │     • Start SDK event stream                             │ │
-│  │     • Receive message, tool_use, tool_result, error, done│ │
+│  │     • Receive assistant, tool_use, result events         │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                           ↓                                    │
 │  ┌──────────────────────────────────────────────────────────┐ │
@@ -105,7 +105,7 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │                                                                │
 │  Environment Variables:                                        │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                                │
-│    AGENT_TEAMS_ENABLED=true  ← SendMessage available           │
+│    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1  ← SendMessage available│
 │                                                                │
 │  Agent Teams Communication:                                    │
 │    architect → qa: "Please review design"                      │
@@ -118,12 +118,38 @@ V2SessionExecutor is a **smart button** that automatically switches this "meetin
 │                                                                │
 │  Environment Variables:                                        │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                                │
-│    AGENT_TEAMS_ENABLED=false  ← SendMessage unavailable        │
+│    (not set — disabled)  ← SendMessage unavailable             │
 │                                                                │
 │  Independent Execution:                                        │
 │    coder: Write code alone                                     │
 │    tester: Run tests alone                                     │
 └────────────────────────────────────────────────────────────────┘
+```
+
+### Event Mapping Flow
+
+```
+SDK SDKMessage                         AgentEvent
+══════════════════════════════════     ══════════════════════════════════════
+type: 'assistant'
+  content: [{ type:'tool_use' }]    →  type: 'tool_use'
+                                         content: "Tool: {name}"
+                                         metadata: { toolName, toolInput }
+
+type: 'assistant'
+  content: [{ type:'text' }...]     →  type: 'message'
+                                         content: text blocks joined '\n'
+                                         (empty array → null, filtered)
+
+type: 'result', subtype:'success'   →  type: 'done'
+                                         content: msg.result
+                                         metadata: { stopReason, cost }
+
+type: 'result', subtype: other      →  type: 'error'
+                                         content: errors[0] ?? 'Execution failed'
+                                         metadata: { subtype }
+
+type: 'system', other               →  null (filtered)
 ```
 
 ---
@@ -200,7 +226,7 @@ const executor = new V2SessionExecutor({
   logger,
   defaultOptions: {
     maxTurns: 100,        // Default max turns (optional)
-    temperature: 1.0,     // Default temperature (optional)
+    // temperature: removed (not in SDKSessionOptions)
     model: 'claude-opus-4-6',  // Default model (optional)
   },
 });
@@ -285,18 +311,13 @@ process.on('SIGTERM', () => {
 
 ## ⚠️ Cautions
 
-### 1. SDK Installation Required
+### 1. SDK Installation
 
-Currently `@anthropic-ai/claude-code` SDK is not installed.
+`@anthropic-ai/claude-agent-sdk@0.2.72` is included in `package.json`. Installed (`bun install` to reinstall).
 
 ```bash
-# Need to install SDK
-bun add @anthropic-ai/claude-code
+bun install
 ```
-
-**Before Installation**:
-- `createSession()` call throws `Error: SDK not installed: @anthropic-ai/claude-code`
-- All `execute()` calls return `error` events
 
 ### 2. Understand Phase-based Agent Teams Behavior
 
@@ -324,7 +345,7 @@ const config = {
 ```typescript
 // Final env vars = baseEnv (auth + Agent Teams) + config.env (custom)
 const finalEnv = {
-  ...baseEnv,         // ANTHROPIC_API_KEY + AGENT_TEAMS_ENABLED
+  ...baseEnv,         // ANTHROPIC_API_KEY + CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
   ...config.env,      // Custom variables (can override)
 };
 ```
@@ -482,7 +503,7 @@ for await (const event of executor.execute(config)) {
 
 **Solution**:
 ```bash
-bun add @anthropic-ai/claude-code
+bun add @anthropic-ai/claude-agent-sdk
 ```
 
 #### 2. Session Creation Failure
@@ -534,7 +555,7 @@ try {
 
 ### Pre-Implementation Checklist
 
-- [ ] `@anthropic-ai/claude-code` SDK installed
+- [ ] `@anthropic-ai/claude-agent-sdk` SDK installed
 - [ ] `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` env var set
 - [ ] AuthProvider implementation complete (getAuthHeader, validateAuth)
 - [ ] Logger instance ready
@@ -579,7 +600,7 @@ try {
 - **IMPLEMENTATION-GUIDE.md**: V2 Session API integration guide
 - **src/layer2/types.ts**: AgentConfig, AgentEvent type definitions
 - **src/auth/types.ts**: AuthProvider interface
-- **tests/unit/layer2/v2-session-executor.test.ts**: 140 test cases
+- **tests/unit/layer2/v2-session-executor.test.ts**: 116 test cases
 
 ---
 
@@ -613,4 +634,4 @@ V2SessionExecutor is a smart agent executor that **automatically switches Agent 
 - ✅ Real-time progress via event streaming
 - ✅ Resume work with session resume
 
-**140 tests all passed** ensures verified stability!
+**116 tests all passed** ensures verified stability!

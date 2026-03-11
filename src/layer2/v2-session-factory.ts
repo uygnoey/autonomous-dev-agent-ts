@@ -2,216 +2,187 @@
  * V2 Session 팩토리 / V2 Session Factory
  *
  * @description
- * KR: Anthropic SDK 기반 V2Session 팩토리와 이벤트 추출 헬퍼를 제공한다.
- * EN: Provides Anthropic SDK-based V2Session factory and event extraction helpers.
+ * KR: @anthropic-ai/claude-agent-sdk 기반 V2Session 팩토리와 이벤트 매핑 헬퍼를 제공한다.
+ * EN: Provides @anthropic-ai/claude-agent-sdk-based V2Session factory and event mapping helpers.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import {
+  unstable_v2_createSession,
+  unstable_v2_prompt,
+  unstable_v2_resumeSession,
+} from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage, SDKSessionOptions } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  BetaTextBlock,
+  BetaToolUseBlock,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs';
+import { AgentError } from 'core/errors.js';
+import { type Result, err, ok } from 'core/types.js';
 import type { AgentName } from 'core/types.js';
 import type { AgentEvent } from 'layer2/types.js';
-import type {
-  V2PromptOptions,
-  V2Session,
-  V2SessionEvent,
-  V2SessionFactory,
-} from 'layer2/v2-session-executor-types.js';
+import type { V2Session, V2SessionFactory } from 'layer2/v2-session-executor-types.js';
+
+// Re-export SDK types consumed by executor
+export type { SDKMessage, SDKSessionOptions };
+
+// ── SDK 팩토리 함수 / SDK Factory Functions ──────────────────────
 
 /**
- * Anthropic SDK 스트림을 V2SessionEvent 스트림으로 변환한다.
+ * @anthropic-ai/claude-agent-sdk의 unstable_v2_createSession을 래핑한 팩토리.
  *
  * @description
- * KR: 에러를 throw하지 않고 error 이벤트로 yield한다. (Result 패턴 준수)
- * EN: Yields error events instead of throwing. (Result pattern compliance)
- */
-export async function* anthropicMessageStream(
-  client: Anthropic,
-  prompt: string,
-  options: V2PromptOptions,
-): AsyncIterable<V2SessionEvent> {
-  try {
-    const stream = client.messages.stream({
-      model: options.model ?? 'claude-opus-4-6',
-      max_tokens: 8192,
-      system: options.systemPrompt,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-        yield { type: 'message', content: chunk.delta.text };
-      } else if (chunk.type === 'message_stop') {
-        yield { type: 'message_stop', stop_reason: 'end_turn' };
-      }
-    }
-  } catch (error: unknown) {
-    yield { type: 'error', error, message: String(error) };
-  }
-}
-
-/**
- * @anthropic-ai/sdk의 Messages API를 사용하는 V2Session 팩토리.
+ * KR: SDKSessionOptions를 받아 V2Session(SDKSession 호환)을 반환한다.
+ *     기본 sessionFactory로 사용된다.
+ * EN: Wraps unstable_v2_createSession; returns a V2Session (SDKSession-compatible).
+ *     Used as the default sessionFactory.
  *
- * @description
- * KR: Anthropic client를 생성하고 anthropicMessageStream으로 스트림을 제공한다.
- *     V2SessionFactory 기본값으로 사용된다.
- * EN: Creates Anthropic client and provides stream via anthropicMessageStream.
- *     Used as the default V2SessionFactory.
+ * @param options - SDK 세션 옵션 / SDK session options
+ * @returns V2Session 인스턴스 / V2Session instance
  */
-export const anthropicSessionFactory: V2SessionFactory = (options) => {
-  // WHY: environment에 API 키가 있으면 해당 값 우선, 없으면 process.env에서 읽음
-  const apiKey = options.environment?.ANTHROPIC_API_KEY;
-  const client = new Anthropic({ apiKey });
-
-  return {
-    stream: (prompt: string) => anthropicMessageStream(client, prompt, options),
-  };
+export const sdkSessionFactory: V2SessionFactory = (options: SDKSessionOptions) => {
+  return unstable_v2_createSession(options) as unknown as V2Session;
 };
 
 /**
- * SDK 이벤트에서 메시지 내용을 추출한다 / Extract message content from SDK event
+ * 단발성 프롬프트를 실행한다 / Execute a one-shot prompt
  *
- * @param event - SDK 이벤트 / SDK event
- * @returns 메시지 내용 / Message content
- */
-export function extractContent(event: V2SessionEvent): string {
-  if ('content' in event && typeof event.content === 'string') {
-    return event.content;
-  }
-  if ('content' in event && Array.isArray(event.content)) {
-    return event.content
-      .filter((block: unknown): block is { type: string; text: string } => {
-        return (
-          typeof block === 'object' &&
-          block !== null &&
-          'type' in block &&
-          (block as { type: string }).type === 'text' &&
-          'text' in block &&
-          typeof (block as { text: unknown }).text === 'string'
-        );
-      })
-      .map((block) => block.text)
-      .join('\n');
-  }
-  return '';
-}
-
-/**
- * tool_result 이벤트에서 결과 내용을 추출한다 / Extract tool result content
+ * @description
+ * KR: unstable_v2_prompt를 래핑하여 Result 패턴으로 결과를 반환한다.
+ * EN: Wraps unstable_v2_prompt and returns the result string via Result pattern.
  *
- * @param event - SDK 이벤트 / SDK event
- * @returns 도구 결과 내용 / Tool result content
+ * @param message - 전송할 메시지 / Message to send
+ * @param options - SDK 세션 옵션 / SDK session options
+ * @returns 결과 문자열 Result / Result with output string or AgentError
  */
-export function extractToolResultContent(event: V2SessionEvent): string {
-  if ('content' in event) {
-    if (typeof event.content === 'string') {
-      return event.content;
+export async function executeOneShot(
+  message: string,
+  options: SDKSessionOptions,
+): Promise<Result<string, AgentError>> {
+  try {
+    const result = await unstable_v2_prompt(message, options);
+    if (result.subtype === 'success') {
+      return ok(result.result);
     }
-    if (Array.isArray(event.content)) {
-      return JSON.stringify(event.content);
-    }
+    // WHY: error subtype들은 errors[] 배열에 메시지를 담을 수 있음
+    const errResult = result as { errors?: string[] };
+    return err(
+      new AgentError('agent_execution_failed', errResult.errors?.[0] ?? 'Execution failed'),
+    );
+  } catch (error) {
+    return err(new AgentError('agent_execution_failed', String(error), error));
   }
-  return 'Tool result received';
 }
 
 /**
- * error 이벤트에서 에러 메시지를 추출한다 / Extract error message from error event
+ * 기존 세션을 재개한다 / Resume an existing session
  *
- * @param event - SDK 이벤트 / SDK event
- * @returns 에러 메시지 / Error message
+ * @description
+ * KR: unstable_v2_resumeSession을 래핑하여 V2Session을 반환한다.
+ * EN: Wraps unstable_v2_resumeSession and returns a V2Session.
+ *
+ * @param sessionId - 재개할 세션 ID / Session ID to resume
+ * @param options - SDK 세션 옵션 / SDK session options
+ * @returns V2Session 인스턴스 / V2Session instance
  */
-export function extractErrorContent(event: V2SessionEvent): string {
-  if ('error' in event && typeof event.error === 'object' && event.error !== null) {
-    const errorObj = event.error as { message?: string };
-    return errorObj.message ?? 'Unknown error';
-  }
-  if ('message' in event && typeof event.message === 'string') {
-    return event.message;
-  }
-  return 'Unknown error occurred';
+export function sdkResumeSession(sessionId: string, options: SDKSessionOptions): V2Session {
+  return unstable_v2_resumeSession(sessionId, options) as unknown as V2Session;
 }
 
+// ── 이벤트 매핑 / Event Mapping ───────────────────────────────────
+
 /**
- * SDK 이벤트를 AgentEvent로 매핑한다 / Map SDK event to AgentEvent
+ * SDKMessage를 AgentEvent로 매핑한다 / Map SDKMessage to AgentEvent
  *
- * @param sdkEvent - SDK에서 수신한 이벤트 / Event from SDK
- * @param agentName - 이벤트를 발생시킨 에이전트 / Agent that emitted the event
- * @param logUnhandled - 미처리 이벤트 로깅 콜백 / Callback for logging unhandled events
+ * @description
+ * KR: SDK에서 수신한 SDKMessage 타입에 따라 AgentEvent를 생성한다.
+ *     - assistant + tool_use block → 'tool_use' 이벤트
+ *     - assistant + text block → 'message' 이벤트
+ *     - result subtype 'success' → 'done' 이벤트 (content = result 문자열)
+ *     - result subtype != 'success' → 'error' 이벤트
+ *     - 그 외 → null (필터링)
+ * EN: Creates AgentEvent based on received SDKMessage type.
+ *     - assistant + tool_use block → 'tool_use' event
+ *     - assistant + text block → 'message' event
+ *     - result subtype 'success' → 'done' event (content = result string)
+ *     - result subtype != 'success' → 'error' event
+ *     - otherwise → null (filtered)
+ *
+ * @param msg - SDK에서 수신한 메시지 / Message received from SDK
+ * @param agentName - 이벤트를 발생시킨 에이전트 이름 / Agent name that emitted the event
+ * @param logUnhandled - 미처리 이벤트 로깅 콜백 / Callback for logging unhandled event types
  * @returns 매핑된 AgentEvent 또는 null / Mapped AgentEvent or null
  */
 export function mapSdkEvent(
-  sdkEvent: V2SessionEvent,
+  msg: SDKMessage,
   agentName: AgentName,
   logUnhandled: (eventType: string | undefined) => void,
 ): AgentEvent | null {
   const timestamp = new Date();
 
-  // WHY: SDK 이벤트 타입에 따라 AgentEvent 타입 결정
-  switch (sdkEvent.type) {
-    case 'message':
-      return {
-        type: 'message',
-        agentName,
-        content: extractContent(sdkEvent),
-        timestamp,
-        metadata: { sdkEvent },
-      };
+  switch (msg.type) {
+    case 'assistant': {
+      const blocks = msg.message.content;
 
-    case 'tool_use':
-      return {
-        type: 'tool_use',
-        agentName,
-        content: `Tool: ${sdkEvent.name || 'unknown'}`,
-        timestamp,
-        metadata: {
-          toolName: sdkEvent.name,
-          toolInput: sdkEvent.input,
-        },
-      };
+      // WHY: tool_use 블록이 있으면 message보다 우선 처리
+      const toolBlock = blocks.find((b): b is BetaToolUseBlock => b.type === 'tool_use');
+      if (toolBlock) {
+        return {
+          type: 'tool_use',
+          agentName,
+          content: `Tool: ${toolBlock.name}`,
+          timestamp,
+          metadata: { toolName: toolBlock.name, toolInput: toolBlock.input },
+        };
+      }
 
-    case 'tool_result':
-      return {
-        type: 'tool_result',
-        agentName,
-        content: extractToolResultContent(sdkEvent),
-        timestamp,
-        metadata: {
-          toolName: sdkEvent.tool_use_id,
-          isError: sdkEvent.is_error,
-        },
-      };
+      // WHY: text 블록을 모아 하나의 content로 합침 (줄바꿈으로 구분)
+      const textBlocks = blocks.filter((b): b is BetaTextBlock => b.type === 'text');
+      if (textBlocks.length > 0) {
+        const text = textBlocks.map((b) => b.text).join('\n');
+        return { type: 'message', agentName, content: text, timestamp };
+      }
 
-    case 'error':
+      // WHY: text/tool_use 블록이 없는 assistant 메시지는 필터링
+      logUnhandled('assistant:empty');
+      return null;
+    }
+
+    case 'result': {
+      if (msg.subtype === 'success') {
+        return {
+          type: 'done',
+          agentName,
+          content: msg.result,
+          timestamp,
+          metadata: { stopReason: msg.stop_reason, cost: msg.total_cost_usd },
+        };
+      }
+      // WHY: error_during_execution, error_max_turns 등 비성공 subtypes
+      const errResult = msg as { errors?: string[] };
       return {
         type: 'error',
         agentName,
-        content: extractErrorContent(sdkEvent),
+        content: errResult.errors?.[0] ?? 'Execution failed',
         timestamp,
-        metadata: { sdkEvent },
+        metadata: { subtype: msg.subtype },
       };
-
-    case 'message_stop':
-    case 'session_end':
-      return {
-        type: 'done',
-        agentName,
-        content: 'Agent execution completed',
-        timestamp,
-        metadata: { stopReason: sdkEvent.stop_reason },
-      };
+    }
 
     default:
-      // WHY: 매핑 불가능한 이벤트는 로그만 남기고 필터링
-      logUnhandled((sdkEvent as { type?: string }).type);
+      // WHY: 매핑 불가능한 이벤트 (system, stream_event 등)는 로그만 남기고 필터링
+      logUnhandled((msg as { type?: string }).type);
       return null;
   }
 }
+
+// ── 유틸리티 / Utilities ──────────────────────────────────────────
 
 /**
  * 에러 이벤트를 생성한다 / Create an error event
  *
  * @param agentName - 에이전트 이름 / Agent name
  * @param message - 에러 메시지 / Error message
- * @returns 에러 이벤트 / Error event
+ * @returns 에러 AgentEvent / Error AgentEvent
  */
 export function createErrorEvent(agentName: AgentName, message: string): AgentEvent {
   return {
@@ -228,7 +199,7 @@ export function createErrorEvent(agentName: AgentName, message: string): AgentEv
  * @description
  * KR: 세션 ID 형식 (projectId:featureId:agentName:phase)에서 에이전트명 추출.
  *     유효하지 않은 ID는 'architect' 기본값 반환.
- * EN: Extracts agent name from session ID format.
+ * EN: Extracts agent name from session ID format (projectId:featureId:agentName:phase).
  *     Returns 'architect' as default for invalid IDs.
  *
  * @param sessionId - 세션 ID / Session ID
@@ -238,7 +209,7 @@ export function extractAgentNameFromSessionId(sessionId: string): AgentName {
   const parts = sessionId.split(':');
   if (parts.length === 4) {
     const agentName = parts[2];
-    // WHY: 타입 가드로 유효한 AgentName 검증
+    // WHY: 타입 가드로 유효한 AgentName만 허용
     const validAgents: AgentName[] = [
       'architect',
       'qa',
@@ -260,13 +231,13 @@ export function extractAgentNameFromSessionId(sessionId: string): AgentName {
  * 세션 ID를 생성한다 / Generate session ID
  *
  * @description
- * KR: 프로젝트ID, 기능ID, 에이전트명, Phase를 조합하여 세션 ID 생성.
- * EN: Combines projectId, featureId, agentName, phase to generate session ID.
+ * KR: 프로젝트ID, 기능ID, 에이전트명, Phase를 조합하여 고유 세션 ID 생성.
+ * EN: Combines projectId, featureId, agentName, phase into a unique session ID.
  *
  * @param projectId - 프로젝트 ID / Project ID
  * @param featureId - 기능 ID / Feature ID
  * @param name - 에이전트 이름 / Agent name
- * @param phase - Phase / Phase
+ * @param phase - 실행 Phase / Execution phase
  * @returns 세션 ID / Session ID
  */
 export function generateSessionId(

@@ -671,7 +671,7 @@ export class StartCommand {
         projectCwd: session.projectInfo.path,
       });
 
-      const teamLeader = bootstrap.createTeamLeader();
+      const teamLeader = await bootstrap.createTeamLeader();
       const features = handoff.contract.implementationOrder;
 
       this.logger.info('Layer2 실행 시작', {

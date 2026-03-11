@@ -30,3 +30,5 @@ export type {
   HandoffPackage,
   VerificationMatrix,
 } from 'layer1/contract-types.js';
+
+export type { ContractChangeRecord, ContractDiffEntry } from 'layer1/contract-change-types.js';

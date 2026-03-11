@@ -52,7 +52,7 @@
 
 ```typescript
 // 핵심 패턴 — AgentExecutor 추상화
-import { unstable_v2_createSession } from '@anthropic-ai/claude-code';
+import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk';
 
 interface AgentExecutor {
   execute(config: AgentConfig): AsyncIterable<AgentEvent>;

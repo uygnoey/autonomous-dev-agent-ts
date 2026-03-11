@@ -398,7 +398,7 @@ bun run test:e2e
 |----------|-----------|---------|
 | **ランタイム** | [Bun](https://bun.sh/) ≥1.1 | パッケージマネージャー、バンドラー、テストランナー |
 | **言語** | TypeScript (ESNext、strict) | 全コードベース |
-| **Agent SDK** | [@anthropic-ai/claude-code](https://www.npmjs.com/package/@anthropic-ai/claude-code) | V2 Session APIベースのエージェント実行 |
+| **Agent SDK** | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) | V2 Session APIベースのエージェント実行 |
 | **Vector DB** | [LanceDB](https://lancedb.com/) | 組み込み、サーバーレス、ファイルベースのベクトルDB |
 | **Embedding** | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) | ローカル埋め込み (Xenova/Jina) |
 | **Linter** | [Biome](https://biomejs.dev/) | Linting + フォーマット |

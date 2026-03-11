@@ -11,6 +11,7 @@
 import type { Logger } from 'core/logger.js';
 import type { AgentName, Result } from 'core/types.js';
 import { ok } from 'core/types.js';
+import type { IAgentDraftLoader } from 'layer2/agent-draft-loader-types.js';
 import type { AgentConfig } from 'layer2/types.js';
 
 // ── 역할별 도구 정의 / Per-role tool definitions ─────────────────
@@ -57,15 +58,20 @@ const AGENT_MAX_TURNS: Readonly<Record<AgentName, number>> = {
  * @example
  * const generator = new AgentGenerator(logger);
  * const result = generator.generateAgentConfig('architect', 'spec...', 'feat-1');
+ * // 비동기 버전 (draftLoader 활용)
+ * const asyncResult = await generator.generateAgentConfigAsync('architect', 'spec...', 'feat-1');
  */
 export class AgentGenerator {
   private readonly logger: Logger;
+  private readonly draftLoader?: IAgentDraftLoader;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param draftLoader - 에이전트 드래프트 로더 (선택) / Agent draft loader (optional)
    */
-  constructor(logger: Logger) {
+  constructor(logger: Logger, draftLoader?: IAgentDraftLoader) {
     this.logger = logger.child({ module: 'agent-generator' });
+    this.draftLoader = draftLoader;
   }
 
   /**
@@ -100,6 +106,75 @@ export class AgentGenerator {
     };
 
     this.logger.info('에이전트 설정 생성', { agentName, featureId, toolCount: tools.length });
+    return ok(config);
+  }
+
+  /**
+   * 에이전트 설정을 비동기로 생성한다 (draftLoader 활용) / Async agent config generation with draft loader
+   *
+   * @description
+   * KR: draftLoader가 주입된 경우 에이전트 .md 드래프트를 시스템 프롬프트 첫 부분에 주입한다.
+   *     draftLoader가 없거나 드래프트 내용이 비어있으면 기존 하드코딩 폴백을 사용한다.
+   * EN: If draftLoader is injected, prepends agent .md draft to system prompt.
+   *     Falls back to hardcoded prompt when loader is absent or draft content is empty.
+   *
+   * @param agentName - 에이전트 이름 / Agent name
+   * @param projectSpec - 프로젝트 스펙 / Project specification
+   * @param featureId - 기능 ID / Feature ID
+   * @param projectAgentsDir - 프로젝트 에이전트 디렉토리 (선택) / Project agents dir (optional)
+   * @param globalAgentsDir - 글로벌 에이전트 디렉토리 (선택) / Global agents dir (optional)
+   * @param ragContext - RAG 검색 결과 컨텍스트 (선택) / RAG search context (optional)
+   * @returns 생성된 AgentConfig / Generated AgentConfig
+   */
+  async generateAgentConfigAsync(
+    agentName: AgentName,
+    projectSpec: string,
+    featureId: string,
+    projectAgentsDir?: string,
+    globalAgentsDir?: string,
+    ragContext?: string,
+  ): Promise<Result<AgentConfig>> {
+    let draftPrefix = '';
+
+    // WHY: draftLoader가 있을 때만 .md 파일 로드 — 선택 주입이므로 없으면 건너뜀
+    if (this.draftLoader) {
+      const draftResult = await this.draftLoader.load(agentName, projectAgentsDir, globalAgentsDir);
+      if (
+        draftResult.ok &&
+        draftResult.value.content.trim() &&
+        draftResult.value.source !== 'builtin'
+      ) {
+        draftPrefix = `${draftResult.value.content.trim()}\n\n`;
+        this.logger.debug('드래프트 파일 시스템 프롬프트에 주입', {
+          agentName,
+          source: draftResult.value.source,
+        });
+      }
+    }
+
+    const baseSystemPrompt = this.buildSystemPrompt(agentName, projectSpec, ragContext);
+    const systemPrompt = draftPrefix ? `${draftPrefix}${baseSystemPrompt}` : baseSystemPrompt;
+    const prompt = this.buildPrompt(agentName, featureId);
+    const tools = AGENT_TOOLS[agentName];
+    const maxTurns = AGENT_MAX_TURNS[agentName];
+
+    const config: AgentConfig = {
+      name: agentName,
+      projectId: '',
+      featureId,
+      phase: this.getDefaultPhase(agentName),
+      systemPrompt,
+      prompt,
+      tools,
+      maxTurns,
+    };
+
+    this.logger.info('에이전트 설정 생성 (비동기)', {
+      agentName,
+      featureId,
+      toolCount: tools.length,
+      hasDraft: draftPrefix.length > 0,
+    });
     return ok(config);
   }
 

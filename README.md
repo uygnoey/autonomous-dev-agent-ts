@@ -398,7 +398,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 |----------|-----------|---------|
 | **Runtime** | [Bun](https://bun.sh/) ≥1.1 | Package manager, bundler, test runner |
 | **Language** | TypeScript (ESNext, strict) | Entire codebase |
-| **Agent SDK** | [@anthropic-ai/claude-code](https://www.npmjs.com/package/@anthropic-ai/claude-code) | V2 Session API based agent execution |
+| **Agent SDK** | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) | V2 Session API based agent execution |
 | **Vector DB** | [LanceDB](https://lancedb.com/) | Embedded, serverless, file-based vector DB |
 | **Embedding** | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) | Local embeddings (Xenova/Jina) |
 | **Linter** | [Biome](https://biomejs.dev/) | Linting + formatting |

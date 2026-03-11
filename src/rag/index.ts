@@ -26,6 +26,17 @@ export {
   TransformersEmbeddingProvider,
 } from 'rag/embeddings.js';
 
+export {
+  createJinaEmbeddingProvider,
+  JinaEmbeddingProvider,
+} from 'rag/jina-embeddings.js';
+
+export {
+  createVoyageEmbeddingProvider,
+  createVoyageLiteEmbeddingProvider,
+  VoyageEmbeddingProvider,
+} from 'rag/voyage-embeddings.js';
+
 // ── 벡터 저장소 ────────────────────────────────────────────────
 
 export { CodeVectorStore } from 'rag/vector-store.js';

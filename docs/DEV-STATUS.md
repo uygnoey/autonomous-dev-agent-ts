@@ -1,6 +1,6 @@
 # adev — 개발 현황 상세 문서
 
-> 최종 갱신: 2026-03-10 (전체 기술 부채 해결 완료)
+> 최종 갱신: 2026-03-11 (V2 Session API 완전 구현 + 테스트 0 fail)
 > 작성 기준: `bun test` 실행 결과 + `bun run tsc --noEmit` + `bun run biome check src/`
 
 ---
@@ -36,7 +36,8 @@
 | `production-tester.ts` 313줄 초과 | ✅ `production-tester-session.ts` 94줄 추출 → 266줄 |
 | `doc-integrator.ts` 300줄 초과 | ✅ `doc-integrator-template.ts` 136줄 추출 → 239줄 |
 | `doc-integrator-fragment.ts` 308줄 초과 | ✅ `doc-integrator-merge.ts` 123줄 추출 → 208줄 |
-| `v2-session-executor.ts` 스텁 상태 확인 | ✅ 이미 완전 구현 확인 (116 pass) |
+| `v2-session-factory.ts` `@anthropic-ai/claude-agent-sdk` 완전 구현 | ✅ `unstable_v2_createSession/prompt/resumeSession` + `mapSdkEvent` |
+| `v2-session-executor.ts` V2 Session API 완전 구현 | ✅ `send()+stream()` 패턴, AGENT_TEAMS 분기, 116 pass |
 | `relative-test/` 미완성 디렉토리 | ✅ 삭제 완료 |
 
 ---
@@ -127,8 +128,9 @@ Claude Opus 기반 5단계 기획 파이프라인 전체 구현.
 | `team-leader-helpers.ts` | 237 | **신규** — executePhase, spawnDocumenter, queryRagContext, getNextPhase, updateStatusForPhase, createEvent 순수 함수 추출 |
 | `layer2-bootstrap.ts` | 140 | `Layer2Bootstrap` — AuthProvider + Logger만으로 전체 Layer2 컴포넌트 인스턴스화 팩토리 |
 | `phase-engine.ts` | 188 | `PhaseEngine` — 4단계 FSM. 전환 규칙 검증. 단계별 에이전트 참여자 매핑. 전환 이력 추적 |
-| `v2-session-executor.ts` | 283 | `V2SessionExecutor` — `AgentExecutor` 완전 구현. `@anthropic-ai/sdk` 실 스트리밍 호출. SDK 이벤트 → `AgentEvent` 완전 매핑 |
-| `v2-session-factory.ts` | 281 | Anthropic SDK 스트림 헬퍼: `anthropicMessageStream`, `mapSdkEvent`, `generateSessionId` 등 |
+| `v2-session-executor.ts` | 279 | `V2SessionExecutor` — `AgentExecutor` 완전 구현. `@anthropic-ai/claude-agent-sdk` `send()+stream()` 패턴. DESIGN Phase Agent Teams 활성화. SDK 이벤트 → `AgentEvent` 완전 매핑 |
+| `v2-session-executor-types.ts` | 97 | `V2Session` 인터페이스, `V2SessionFactory`, `V2SessionExecutorOptions` — SDK 호환 타입 |
+| `v2-session-factory.ts` | 254 | `@anthropic-ai/claude-agent-sdk` 기반: `sdkSessionFactory`, `executeOneShot`, `sdkResumeSession`, `mapSdkEvent` (text `\n` 조인) |
 | `agent-generator.ts` | 180 | `AgentGenerator` — 역할별 `AgentConfig` 생성. **`coder`만** 코드 수정 도구 보유. 역할별 시스템 프롬프트 + max_turns |
 | `coder-allocator.ts` | 164 | `CoderAllocator` — 모듈별 coder 할당. 다중 coder 파일 충돌 방지. 브랜치 명: `feature/{featureId}-{module}-coderN` |
 | `integration-tester.ts` | 252 | `IntegrationTester` — 4단계 순서 테스트: unit→module→integration→e2e. Fail-Fast (첫 실패 즉시 중단) |

@@ -6,6 +6,8 @@
  * EN: Types for user conversation and layer2 verification requests/results.
  */
 
+import type { HandoffPackage } from 'layer1/contract-types.js';
+
 // ── 대화 / Conversation ──────────────────────────────────────────
 
 /**
@@ -53,6 +55,15 @@ export interface Layer1VerificationRequest {
 
   /** 질문 / Question */
   readonly question: string;
+
+  /**
+   * Contract 스냅샷 (선택) — AI 검증 시 추가 컨텍스트로 활용
+   * Contract snapshot (optional) — used as extra context during AI verification
+   *
+   * WHY: layer1/types.js가 이 파일을 re-export하여 순환 참조가 생기므로
+   *      HandoffPackage를 정의하는 contract-types.js에서 직접 import한다.
+   */
+  readonly contractSnapshot?: HandoffPackage;
 }
 
 /**

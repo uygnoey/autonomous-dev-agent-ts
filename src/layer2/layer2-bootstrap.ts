@@ -9,6 +9,8 @@
  *     Instantiates all Layer2 components from just AuthProvider and Logger.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { AuthProvider } from 'auth/types.js';
 import type { Logger } from 'core/logger.js';
 import { ProcessExecutor } from 'core/process-executor.js';
@@ -18,10 +20,15 @@ import { BiasDetector } from 'layer2/bias-detector.js';
 import { CleanEnvManager } from 'layer2/clean-env-manager.js';
 import { CoderAllocator } from 'layer2/coder-allocator.js';
 import { FailureHandler } from 'layer2/failure-handler.js';
+import { GitBranchManager } from 'layer2/git-branch-manager.js';
 import { IntegrationTester } from 'layer2/integration-tester.js';
+import { IpcPoller } from 'layer2/ipc-poller.js';
+import { ParallelCoderRunner } from 'layer2/parallel-coder-runner.js';
 import { PhaseEngine } from 'layer2/phase-engine.js';
 import { ProgressTracker } from 'layer2/progress-tracker.js';
 import { SessionManager } from 'layer2/session-manager.js';
+import { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestrator.js';
+import { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { TeamLeader } from 'layer2/team-leader.js';
@@ -56,9 +63,9 @@ export interface Layer2BootstrapOptions {
  *
  * @example
  * const bootstrap = new Layer2Bootstrap({ authProvider, logger, projectCwd });
- * const teamLeader = bootstrap.createTeamLeader();
+ * const teamLeader = await bootstrap.createTeamLeader();
  * for await (const event of teamLeader.executeFeature('feat-1', handoff)) {
- *   console.log(event.content);
+ *   process.stdout.write(event.content + '\n');
  * }
  */
 export class Layer2Bootstrap {
@@ -80,13 +87,15 @@ export class Layer2Bootstrap {
    *
    * @description
    * KR: 모든 Layer2 컴포넌트를 생성하고 TeamLeader에 주입한다.
-   *     각 컴포넌트는 독립적으로 생성되어 TeamLeaderDeps로 묶인다.
+   *     SessionSnapshotStore.initialize()가 async이므로 이 메서드도 async.
+   *     초기화 실패 시 경고만 남기고 store 없이 TeamLeader를 생성한다.
    * EN: Creates all Layer2 components and injects them into TeamLeader.
-   *     Each component is created independently and bundled as TeamLeaderDeps.
+   *     async because SessionSnapshotStore.initialize() is async.
+   *     On init failure, warns and creates TeamLeader without the store.
    *
    * @returns TeamLeader 인스턴스 / TeamLeader instance
    */
-  createTeamLeader(): TeamLeader {
+  async createTeamLeader(): Promise<TeamLeader> {
     const logger = this.logger;
 
     // 1. SDK executor: Anthropic Messages API 기반 에이전트 실행기
@@ -96,7 +105,6 @@ export class Layer2Bootstrap {
       defaultOptions: {
         model: 'claude-opus-4-6',
         maxTurns: 50,
-        temperature: 1.0,
       },
     });
 
@@ -118,7 +126,52 @@ export class Layer2Bootstrap {
     const cleanEnvManager = new CleanEnvManager(logger);
     const integrationTester = new IntegrationTester(logger, processExecutor, cleanEnvManager);
 
-    // 4. 의존성 묶음 구성
+    // 4. 세션 스냅샷 저장소 초기화 (Batch 1 신규 컴포넌트)
+    // WHY: LanceDB dbPath는 ~/.adev/data/snapshots 를 사용
+    const snapshotDbPath = join(homedir(), '.adev', 'data', 'snapshots');
+    const sessionSnapshotStore = new SessionSnapshotStore(snapshotDbPath, logger);
+    const initResult = await sessionSnapshotStore.initialize();
+    if (!initResult.ok) {
+      logger.warn('SessionSnapshotStore 초기화 실패 — 세션 복원 기능 비활성화', {
+        error: initResult.error.message,
+      });
+    }
+
+    // 5. 세션 복원 오케스트레이터 (Batch 1 신규 컴포넌트)
+    const sessionRestoreOrchestrator = new SessionRestoreOrchestrator({
+      sessionSnapshotStore,
+      logger,
+      authProvider: this.authProvider,
+    });
+
+    // 6. 디스크 IPC 폴러 (Batch 1 신규 컴포넌트)
+    // WHY: 팀 메시지/태스크 이벤트를 폴링하기 위해 ~/.claude/teams, ~/.claude/tasks 감시
+    const ipcPoller = new IpcPoller({
+      teamsDir: join(homedir(), '.claude', 'teams'),
+      tasksDir: join(homedir(), '.claude', 'tasks'),
+      logger,
+    });
+
+    // 7. 병렬 Coder 실행기 (Batch 2 신규 컴포넌트)
+    // WHY: CODE phase에서 다수 Coder를 병렬로 실행하여 구현 속도를 높인다
+    const parallelCoderRunner = new ParallelCoderRunner({
+      agentGenerator,
+      agentSpawner,
+      sessionManager,
+      streamMonitor,
+      coderAllocator,
+      logger,
+    });
+
+    // 8. Git 브랜치 관리자 (Batch 2 신규 컴포넌트)
+    // WHY: Coder별 피처 브랜치를 생성하고 병렬 실행 완료 후 main에 병합한다
+    const gitBranchManager = new GitBranchManager({
+      processExecutor,
+      logger,
+      cwd: this.projectCwd,
+    });
+
+    // 9. 의존성 묶음 구성
     const deps: TeamLeaderDeps = {
       phaseEngine,
       agentSpawner,
@@ -133,6 +186,11 @@ export class Layer2Bootstrap {
       verificationGate,
       integrationTester,
       logger,
+      sessionSnapshotStore: initResult.ok ? sessionSnapshotStore : undefined,
+      sessionRestoreOrchestrator: initResult.ok ? sessionRestoreOrchestrator : undefined,
+      ipcPoller,
+      parallelCoderRunner,
+      gitBranchManager,
     };
 
     return new TeamLeader(deps);

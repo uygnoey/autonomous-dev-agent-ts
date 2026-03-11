@@ -6,6 +6,7 @@
  * EN: Types for ContractSchema, VerificationMatrix, and HandoffPackage.
  */
 
+import type { ContractChangeRecord } from 'layer1/contract-change-types.js';
 import type { FeatureSpec, TestTypeDefinition } from 'layer1/feature-types.js';
 
 // ── Contract 스키마 / Contract Schema ────────────────────────────
@@ -95,4 +96,10 @@ export interface HandoffPackage {
 
   /** 사용자 확인 여부 / Whether confirmed by user */
   readonly confirmedByUser: boolean;
+
+  /** Contract 버전 (1부터 시작) / Contract version starting at 1 */
+  readonly version?: number;
+
+  /** 변경 이력 / Change history */
+  readonly changeHistory?: readonly ContractChangeRecord[];
 }

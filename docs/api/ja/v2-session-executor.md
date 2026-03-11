@@ -2,9 +2,9 @@
 
 # V2SessionExecutor API ドキュメント
 
-**最終更新**: 2025-01-XX
+**最終更新**: 2026-03-11
 **バージョン**: v2.4
-**テスト検証**: ✅ 140テスト全て合格 (Normal 20%, Edge 40%, Error 40%)
+**テスト検証**: ✅ 116テスト全て合格 (Normal 20%, Edge 40%, Error 40%)
 **Architect評価**: 99/100 (Best Practice)
 **Reviewer評価**: 98/100 (APPROVED)
 
@@ -42,10 +42,10 @@ V2SessionExecutorはこの「集まり方」を自動的に切り替える **ス
 │     • AuthProviderから認証ヘッダー取得                         │
 │     • x-api-key → ANTHROPIC_API_KEY 変換                       │
 │     • authorization → CLAUDE_CODE_OAUTH_TOKEN 変換              │
-│     • Phase確認 → AGENT_TEAMS_ENABLED 設定                     │
+│     • Phase確認 → CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 設定    │
 │  2. createSession()                                            │
 │     • unstable_v2_createSession() 呼び出し                     │
-│  3. session.stream(prompt)                                     │
+│  3. session.send(prompt) + session.stream()                    │
 │     • SDKイベントストリーム開始                                │
 │  4. mapSdkEvent()                                              │
 │     • V2SessionEvent → AgentEvent 変換                         │
@@ -62,6 +62,60 @@ V2SessionExecutorはこの「集まり方」を自動的に切り替える **ス
 | CODE | 無効化 | ❌ 不可 | 独立コード作成 |
 | TEST | 無効化 | ❌ 不可 | 独立テスト実行 |
 | VERIFY | 無効化 | ❌ 不可 | 独立品質検証 |
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  Phase: DESIGN                                                 │
+│  enableAgentTeams = true                                       │
+│                                                                │
+│  環境変数:                                                     │
+│    ANTHROPIC_API_KEY=sk-ant-xxx                                │
+│    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1  ← SendMessage 使用可│
+│                                                                │
+│  Agent Teams 通信:                                             │
+│    architect → qa: "設計レビューお願い"                        │
+│    qa → architect: "セキュリティ問題発見"                      │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│  Phase: CODE / TEST / VERIFY                                   │
+│  enableAgentTeams = false                                      │
+│                                                                │
+│  環境変数:                                                     │
+│    ANTHROPIC_API_KEY=sk-ant-xxx                                │
+│    (未設定 — 無効化)  ← SendMessage 使用不可                  │
+│                                                                │
+│  独立実行:                                                     │
+│    coder: 一人でコード作成                                     │
+│    tester: 一人でテスト実行                                    │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### イベントマッピングフロー
+
+```
+SDK SDKMessage                         AgentEvent
+══════════════════════════════════     ══════════════════════════════════════
+type: 'assistant'
+  content: [{ type:'tool_use' }]    →  type: 'tool_use'
+                                         content: "Tool: {name}"
+                                         metadata: { toolName, toolInput }
+
+type: 'assistant'
+  content: [{ type:'text' }...]     →  type: 'message'
+                                         content: textブロック '\n' 結合
+                                         (空配列 → null、フィルタリング)
+
+type: 'result', subtype:'success'   →  type: 'done'
+                                         content: msg.result
+                                         metadata: { stopReason, cost }
+
+type: 'result', subtype: その他     →  type: 'error'
+                                         content: errors[0] ?? 'Execution failed'
+                                         metadata: { subtype }
+
+type: 'system', その他              →  null (フィルタリング)
+```
 
 ---
 
@@ -121,7 +175,7 @@ const executor = new V2SessionExecutor({
   logger,
   defaultOptions: {
     maxTurns: 100,
-    temperature: 1.0,
+    // temperature: removed (not in SDKSessionOptions)
     model: 'claude-opus-4-6',
   },
 });
@@ -191,16 +245,13 @@ process.on('SIGTERM', () => {
 
 ## ⚠️ 注意事項
 
-### 1. SDK インストール必須
+### 1. SDK インストール
+
+`@anthropic-ai/claude-agent-sdk@0.2.72` が `package.json` に含まれています。インストール完了 (`bun install` で再インストール可能)。
 
 ```bash
-# SDK インストール必要
-bun add @anthropic-ai/claude-code
+bun install
 ```
-
-**インストール前の動作**:
-- `createSession()` 呼び出し時に `Error: SDK not installed` 発生
-- すべての `execute()` 呼び出しが `error` イベントを返す
 
 ### 2. Phase別 Agent Teams 動作理解
 
@@ -220,7 +271,7 @@ const config = {
 ```typescript
 // 最終環境変数 = baseEnv (認証 + Agent Teams) + config.env (ユーザー定義)
 const finalEnv = {
-  ...baseEnv,         // ANTHROPIC_API_KEY + AGENT_TEAMS_ENABLED
+  ...baseEnv,         // ANTHROPIC_API_KEY + CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
   ...config.env,      // ユーザー定義変数 (上書き可能)
 };
 ```
@@ -347,7 +398,7 @@ for await (const event of executor.resume(sessionId)) {
 
 **解決**:
 ```bash
-bun add @anthropic-ai/claude-code
+bun add @anthropic-ai/claude-agent-sdk
 ```
 
 #### 2. セッション生成失敗
@@ -560,7 +611,7 @@ async function executeParallelAgents(
 
 ### 実装前チェックリスト
 
-- [ ] `@anthropic-ai/claude-code` SDK インストール完了
+- [ ] `@anthropic-ai/claude-agent-sdk` SDK インストール完了
 - [ ] `ANTHROPIC_API_KEY` または `CLAUDE_CODE_OAUTH_TOKEN` 環境変数設定
 - [ ] AuthProvider実装完了 (getAuthHeader, validateAuth)
 - [ ] Loggerインスタンス準備完了
@@ -590,7 +641,7 @@ async function executeParallelAgents(
 - **SPEC.md**: Phase転換ロジック、Agent Teams有効化条件
 - **IMPLEMENTATION-GUIDE.md**: V2 Session API統合ガイド
 - **src/layer2/types.ts**: AgentConfig, AgentEventタイプ定義
-- **tests/unit/layer2/v2-session-executor.test.ts**: 140テストケース
+- **tests/unit/layer2/v2-session-executor.test.ts**: 116テストケース
 
 ---
 
@@ -617,4 +668,4 @@ V2SessionExecutorは **Phase基盤でAgent Teams有効化を自動転換**する
 6. プロセス終了前cleanup()呼び出し
 ```
 
-**140テスト全て合格**で検証された安定性を保証します!
+**116テスト全て合格**で検証された安定性を保証します!

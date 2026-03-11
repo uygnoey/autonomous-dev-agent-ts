@@ -2,9 +2,9 @@
 
 # V2SessionExecutor API 문서
 
-**최종 업데이트**: 2025-01-XX
+**최종 업데이트**: 2026-03-11
 **버전**: v2.4
-**테스트 검증**: ✅ 140개 테스트 전체 통과 (Normal 20%, Edge 40%, Error 40%)
+**테스트 검증**: ✅ 116개 테스트 전체 통과 (Normal 20%, Edge 40%, Error 40%)
 **Architect 평가**: 99/100 (Best Practice)
 **Reviewer 평가**: 98/100 (APPROVED)
 
@@ -29,7 +29,7 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 │  └──────┘   └──────┘   └──────┘     (SendMessage 활성화)  │
 │  Architect    QA      Coder                                 │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=true                                   │
+│  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1                                   │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,7 +39,7 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 │  └──────┘   └──────┘   └──────┘     (SendMessage 불가)     │
 │  Coder      Tester      QC                                  │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=false                                  │
+│  (키 미설정 — 비활성화)                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +65,7 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 │  │     • AuthProvider에서 인증 헤더 가져오기                │ │
 │  │     • x-api-key → ANTHROPIC_API_KEY 변환                 │ │
 │  │     • authorization → CLAUDE_CODE_OAUTH_TOKEN 변환        │ │
-│  │     • Phase 확인 → AGENT_TEAMS_ENABLED 설정              │ │
+│  │     • Phase 확인 → CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 설정              │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                           ↓                                    │
 │  ┌──────────────────────────────────────────────────────────┐ │
@@ -105,7 +105,7 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 │                                                                │
 │  환경변수:                                                     │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                                │
-│    AGENT_TEAMS_ENABLED=true  ← SendMessage 사용 가능           │
+│    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1  ← SendMessage 사용 가능           │
 │                                                                │
 │  Agent Teams 통신:                                             │
 │    architect → qa: "설계 검토 부탁"                            │
@@ -118,7 +118,7 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 │                                                                │
 │  환경변수:                                                     │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                                │
-│    AGENT_TEAMS_ENABLED=false  ← SendMessage 사용 불가          │
+│    (키 미설정 — 비활성화)  ← SendMessage 사용 불가          │
 │                                                                │
 │  독립 실행:                                                    │
 │    coder: 혼자 코드 작성                                       │
@@ -129,29 +129,27 @@ V2SessionExecutor는 이 "모임 방식"을 자동으로 전환해주는 **스�
 ### 이벤트 매핑 흐름
 
 ```
-SDK V2SessionEvent          →  AgentEvent
-══════════════════════════     ══════════════════════════════════
-type: 'message'             →  type: 'message'
-  content: "Hello"          →    content: "Hello"
-                            →    agentName: 'architect'
-                            →    timestamp: Date
+SDK SDKMessage                         AgentEvent
+══════════════════════════════════     ══════════════════════════════════════
+type: 'assistant'
+  content: [{ type:'tool_use' }]    →  type: 'tool_use'
+                                         content: "Tool: {name}"
+                                         metadata: { toolName, toolInput }
 
-type: 'tool_use'            →  type: 'tool_use'
-  name: 'Read'              →    content: "Tool: Read"
-  input: {...}              →    metadata: { toolName, toolInput }
+type: 'assistant'
+  content: [{ type:'text' }...]     →  type: 'message'
+                                         content: text 블록 '\n' 조인
+                                         (빈 배열 → null, 필터링됨)
 
-type: 'tool_result'         →  type: 'tool_result'
-  tool_use_id: 'tool_123'   →    content: (결과 내용)
-  content: "..."            →    metadata: { toolName, isError }
+type: 'result', subtype:'success'   →  type: 'done'
+                                         content: msg.result
+                                         metadata: { stopReason, cost }
 
-type: 'error'               →  type: 'error'
-  error: { message: "..." } →    content: "에러 메시지"
+type: 'result', subtype: 기타       →  type: 'error'
+                                         content: errors[0] ?? 'Execution failed'
+                                         metadata: { subtype }
 
-type: 'message_stop'        →  type: 'done'
-  stop_reason: 'end_turn'   →    content: "Agent execution completed"
-                            →    metadata: { stopReason }
-
-type: 'unknown_event'       →  null (필터링됨)
+type: 'system', 기타                →  null (필터링됨)
 ```
 
 ---
@@ -228,7 +226,7 @@ const executor = new V2SessionExecutor({
   logger,
   defaultOptions: {
     maxTurns: 100,        // 기본 최대 턴 수 (선택)
-    temperature: 1.0,     // 기본 temperature (선택)
+    // temperature: 제거됨 (SDKSessionOptions 미지원)
     model: 'claude-opus-4-6',  // 기본 모델 (선택)
   },
 });
@@ -313,18 +311,13 @@ process.on('SIGTERM', () => {
 
 ## ⚠️ 주의사항
 
-### 1. SDK 설치 필수
+### 1. SDK 설치 확인
 
-현재 코드에는 `@anthropic-ai/claude-code` SDK가 설치되지 않은 상태입니다.
+`@anthropic-ai/claude-agent-sdk@0.2.72` 가 `package.json`에 포함되어 있습니다. 재설치 필요 시:
 
 ```bash
-# SDK 설치 필요
-bun add @anthropic-ai/claude-code
+bun install
 ```
-
-**설치 전 동작**:
-- `createSession()` 호출 시 `Error: SDK not installed: @anthropic-ai/claude-code` 발생
-- 모든 `execute()` 호출이 `error` 이벤트를 반환함
 
 ### 2. Phase별 Agent Teams 동작 이해
 
@@ -352,7 +345,7 @@ const config = {
 ```typescript
 // 최종 환경변수 = baseEnv (인증 + Agent Teams) + config.env (사용자 정의)
 const finalEnv = {
-  ...baseEnv,         // ANTHROPIC_API_KEY + AGENT_TEAMS_ENABLED
+  ...baseEnv,         // ANTHROPIC_API_KEY + CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
   ...config.env,      // 사용자 정의 변수 (덮어쓰기 가능)
 };
 ```
@@ -510,7 +503,7 @@ for await (const event of executor.execute(config)) {
 
 **해결**:
 ```bash
-bun add @anthropic-ai/claude-code
+bun add @anthropic-ai/claude-agent-sdk
 ```
 
 #### 2. 세션 생성 실패
@@ -830,7 +823,7 @@ console.log('전체 세션 상태:', tracker.getAllSessions());
 
 ### 구현 전 체크리스트
 
-- [ ] `@anthropic-ai/claude-code` SDK 설치 완료
+- [ ] `@anthropic-ai/claude-agent-sdk` SDK 설치 완료
 - [ ] `ANTHROPIC_API_KEY` 또는 `CLAUDE_CODE_OAUTH_TOKEN` 환경변수 설정
 - [ ] AuthProvider 구현 완료 (getAuthHeader, validateAuth)
 - [ ] Logger 인스턴스 준비 완료
@@ -875,7 +868,7 @@ console.log('전체 세션 상태:', tracker.getAllSessions());
 - **IMPLEMENTATION-GUIDE.md**: V2 Session API 통합 가이드
 - **src/layer2/types.ts**: AgentConfig, AgentEvent 타입 정의
 - **src/auth/types.ts**: AuthProvider 인터페이스
-- **tests/unit/layer2/v2-session-executor.test.ts**: 140개 테스트 케이스
+- **tests/unit/layer2/v2-session-executor.test.ts**: 116개 테스트 케이스
 
 ---
 
@@ -909,4 +902,4 @@ V2SessionExecutor는 **Phase 기반으로 Agent Teams 활성화를 자동 전환
 - ✅ 이벤트 스트리밍으로 실시간 진행 상황 파악
 - ✅ 세션 재개로 작업 이어하기 가능
 
-**140개 테스트 전체 통과**로 검증된 안정성을 보장합니다!
+**116개 테스트 전체 통과**로 검증된 안정성을 보장합니다!

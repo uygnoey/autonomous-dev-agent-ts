@@ -427,7 +427,7 @@ async *resume(sessionId: string): AsyncIterable<AgentEvent> {
 
 ## 🚨 Blocking Issues 확인
 
-### Blocker 1: @anthropic-ai/claude-code 패키지 ✅
+### Blocker 1: @anthropic-ai/claude-agent-sdk 패키지 ✅
 
 **확인 항목**: SDK import 성공 여부
 
@@ -441,7 +441,7 @@ async *resume(sessionId: string): AsyncIterable<AgentEvent> {
 //   type V2Session,
 //   type V2SessionEvent,
 //   type V2PromptOptions,
-// } from '@anthropic-ai/claude-code';
+// } from '@anthropic-ai/claude-agent-sdk';
 ```
 
 **평가**: ✅ SDK 미설치를 명확히 인지하고 있음. 타입 스텁으로 개발 가능.
@@ -477,7 +477,7 @@ async *resume(sessionId: string): AsyncIterable<AgentEvent> {
 - [x] 세션 재개 로직 (메모리 기반, SessionManager는 추후)
 
 ### 의존성
-- [x] @anthropic-ai/claude-code import (TODO 주석으로 명시)
+- [x] @anthropic-ai/claude-agent-sdk import (TODO 주석으로 명시)
 - [x] unstable_v2_createSession 사용 (스텁 구현)
 - [x] 순환 의존성 없음 (bunx madge --circular)
 

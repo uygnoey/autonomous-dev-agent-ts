@@ -14,14 +14,19 @@
 
 import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
+import type { IpcPoller } from 'layer2/ipc-poller.js';
+import type { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestrator.js';
+import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import {
   createEvent,
+  executeCodePhase,
   executePhase,
   getNextPhase,
   spawnDocumenter,
   updateStatusForPhase,
 } from 'layer2/team-leader-helpers.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
+import { runTokenWaitLoop } from 'layer2/token-wait-loop.js';
 import type { AgentEvent } from 'layer2/types.js';
 
 // Re-export for external consumers
@@ -64,6 +69,11 @@ export class TeamLeader {
   private readonly integrationTester: TeamLeaderDeps['integrationTester'];
   private readonly logger: TeamLeaderDeps['logger'];
   private readonly ragSearcher: TeamLeaderDeps['ragSearcher'];
+  private readonly sessionSnapshotStore: SessionSnapshotStore | undefined;
+  private readonly sessionRestoreOrchestrator: SessionRestoreOrchestrator | undefined;
+  private readonly ipcPoller: IpcPoller | undefined;
+  private readonly parallelCoderRunner: TeamLeaderDeps['parallelCoderRunner'];
+  private readonly gitBranchManager: TeamLeaderDeps['gitBranchManager'];
   private currentFeatureId: string | null = null;
 
   /**
@@ -84,6 +94,11 @@ export class TeamLeader {
     this.integrationTester = deps.integrationTester;
     this.logger = deps.logger.child({ module: 'team-leader' });
     this.ragSearcher = deps.ragSearcher;
+    this.sessionSnapshotStore = deps.sessionSnapshotStore;
+    this.sessionRestoreOrchestrator = deps.sessionRestoreOrchestrator;
+    this.ipcPoller = deps.ipcPoller;
+    this.parallelCoderRunner = deps.parallelCoderRunner;
+    this.gitBranchManager = deps.gitBranchManager;
   }
 
   /**
@@ -111,49 +126,98 @@ export class TeamLeader {
 
     this.logger.info('기능 구현 시작', { featureId, projectId: handoffPackage.projectId });
 
-    let iteration = 0;
+    // WHY: IpcPoller가 주입됐을 때만 시작 — 팀 메시지 및 태스크 이벤트 감지
+    this.ipcPoller?.start((event) => {
+      this.logger.debug('IPC 이벤트 수신', { type: event.type });
+    });
 
-    while (iteration < MAX_ITERATIONS) {
-      iteration += 1;
-      const currentPhase = this.phaseEngine.currentPhase;
+    try {
+      let iteration = 0;
 
-      this.logger.info('Phase 실행', { featureId, phase: currentPhase, iteration });
+      while (iteration < MAX_ITERATIONS) {
+        iteration += 1;
+        const currentPhase = this.phaseEngine.currentPhase;
 
-      // WHY: 토큰 모니터를 확인하여 리소스 부족 시 중단
-      if (this.tokenMonitor.shouldPauseAll()) {
-        this.logger.error('토큰 부족으로 실행 일시 정지', { featureId });
-        yield createEvent('error', '토큰 리밋 도달로 실행 일시 정지');
-        return;
+        this.logger.info('Phase 실행', { featureId, phase: currentPhase, iteration });
+
+        // WHY: 토큰 부족 시 단순 중단 대신 세션 저장 후 대기 → 복원 루프 실행
+        if (this.tokenMonitor.shouldPauseAll()) {
+          if (
+            this.sessionSnapshotStore !== undefined &&
+            this.sessionRestoreOrchestrator !== undefined
+          ) {
+            this.logger.warn('토큰 한도 도달 — 세션 대기 루프 시작', { featureId });
+            yield* runTokenWaitLoop(
+              {
+                tokenMonitor: this.tokenMonitor,
+                sessionManager: this.sessionManager,
+                sessionSnapshotStore: this.sessionSnapshotStore,
+                sessionRestoreOrchestrator: this.sessionRestoreOrchestrator,
+                logger: this.logger,
+              },
+              featureId,
+              handoffPackage.projectId,
+            );
+          } else {
+            // WHY: sessionSnapshotStore/orchestrator 미주입 시 기존 동작 유지
+            this.logger.error('토큰 부족으로 실행 일시 정지', { featureId });
+            yield createEvent('error', '토큰 리밋 도달로 실행 일시 정지');
+            return;
+          }
+        }
+
+        if (currentPhase === 'CODE') {
+          yield* executeCodePhase(
+            {
+              phaseEngine: this.phaseEngine,
+              tokenMonitor: this.tokenMonitor,
+              agentGenerator: this.agentGenerator,
+              sessionManager: this.sessionManager,
+              agentSpawner: this.agentSpawner,
+              streamMonitor: this.streamMonitor,
+              logger: this.logger,
+              ragSearcher: this.ragSearcher,
+              coderAllocator: this.coderAllocator,
+              parallelCoderRunner: this.parallelCoderRunner,
+              gitBranchManager: this.gitBranchManager,
+            },
+            featureId,
+            handoffPackage,
+          );
+        } else {
+          yield* executePhase(
+            {
+              phaseEngine: this.phaseEngine,
+              tokenMonitor: this.tokenMonitor,
+              agentGenerator: this.agentGenerator,
+              sessionManager: this.sessionManager,
+              agentSpawner: this.agentSpawner,
+              streamMonitor: this.streamMonitor,
+              logger: this.logger,
+              ragSearcher: this.ragSearcher,
+            },
+            currentPhase,
+            featureId,
+            handoffPackage,
+          );
+        }
+
+        if (currentPhase === 'VERIFY') {
+          yield* this.handleVerifyResult(featureId, handoffPackage, iteration);
+          // WHY: handleVerifyResult가 done을 yield하면 종료
+          if (this.verificationGate.isAllPassed(featureId)) return;
+        } else {
+          this.advancePhase(featureId, currentPhase);
+        }
       }
 
-      yield* executePhase(
-        {
-          phaseEngine: this.phaseEngine,
-          tokenMonitor: this.tokenMonitor,
-          agentGenerator: this.agentGenerator,
-          sessionManager: this.sessionManager,
-          agentSpawner: this.agentSpawner,
-          streamMonitor: this.streamMonitor,
-          logger: this.logger,
-          ragSearcher: this.ragSearcher,
-        },
-        currentPhase,
-        featureId,
-        handoffPackage,
-      );
-
-      if (currentPhase === 'VERIFY') {
-        yield* this.handleVerifyResult(featureId, handoffPackage, iteration);
-        // WHY: handleVerifyResult가 done을 yield하면 종료
-        if (this.verificationGate.isAllPassed(featureId)) return;
-      } else {
-        this.advancePhase(featureId, currentPhase);
-      }
+      this.logger.error('최대 반복 횟수 초과', { featureId, maxIterations: MAX_ITERATIONS });
+      this.progressTracker.updateStatus(featureId, 'failed');
+      yield createEvent('error', `최대 반복 횟수(${MAX_ITERATIONS}) 초과로 중단`);
+    } finally {
+      // WHY: 정상 종료, 에러, return 모두 IpcPoller를 중단
+      this.ipcPoller?.stop();
     }
-
-    this.logger.error('최대 반복 횟수 초과', { featureId, maxIterations: MAX_ITERATIONS });
-    this.progressTracker.updateStatus(featureId, 'failed');
-    yield createEvent('error', `최대 반복 횟수(${MAX_ITERATIONS}) 초과로 중단`);
   }
 
   /**

@@ -76,3 +76,23 @@ export type { Plugin, PluginLoader, PluginManifest } from 'core/plugin-loader.js
 
 export { ProcessExecutor } from 'core/process-executor.js';
 export type { ProcessOptions, ProcessResult } from 'core/process-executor.js';
+
+// ── skill 병합 ────────────────────────────────────────────────
+
+export { SkillMerger } from 'core/skill-merger.js';
+export type {
+  ISkillMerger,
+  SkillFile,
+  SkillMergeOptions,
+  SkillReference,
+} from 'core/skill-merger-types.js';
+
+// ── 템플릿 로더 ───────────────────────────────────────────────
+
+export { TemplateLoader } from 'core/template-loader.js';
+export type {
+  ITemplateLoader,
+  PromptTemplate,
+  TemplateFormat,
+  TemplateLoadOptions,
+} from 'core/template-loader-types.js';

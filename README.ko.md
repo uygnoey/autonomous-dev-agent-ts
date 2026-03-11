@@ -398,7 +398,7 @@ bun run test:e2e
 |----------|-----------|---------|
 | **런타임** | [Bun](https://bun.sh/) ≥1.1 | 패키지 매니저, 번들러, 테스트 러너 |
 | **언어** | TypeScript (ESNext, strict) | 전체 코드베이스 |
-| **Agent SDK** | [@anthropic-ai/claude-code](https://www.npmjs.com/package/@anthropic-ai/claude-code) | V2 Session API 기반 에이전트 실행 |
+| **Agent SDK** | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) | V2 Session API 기반 에이전트 실행 |
 | **Vector DB** | [LanceDB](https://lancedb.com/) | 임베디드, 서버리스, 파일 기반 벡터 DB |
 | **Embedding** | [@huggingface/transformers](https://huggingface.co/docs/transformers.js) | 로컬 임베딩 (Xenova/Jina) |
 | **Linter** | [Biome](https://biomejs.dev/) | 린팅 + 포맷팅 |

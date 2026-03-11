@@ -12,10 +12,15 @@ import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { BiasDetector } from 'layer2/bias-detector.js';
 import type { CoderAllocator } from 'layer2/coder-allocator.js';
 import type { FailureHandler } from 'layer2/failure-handler.js';
+import type { GitBranchManager } from 'layer2/git-branch-manager.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { IpcPoller } from 'layer2/ipc-poller.js';
+import type { ParallelCoderRunner } from 'layer2/parallel-coder-runner.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
 import type { ProgressTracker } from 'layer2/progress-tracker.js';
 import type { SessionManager } from 'layer2/session-manager.js';
+import type { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestrator.js';
+import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { VerificationGate } from 'layer2/verification-gate.js';
@@ -44,4 +49,14 @@ export interface TeamLeaderDeps {
   readonly logger: Logger;
   /** RAG 검색기 (선택) — 에이전트 컨텍스트 주입에 사용 / RAG searcher (optional) for context injection */
   readonly ragSearcher?: RagSearcher;
+  /** 세션 스냅샷 저장소 (선택) — 토큰 한도 도달 시 세션 영속화 / Session snapshot store (optional) for token reset persistence */
+  readonly sessionSnapshotStore?: SessionSnapshotStore;
+  /** 세션 복원 오케스트레이터 (선택) — 토큰 리셋 후 세션 복원 / Session restore orchestrator (optional) for post-reset recovery */
+  readonly sessionRestoreOrchestrator?: SessionRestoreOrchestrator;
+  /** 디스크 IPC 폴러 (선택) — 팀 메시지/태스크 이벤트 감지 / Disk IPC poller (optional) for team message and task events */
+  readonly ipcPoller?: IpcPoller;
+  /** 병렬 Coder 실행기 (선택) — CODE phase에서 다수 Coder 병렬 실행 / Parallel coder runner (optional) for concurrent CODE phase execution */
+  readonly parallelCoderRunner?: ParallelCoderRunner;
+  /** Git 브랜치 관리자 (선택) — Coder 브랜치 생성 및 병합 / Git branch manager (optional) for branch setup and merge */
+  readonly gitBranchManager?: GitBranchManager;
 }

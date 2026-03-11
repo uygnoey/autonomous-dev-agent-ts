@@ -218,7 +218,7 @@ mcp → core
 **필수 입력**:
 - [x] `ConversationMessage` 타입 (정의됨)
 - [x] `MemoryRepository` 인터페이스 (core/memory.ts에 존재)
-- [ ] Claude Messages API 클라이언트 (@anthropic-ai/sdk 또는 fetch)
+- [ ] Claude Messages API 클라이언트 (@anthropic-ai/claude-agent-sdk 또는 fetch)
 
 **필수 출력**:
 - [ ] `addMessage(message: ConversationMessage): Promise<Result<void>>`
@@ -246,7 +246,7 @@ mcp → core
 **필수 입력**:
 - [x] `AgentConfig` 타입 (정의됨)
 - [x] `AgentExecutor` 인터페이스 (정의됨)
-- [ ] `@anthropic-ai/claude-code` SDK 설치 및 import
+- [ ] `@anthropic-ai/claude-agent-sdk` SDK 설치 및 import
 
 **필수 출력**:
 - [ ] `execute(config: AgentConfig): AsyncIterable<AgentEvent>`
@@ -575,7 +575,7 @@ for (const testCase of testCases) {
 - ✅ 기존 코드 품질 양호 (TODO/FIXME 0건)
 
 **주의 필요**:
-- ⚠️ Task #3: SDK 설치 후 버전 호환성 확인 필요 (`@anthropic-ai/claude-code`)
+- ⚠️ Task #3: SDK 설치 후 버전 호환성 확인 필요 (`@anthropic-ai/claude-agent-sdk`)
 - ⚠️ Task #4: Transformers 라이브러리 메모리 사용량 모니터링 필요
 - ⚠️ Task #6: 실제 테스트 실행 로직 구현 필요 (현재 더미 가능성)
 
@@ -604,7 +604,7 @@ for (const testCase of testCases) {
 ### 🚦 승인 상태: ✅ 승인 (조건부)
 
 **조건**:
-- Task #3 구현 전 `@anthropic-ai/claude-code` SDK 설치 확인
+- Task #3 구현 전 `@anthropic-ai/claude-agent-sdk` SDK 설치 확인
 - Task #4 구현 전 `@huggingface/transformers` 메모리 요구사항 확인
 - 모든 테스트는 `bun test` 프레임워크 사용 (vitest/jest 금지)
 

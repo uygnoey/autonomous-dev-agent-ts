@@ -1472,3 +1472,132 @@ describe('Layer1Verifier 최종 추가 경계값', () => {
     }
   });
 });
+
+// ── verifyAsync() 테스트 / verifyAsync() Tests ──────────────────
+
+import type { AdevError } from 'core/errors.js';
+import type { ClaudeApiRequestOptions, ClaudeApiResponse } from 'layer1/claude-api-types.js';
+import type { ClaudeApi } from 'layer1/claude-api.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
+
+/**
+ * ClaudeApi 모의 / Mock ClaudeApi for verifyAsync tests
+ */
+function makeVerifierMockApi(
+  responseContent: string,
+  shouldError = false,
+): ClaudeApi {
+  return {
+    createMessage: async (
+      _messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+      _options?: ClaudeApiRequestOptions,
+    ): Promise<Result<ClaudeApiResponse, AdevError>> => {
+      if (shouldError) {
+        const { AgentError } = await import('core/errors.js');
+        return err(new AgentError('agent_api_error', 'Mock API error'));
+      }
+      return ok({
+        content: responseContent,
+        metadata: {
+          model: 'claude-haiku-4-20250514',
+          inputTokens: 20,
+          outputTokens: 10,
+          stopReason: 'end_turn',
+        },
+      });
+    },
+    streamMessage: async () => ok(undefined),
+  } as unknown as ClaudeApi;
+}
+
+describe('Layer1Verifier verifyAsync() — claudeApi 없을 때', () => {
+  it('claudeApi 없으면 로컬 판정으로 폴백', async () => {
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'));
+    const result = await verifier.verifyAsync(makeRequest());
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('구현 코드 정상 → claudeApi 없어도 passed=true', async () => {
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'));
+    const result = await verifier.verifyAsync(makeRequest());
+
+    if (result.ok) {
+      expect(result.value.passed).toBe(true);
+    }
+  });
+
+  it('구현 코드 빈 문자열 → claudeApi 없어도 passed=false', async () => {
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'));
+    const result = await verifier.verifyAsync(makeRequest({ implementedCode: '' }));
+
+    if (result.ok) {
+      expect(result.value.passed).toBe(false);
+    }
+  });
+
+  it('verifyAsync 반환값에 featureId 포함', async () => {
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'));
+    const result = await verifier.verifyAsync(makeRequest({ featureId: 'async-feat-1' }));
+
+    if (result.ok) {
+      expect(result.value.featureId).toBe('async-feat-1');
+    }
+  });
+});
+
+describe('Layer1Verifier verifyAsync() — mock claudeApi 주입', () => {
+  it('ClaudeApi PASS 응답 → passed=true', async () => {
+    const api = makeVerifierMockApi('PASS: implementation looks good');
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'), api);
+    const result = await verifier.verifyAsync(makeRequest());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.passed).toBe(true);
+    }
+  });
+
+  it('ClaudeApi FAIL 응답 → passed=false', async () => {
+    const api = makeVerifierMockApi('FAIL: test failures detected');
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'), api);
+    const result = await verifier.verifyAsync(makeRequest());
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.passed).toBe(false);
+    }
+  });
+
+  it('ClaudeApi 오류 → 로컬 판정으로 폴백 (ok=true)', async () => {
+    const api = makeVerifierMockApi('', true); // shouldError=true
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'), api);
+    const result = await verifier.verifyAsync(makeRequest());
+
+    // WHY: AI 오류 시 로컬 판정으로 폴백 — 에러를 올리지 않는 설계
+    expect(result.ok).toBe(true);
+  });
+
+  it('로컬 검사 실패 시 claudeApi 호출 없이 즉시 실패', async () => {
+    const api = makeVerifierMockApi('PASS: should not be called');
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'), api);
+    const result = await verifier.verifyAsync(makeRequest({ implementedCode: '' }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // WHY: 로컬 실패이므로 AI PASS 응답과 무관하게 passed=false
+      expect(result.value.passed).toBe(false);
+    }
+  });
+
+  it('PASS 응답 시 feedback에 AI 메시지 포함', async () => {
+    const api = makeVerifierMockApi('PASS: all checks pass');
+    const verifier = new Layer1Verifier(new ConsoleLogger('error'), api);
+    const result = await verifier.verifyAsync(makeRequest());
+
+    if (result.ok && result.value.passed) {
+      expect(result.value.feedback.length).toBeGreaterThan(0);
+    }
+  });
+});

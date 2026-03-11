@@ -48,6 +48,7 @@
     "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.72",
     "@anthropic-ai/claude-code": "^0.2.63",
     "@anthropic-ai/sdk": "^0.78.0",
     "@huggingface/transformers": "^3.0.0",

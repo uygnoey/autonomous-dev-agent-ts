@@ -17,6 +17,8 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { OAuthExpiryChecker } from 'auth/oauth-expiry-checker.js';
+import { formatOAuthExpiryWarning } from 'cli/tui/renderer.js';
 import { AuthError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
@@ -29,7 +31,12 @@ const ENV_FILE = join(ADEV_DIR, '.env');
 /**
  * 현재 인증 상태를 반환한다 / Returns current auth status
  */
-async function getAuthStatus(): Promise<{ method: string; masked: string } | null> {
+async function getAuthStatus(): Promise<{
+  method: string;
+  masked: string;
+  /** OAuth 토큰 원문 (만료 감지용), API Key 시 null / Raw OAuth token (for expiry check), null for API Key */
+  oauthToken: string | null;
+} | null> {
   if (!existsSync(ENV_FILE)) return null;
 
   const content = await readFile(ENV_FILE, 'utf-8');
@@ -40,12 +47,12 @@ async function getAuthStatus(): Promise<{ method: string; masked: string } | nul
     if (trimmed.startsWith('ANTHROPIC_API_KEY=')) {
       const key = trimmed.slice('ANTHROPIC_API_KEY='.length);
       const masked = `${key.slice(0, 10)}...${key.slice(-4)}`;
-      return { method: 'API Key', masked };
+      return { method: 'API Key', masked, oauthToken: null };
     }
     if (trimmed.startsWith('CLAUDE_CODE_OAUTH_TOKEN=')) {
       const token = trimmed.slice('CLAUDE_CODE_OAUTH_TOKEN='.length);
       const masked = `${token.slice(0, 14)}...${token.slice(-4)}`;
-      return { method: 'OAuth Token', masked };
+      return { method: 'OAuth Token', masked, oauthToken: token };
     }
   }
   return null;
@@ -127,7 +134,19 @@ export class AuthCommand {
       process.stdout.write('\n✅ 인증 상태 / Auth Status\n');
       process.stdout.write(`   방법 / Method: ${status.method}\n`);
       process.stdout.write(`   키 / Key:    ${status.masked}\n`);
-      process.stdout.write(`   파일 / File: ${ENV_FILE}\n\n`);
+      process.stdout.write(`   파일 / File: ${ENV_FILE}\n`);
+
+      // OAuth 토큰인 경우 만료 상태 확인 / Check expiry status for OAuth tokens
+      if (status.oauthToken !== null) {
+        const checker = new OAuthExpiryChecker();
+        const expiryInfo = checker.check(status.oauthToken);
+        const warning = formatOAuthExpiryWarning(expiryInfo);
+        if (warning) {
+          process.stdout.write(`${warning}\n`);
+        }
+      }
+
+      process.stdout.write('\n');
     } else {
       process.stdout.write('\n⚠️  인증이 설정되지 않았습니다 / No authentication configured\n');
       process.stdout.write('   adev auth 를 실행하세요 / Run: adev auth\n\n');

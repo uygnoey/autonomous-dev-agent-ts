@@ -13,7 +13,7 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type AgentName, type Result, err, ok } from 'core/types.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
-import type { V2PromptOptions, V2Session } from 'layer2/v2-session-executor-types.js';
+import type { SDKSessionOptions, V2Session } from 'layer2/v2-session-executor-types.js';
 export type {
   V2SessionFactory,
   V2SessionExecutorOptions,
@@ -23,11 +23,12 @@ import type {
   V2SessionFactory,
 } from 'layer2/v2-session-executor-types.js';
 import {
-  anthropicSessionFactory,
   createErrorEvent,
   extractAgentNameFromSessionId,
   generateSessionId,
   mapSdkEvent,
+  sdkResumeSession,
+  sdkSessionFactory,
 } from 'layer2/v2-session-factory.js';
 
 /**
@@ -57,7 +58,7 @@ export class V2SessionExecutor implements AgentExecutor {
   private readonly authProvider: AuthProvider;
   private readonly logger: Logger;
   private readonly defaultOptions: V2SessionExecutorOptions['defaultOptions'];
-  private readonly activeSessions: Map<string, V2Session>;
+  private readonly activeSessions: Map<string, { session: V2Session; options: SDKSessionOptions }>;
   private readonly sessionFactory: V2SessionFactory;
 
   constructor(options: V2SessionExecutorOptions) {
@@ -65,8 +66,8 @@ export class V2SessionExecutor implements AgentExecutor {
     this.logger = options.logger.child({ module: 'V2SessionExecutor' });
     this.defaultOptions = options.defaultOptions;
     this.activeSessions = new Map();
-    // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 Anthropic SDK 기반 팩토리 사용
-    this.sessionFactory = options.sessionFactory ?? anthropicSessionFactory;
+    // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 claude-agent-sdk 기반 팩토리 사용
+    this.sessionFactory = options.sessionFactory ?? sdkSessionFactory;
   }
 
   /**
@@ -101,17 +102,19 @@ export class V2SessionExecutor implements AgentExecutor {
         return;
       }
 
-      const session = sessionResult.value;
+      const { session, options: sessionOptions } = sessionResult.value;
       const sessionId = generateSessionId(
         config.projectId,
         config.featureId,
         config.name,
         config.phase,
       );
-      this.activeSessions.set(sessionId, session);
+      this.activeSessions.set(sessionId, { session, options: sessionOptions });
 
       try {
-        for await (const sdkEvent of session.stream(config.prompt)) {
+        // WHY: send()로 프롬프트 전달 후 stream()으로 응답 수신 (V2 Session API 패턴)
+        await session.send(config.prompt);
+        for await (const sdkEvent of session.stream()) {
           const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
             this.logger.debug('Unhandled SDK event type', { eventType });
           });
@@ -122,6 +125,7 @@ export class V2SessionExecutor implements AgentExecutor {
           // WHY: done 이벤트 수신 시 세션 정리
           if (mappedEvent?.type === 'done') {
             this.logger.info('Agent execution completed', { agentName: config.name });
+            session.close();
             this.activeSessions.delete(sessionId);
           }
         }
@@ -155,24 +159,19 @@ export class V2SessionExecutor implements AgentExecutor {
   async *resume(sessionId: string): AsyncIterable<AgentEvent> {
     this.logger.info('Resuming session', { sessionId });
 
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      // WHY: 세션 ID에서 에이전트명 추출 (형식: projectId:featureId:agentName:phase)
-      const agentName = extractAgentNameFromSessionId(sessionId);
-      yield {
-        type: 'error',
-        agentName,
-        content: `Session not found: ${sessionId}`,
-        timestamp: new Date(),
-      };
-      return;
-    }
+    const agentName = extractAgentNameFromSessionId(sessionId);
+    const stored = this.activeSessions.get(sessionId);
+
+    // WHY: 메모리에 없으면 sdkResumeSession으로 세션 복원 (기본 옵션 사용)
+    const session: V2Session = stored
+      ? stored.session
+      : sdkResumeSession(sessionId, {
+          model: this.defaultOptions?.model ?? 'claude-opus-4-6',
+        });
 
     try {
-      const agentName = extractAgentNameFromSessionId(sessionId);
-
-      // WHY: 세션 재개는 추가 프롬프트 없이 스트림 계속 수신
-      for await (const sdkEvent of session.stream('')) {
+      // WHY: resume은 이미 대화 컨텍스트가 있으므로 send 없이 stream만 수신
+      for await (const sdkEvent of session.stream()) {
         const mappedEvent = mapSdkEvent(sdkEvent, agentName, (eventType) => {
           this.logger.debug('Unhandled SDK event type', { eventType });
         });
@@ -185,7 +184,6 @@ export class V2SessionExecutor implements AgentExecutor {
         }
       }
     } catch (error) {
-      const agentName = extractAgentNameFromSessionId(sessionId);
       this.logger.error('Session resume failed', { sessionId, error });
       yield {
         type: 'error',
@@ -219,11 +217,9 @@ export class V2SessionExecutor implements AgentExecutor {
     }
 
     if (enableAgentTeams) {
-      baseEnv.AGENT_TEAMS_ENABLED = 'true';
+      // WHY: Agent Teams는 '1'로 설정 시 활성화, 미설정 시 비활성화 (키 자체를 설정하지 않음)
+      baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
       this.logger.debug('Agent Teams enabled', { phase: config.phase });
-    } else {
-      baseEnv.AGENT_TEAMS_ENABLED = 'false';
-      this.logger.debug('Agent Teams disabled', { phase: config.phase });
     }
 
     return { ...baseEnv, ...(config.env ?? {}) };
@@ -239,21 +235,20 @@ export class V2SessionExecutor implements AgentExecutor {
   private async createSession(
     config: AgentConfig,
     env: Record<string, string>,
-  ): Promise<Result<V2Session, AgentError>> {
+  ): Promise<Result<{ session: V2Session; options: SDKSessionOptions }, AgentError>> {
     try {
-      const sessionOptions: V2PromptOptions = {
-        systemPrompt: config.systemPrompt,
-        maxTurns: config.maxTurns ?? this.defaultOptions?.maxTurns ?? 50,
-        temperature: this.defaultOptions?.temperature ?? 1.0,
+      const sessionOptions: SDKSessionOptions = {
         model: this.defaultOptions?.model ?? 'claude-opus-4-6',
-        tools: config.tools.length > 0 ? [...config.tools] : undefined,
-        environment: env,
+        permissionMode: 'bypassPermissions',
+        executable: 'bun',
+        env,
+        allowedTools: config.tools.length > 0 ? [...config.tools] : undefined,
       };
 
       const session = this.sessionFactory(sessionOptions);
       this.logger.debug('Session created', { agentName: config.name, phase: config.phase });
 
-      return ok(session);
+      return ok({ session, options: sessionOptions });
     } catch (error) {
       this.logger.error('Session creation failed', { agentName: config.name, error });
 

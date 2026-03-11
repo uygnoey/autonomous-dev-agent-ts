@@ -2,9 +2,9 @@
 
 # Documentación API de V2SessionExecutor
 
-**Última actualización**: 2025-01-XX
+**Última actualización**: 2026-03-11
 **Versión**: v2.4
-**Verificación de pruebas**: ✅ 140 pruebas completas pasadas (Normal 20%, Edge 40%, Error 40%)
+**Verificación de pruebas**: ✅ 116 pruebas completas pasadas (Normal 20%, Edge 40%, Error 40%)
 **Evaluación Architect**: 99/100 (Best Practice)
 **Evaluación Reviewer**: 98/100 (APPROVED)
 
@@ -29,7 +29,7 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │  └──────┘   └──────┘   └──────┘     (SendMessage activado) │
 │  Architect    QA      Coder                                 │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=true                                   │
+│  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1                     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,7 +39,7 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │  └──────┘   └──────┘   └──────┘     (SendMessage no disponible)│
 │  Coder      Tester      QC                                  │
 │                                                             │
-│  AGENT_TEAMS_ENABLED=false                                  │
+│  (no configurado — desactivado)                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +65,7 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │  │     • Obtener encabezado de auth de AuthProvider     │ │
 │  │     • Conversión x-api-key → ANTHROPIC_API_KEY       │ │
 │  │     • Conversión authorization → CLAUDE_CODE_OAUTH_TOKEN│ │
-│  │     • Verificar Phase → Configurar AGENT_TEAMS_ENABLED│ │
+│  │     • Verificar Phase → Configurar CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS│ │
 │  └──────────────────────────────────────────────────────┘ │
 │                           ↓                                │
 │  ┌──────────────────────────────────────────────────────┐ │
@@ -76,9 +76,9 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │  └──────────────────────────────────────────────────────┘ │
 │                           ↓                                │
 │  ┌──────────────────────────────────────────────────────┐ │
-│  │  3. session.stream(prompt)                           │ │
+│  │  3. session.send(prompt) + session.stream()          │ │
 │  │     • Iniciar flujo de eventos SDK                   │ │
-│  │     • Recibir message, tool_use, tool_result, error, done│ │
+│  │     • Recibir eventos assistant, tool_use, result    │ │
 │  └──────────────────────────────────────────────────────┘ │
 │                           ↓                                │
 │  ┌──────────────────────────────────────────────────────┐ │
@@ -105,7 +105,7 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │                                                            │
 │  Variables de entorno:                                     │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                            │
-│    AGENT_TEAMS_ENABLED=true  ← SendMessage disponible     │
+│    CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1  ← SendMessage disponible│
 │                                                            │
 │  Comunicación Agent Teams:                                 │
 │    architect → qa: "Por favor revisa el diseño"           │
@@ -118,7 +118,7 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 │                                                            │
 │  Variables de entorno:                                     │
 │    ANTHROPIC_API_KEY=sk-ant-xxx                            │
-│    AGENT_TEAMS_ENABLED=false  ← SendMessage no disponible │
+│    (no configurado — desactivado)  ← SendMessage no disponible│
 │                                                            │
 │  Ejecución independiente:                                  │
 │    coder: Escribe código solo                             │
@@ -129,29 +129,27 @@ V2SessionExecutor es un **botón inteligente** que cambia automáticamente este 
 ### Flujo de Mapeo de Eventos
 
 ```
-SDK V2SessionEvent          →  AgentEvent
-══════════════════════════     ══════════════════════════════════
-type: 'message'             →  type: 'message'
-  content: "Hello"          →    content: "Hello"
-                            →    agentName: 'architect'
-                            →    timestamp: Date
+SDK SDKMessage                         AgentEvent
+══════════════════════════════════     ══════════════════════════════════════
+type: 'assistant'
+  content: [{ type:'tool_use' }]    →  type: 'tool_use'
+                                         content: "Tool: {name}"
+                                         metadata: { toolName, toolInput }
 
-type: 'tool_use'            →  type: 'tool_use'
-  name: 'Read'              →    content: "Tool: Read"
-  input: {...}              →    metadata: { toolName, toolInput }
+type: 'assistant'
+  content: [{ type:'text' }...]     →  type: 'message'
+                                         content: bloques text unidos '\n'
+                                         (array vacío → null, filtrado)
 
-type: 'tool_result'         →  type: 'tool_result'
-  tool_use_id: 'tool_123'   →    content: (contenido del resultado)
-  content: "..."            →    metadata: { toolName, isError }
+type: 'result', subtype:'success'   →  type: 'done'
+                                         content: msg.result
+                                         metadata: { stopReason, cost }
 
-type: 'error'               →  type: 'error'
-  error: { message: "..." } →    content: "mensaje de error"
+type: 'result', subtype: otro       →  type: 'error'
+                                         content: errors[0] ?? 'Execution failed'
+                                         metadata: { subtype }
 
-type: 'message_stop'        →  type: 'done'
-  stop_reason: 'end_turn'   →    content: "Agent execution completed"
-                            →    metadata: { stopReason }
-
-type: 'unknown_event'       →  null (filtrado)
+type: 'system', otro                →  null (filtrado)
 ```
 
 ---
@@ -228,7 +226,7 @@ const executor = new V2SessionExecutor({
   logger,
   defaultOptions: {
     maxTurns: 100,        // Número máximo de turnos predeterminado (opcional)
-    temperature: 1.0,     // Temperature predeterminado (opcional)
+    // temperature: removed (not in SDKSessionOptions)
     model: 'claude-opus-4-6',  // Modelo predeterminado (opcional)
   },
 });
@@ -313,18 +311,13 @@ process.on('SIGTERM', () => {
 
 ## ⚠️ Precauciones
 
-### 1. Instalación de SDK Requerida
+### 1. Instalación de SDK
 
-Actualmente el código no tiene el SDK `@anthropic-ai/claude-code` instalado.
+`@anthropic-ai/claude-agent-sdk@0.2.72` está incluido en `package.json`. Instalado (`bun install` para reinstalar).
 
 ```bash
-# Instalación de SDK necesaria
-bun add @anthropic-ai/claude-code
+bun install
 ```
-
-**Operación antes de instalación**:
-- `Error: SDK not installed: @anthropic-ai/claude-code` ocurre al llamar `createSession()`
-- Todas las llamadas a `execute()` devuelven evento `error`
 
 ### 2. Entender Operación de Agent Teams por Phase
 
@@ -352,7 +345,7 @@ const config = {
 ```typescript
 // Variables de entorno finales = baseEnv (auth + Agent Teams) + config.env (personalizado)
 const finalEnv = {
-  ...baseEnv,         // ANTHROPIC_API_KEY + AGENT_TEAMS_ENABLED
+  ...baseEnv,         // ANTHROPIC_API_KEY + CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
   ...config.env,      // Variables personalizadas (puede sobrescribir)
 };
 ```
@@ -510,7 +503,7 @@ for await (const event of executor.execute(config)) {
 
 **Solución**:
 ```bash
-bun add @anthropic-ai/claude-code
+bun add @anthropic-ai/claude-agent-sdk
 ```
 
 #### 2. Fallo en Creación de Sesión
@@ -830,7 +823,7 @@ console.log('Estado de todas las sesiones:', tracker.getAllSessions());
 
 ### Lista de Verificación Antes de Implementación
 
-- [ ] Instalación completa de SDK `@anthropic-ai/claude-code`
+- [ ] Instalación completa de SDK `@anthropic-ai/claude-agent-sdk`
 - [ ] Configuración de variable de entorno `ANTHROPIC_API_KEY` o `CLAUDE_CODE_OAUTH_TOKEN`
 - [ ] Implementación completa de AuthProvider (getAuthHeader, validateAuth)
 - [ ] Preparación completa de instancia Logger
@@ -875,7 +868,7 @@ console.log('Estado de todas las sesiones:', tracker.getAllSessions());
 - **IMPLEMENTATION-GUIDE.md**: Guía de integración de V2 Session API
 - **src/layer2/types.ts**: Definición de tipos AgentConfig, AgentEvent
 - **src/auth/types.ts**: Interfaz AuthProvider
-- **tests/unit/layer2/v2-session-executor.test.ts**: 140 casos de prueba
+- **tests/unit/layer2/v2-session-executor.test.ts**: 116 casos de prueba
 
 ---
 
@@ -909,4 +902,4 @@ V2SessionExecutor es un ejecutor de agente inteligente que **cambia automáticam
 - ✅ Seguimiento de progreso en tiempo real con flujo de eventos
 - ✅ Posibilidad de continuar trabajo con reanudación de sesión
 
-¡Garantiza estabilidad verificada con **140 pruebas completas pasadas**!
+¡Garantiza estabilidad verificada con **116 pruebas completas pasadas**!

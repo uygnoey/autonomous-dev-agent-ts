@@ -100,6 +100,21 @@ const VALID_MODELS = new Set(['opus', 'sonnet']);
 // ── 환경변수 ─────────────────────────────────────────────────
 
 /**
+ * 환경변수에서 Voyage API 키를 읽는다 / Read Voyage API key from environment
+ *
+ * @returns VOYAGE_API_KEY 값 또는 null / VOYAGE_API_KEY value or null
+ *
+ * @example
+ * const key = getVoyageApiKey();
+ * if (key) {
+ *   const provider = createVoyageEmbeddingProvider(logger, key);
+ * }
+ */
+export function getVoyageApiKey(): string | null {
+  return process.env.VOYAGE_API_KEY ?? null;
+}
+
+/**
  * 환경변수에서 인증 정보를 읽는다 / Load authentication from environment variables
  *
  * @returns 성공 시 EnvironmentVars, 실패 시 ConfigError

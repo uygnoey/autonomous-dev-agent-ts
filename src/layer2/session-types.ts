@@ -42,6 +42,8 @@ export interface SessionSnapshot {
   readonly lastActivity: Date;
   /** 추가 메타데이터 / Additional metadata */
   readonly metadata: Readonly<Record<string, unknown>>;
+  /** 토큰 리셋 복원용 대화 이력 (직렬화 전 원본) / Conversation history for token reset recovery */
+  readonly conversationHistory?: readonly unknown[];
 }
 
 // ── 기능 진행 상태 / Feature Progress ────────────────────────────

@@ -53,6 +53,14 @@ export { ContractBuilder } from 'layer1/contract-builder.js';
 
 export { Layer1Verifier } from 'layer1/verifier.js';
 
+// ── Contract AI 검증기 ───────────────────────────────────────────
+
+export { ContractVerifier } from 'layer1/contract-verifier.js';
+export type {
+  ContractVerificationIssue,
+  ContractVerificationResult,
+} from 'layer1/contract-verifier-types.js';
+
 // ── Claude API ──────────────────────────────────────────────────
 
 export {

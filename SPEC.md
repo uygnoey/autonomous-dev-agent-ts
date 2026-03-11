@@ -1458,7 +1458,7 @@ Subscription 모드:
 
 ```typescript
 // V2 Session API 기반 구현
-import { unstable_v2_createSession } from '@anthropic-ai/claude-code';
+import { unstable_v2_createSession } from '@anthropic-ai/claude-agent-sdk';
 
 const session = unstable_v2_createSession({
   systemPrompt: agentPrompt,
