@@ -1,6 +1,6 @@
 # adev — 개발 현황 상세 문서
 
-> 최종 갱신: 2026-03-11 (V2 Session API 완전 구현 + 테스트 0 fail)
+> 최종 갱신: 2026-03-12 (Batch 2 신규 구현 + 테스트 0 fail)
 > 작성 기준: `bun test` 실행 결과 + `bun run tsc --noEmit` + `bun run biome check src/`
 
 ---
@@ -9,18 +9,27 @@
 
 | 항목 | 상태 | 수치 |
 |------|------|------|
-| 전체 소스 파일 | ✅ 완료 | 131개 `.ts` (src/) |
-| 전체 테스트 파일 | ✅ 완료 | 82개 `.ts` (tests/) |
-| 테스트 통과율 | ✅ | **204,769 pass / 0 fail / 0 error** |
+| 전체 소스 파일 | ✅ 완료 | 134개 `.ts` (src/) |
+| 전체 테스트 파일 | ✅ 완료 | 97개 `.ts` (tests/) |
+| 테스트 통과율 | ✅ | **205,339 pass / 0 fail / 0 error** |
 | TypeScript 컴파일 | ✅ | `tsc --noEmit` 오류 없음 |
-| Biome 린트 | ✅ | 131개 파일 검사 이상 없음 |
+| Biome 린트 | ✅ | 134개 파일 검사 이상 없음 |
 | 300줄 초과 파일 | ✅ | **0개** (모두 분할 완료) |
 | 기술 부채 | ✅ | **0건** |
 | 총 소스 코드 라인 | — | ~17,500+ 줄 (src/) |
 | 총 테스트 코드 라인 | — | ~131,000+ 줄 (tests/) |
 | 총 커밋 수 | — | 113개 커밋 |
 
-> 이전 상태 대비: 204,754 pass / 0 fail / **1 error** → **204,769 pass / 0 fail / 0 error** (15개 테스트 복원)
+> 이전 대비: 204,769 → **205,339 pass** (+570), 0 fail, Batch 2 신규 파일 3개 추가
+
+---
+
+### ✅ Batch 2 신규 구현 (2026-03-12)
+
+- `src/layer1/agent-md-generator.ts`: AI 기반 `.adev/agents/*.md` 초안 생성
+- `src/layer1/agent-md-generator-instructions.ts`: 7개 에이전트별 지침
+- `src/rag/embedding-factory.ts`: 4-Provider Embedding Factory (`createEmbeddingProvider`, `parseEmbeddingProviderType`)
+- `src/cli/commands/init.ts`: `process.stdin.isTTY` non-TTY 방어 처리 추가
 
 ---
 
@@ -213,16 +222,17 @@ yargs 기반 CLI + TUI.
 
 ## 테스트 현황
 
-### 테스트 결과 (2026-03-10 최종)
+### 테스트 결과 (2026-03-12 최신)
 
 ```
-204,769 pass / 0 fail / 0 error
-588,749 expect() calls
-81 test files
-107.68s
+unit:   13,038 pass / 0 fail (81 파일)
+module:  1,068 pass / 0 fail  (8 파일)
+e2e:   191,233 pass / 0 fail  (8 파일)
+─────────────────────────────────────────
+총계:  205,339 pass / 0 fail / 0 error (97 파일)
 ```
 
-### 테스트 파일 분포 (82개)
+### 테스트 파일 분포 (97개)
 
 | 위치 | 파일 수 | 비고 |
 |------|---------|------|
@@ -230,14 +240,14 @@ yargs 기반 CLI + TUI.
 | `tests/unit/cli/` | 8 | |
 | `tests/unit/core/` | 7 | |
 | `tests/unit/layer1/` | 8 | |
-| `tests/unit/layer2/` | 17 | |
+| `tests/unit/layer2/` | 25 | Batch 1 신규 테스트 포함 |
 | `tests/unit/layer3/` | 5 | |
 | `tests/unit/mcp/` | 9 (5 + 4 builtin) | |
-| `tests/unit/rag/` | 8 | beforeEach 수정으로 270 tests 완전 복원 |
+| `tests/unit/rag/` | 11 | Batch 2 신규 테스트 포함 |
 | `tests/module/` | 8 | |
 | `tests/e2e/` | 8 | |
 | `tests/integration/` | 1 | |
-| **합계** | **82** | **204,769 tests** |
+| **합계** | **97** | **205,339 tests** |
 
 ---
 
