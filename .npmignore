@@ -1,24 +1,16 @@
-# Development
-src/
-tests/
-.claude/
-claudedocs/
+# adev .npmignore — publish 시 제외 목록
 
-# Config
-.adev/
-.vscode/
+tests/
+docs/
+claudedocs/
+scripts/
+.claude/
+relative-test/
+poc/
+adev-spec-full-v2_4.md
 tsconfig.json
 biome.json
-
-# Docs (keep only README in package)
-docs/
-*.md
-!README.md
-
-# Git
-.git/
-.gitignore
-
-# Build artifacts
-node_modules/
-*.log
+bun.lock
+ARCHITECTURE.md
+SPEC.md
+IMPLEMENTATION-GUIDE.md
