@@ -11,6 +11,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createAuthProvider } from '../../auth/index.js';
 import type { AuthProvider } from '../../auth/types.js';
@@ -20,6 +21,8 @@ import type { Logger } from '../../core/logger.js';
 import { MemoryRepository } from '../../core/memory.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
+import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
+import type { AgentMdGeneratorConfig } from '../../layer1/agent-md-generator.js';
 import { ClaudeApi } from '../../layer1/claude-api.js';
 import { ContractBuilder } from '../../layer1/contract-builder.js';
 import { ConversationManager } from '../../layer1/conversation.js';
@@ -351,7 +354,23 @@ export class StartCommand {
             const contractPath = resolve(session.projectInfo.path, '.adev', 'contract.json');
             chat.showContractComplete(contractPath);
 
-            // WHY: Contract 생성 완료 후 Layer2 자율 개발 시작 여부 유저에게 확인
+            // WHY: Contract 완료 후 AI 기반 agent.md 초안 생성 — 유저 확인 후 진행
+            chat.system(
+              'AI로 에이전트 가이드 문서(.adev/agents/*.md)를 생성하려면 "yes"를 입력하세요. (건너뛰려면 Enter)',
+            );
+            const agentMdEvent = await chat.waitForInput();
+            if (
+              agentMdEvent.type === 'message' &&
+              (agentMdEvent.text.toLowerCase() === 'yes' ||
+                agentMdEvent.text.toLowerCase() === 'y' ||
+                agentMdEvent.text === '네' ||
+                agentMdEvent.text === '예')
+            ) {
+              // WHY: 실패해도 Layer2 진행에 영향 없도록 warn 로그만 남기고 계속
+              await this.generateAgentMds(session, contractResult.value, chat);
+            }
+
+            // WHY: agent.md 생성 후 Layer2 자율 개발 시작 여부 유저에게 확인
             chat.system('Layer2 자율 개발을 시작하려면 "yes"를 입력하세요. (건너뛰려면 Enter)');
             const confirmEvent = await chat.waitForInput();
             if (
@@ -639,6 +658,88 @@ export class StartCommand {
           error,
         ),
       );
+    }
+  }
+
+  /**
+   * AgentMdGenerator로 7개 agent.md 초안을 생성하고 .adev/agents/ 에 저장한다
+   * Generate 7 agent .md drafts via AgentMdGenerator and save to .adev/agents/
+   *
+   * @description
+   * KR: HandoffPackage에서 projectType을 추출하고, AI로 7개 에이전트 역할 문서를 병렬 생성한다.
+   *     실패 시 warn 로그만 남기고 Layer2 진행은 계속한다 (선택적 기능).
+   *     .adev/agents/ 디렉토리가 없으면 자동 생성한다.
+   * EN: Extracts projectType from HandoffPackage, then generates 7 agent role documents in parallel.
+   *     On failure, only logs a warning and continues (optional feature).
+   *     Creates .adev/agents/ directory if it does not exist.
+   *
+   * @param session - Layer1 세션 상태 / Layer1 session state
+   * @param handoff - HandoffPackage (projectType 추출용) / HandoffPackage (for projectType extraction)
+   * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+   * @returns 항상 ok(void) — 실패 시 warn 로그만 / Always ok(void) — only warns on failure
+   */
+  private async generateAgentMds(
+    session: Layer1SessionState,
+    handoff: HandoffPackage,
+    chat: ChatUi,
+  ): Promise<Result<void, AdevError>> {
+    try {
+      chat.startSpinner('에이전트 문서 초안 생성 중...');
+
+      // WHY: .adev/agents/ 디렉토리가 없으면 mkdir — init 없이 start를 실행하는 경우 대비
+      const agentsDir = resolve(session.projectInfo.path, '.adev', 'agents');
+      await mkdir(agentsDir, { recursive: true });
+
+      // WHY: HandoffPackage.contract.projectType에서 추출 — 설계 단계에서 결정된 값 사용
+      const config: AgentMdGeneratorConfig = {
+        projectPath: session.projectInfo.path,
+        projectName: session.projectInfo.name,
+        projectType: handoff.contract.projectType,
+        techStack: 'TypeScript, Bun',
+        conventions: 'ES Modules, strict TypeScript, Result<T,E> pattern, kebab-case files',
+        language: 'Korean',
+      };
+
+      const generator = new AgentMdGenerator(session.claudeApi, this.logger);
+
+      // 1. 7개 초안 병렬 생성
+      const draftsResult = await generator.generate(config);
+      if (!draftsResult.ok) {
+        chat.failSpinner('에이전트 문서 초안 생성 실패 (건너뜀)');
+        // WHY: 선택적 기능 — 실패해도 Layer2 진행을 막지 않음
+        this.logger.warn(
+          '에이전트 .md 초안 생성 실패, 건너뜀 / Agent .md generation failed, skipping',
+          {
+            error: draftsResult.error.message,
+          },
+        );
+        return ok(undefined);
+      }
+
+      // 2. .adev/agents/ 에 저장
+      const saveResult = await generator.saveDrafts(session.projectInfo.path, draftsResult.value);
+      if (!saveResult.ok) {
+        chat.failSpinner('에이전트 문서 저장 실패 (건너뜀)');
+        // WHY: 선택적 기능 — 실패해도 Layer2 진행을 막지 않음
+        this.logger.warn('에이전트 .md 초안 저장 실패, 건너뜀 / Agent .md save failed, skipping', {
+          error: saveResult.error.message,
+        });
+        return ok(undefined);
+      }
+
+      chat.succeedSpinner(`에이전트 문서 생성 완료 (${agentsDir})`);
+      this.logger.info('에이전트 .md 초안 저장 완료 / Agent .md drafts saved', { agentsDir });
+
+      return ok(undefined);
+    } catch (error: unknown) {
+      // WHY: 예외도 warn 수준 — 선택적 기능이므로 Layer2를 막지 않음
+      this.logger.warn(
+        '에이전트 .md 생성 예외 발생, 건너뜀 / Agent .md generation exception, skipping',
+        {
+          error: String(error),
+        },
+      );
+      return ok(undefined);
     }
   }
 

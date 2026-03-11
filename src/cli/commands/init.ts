@@ -133,7 +133,10 @@ export class InitCommand implements IInitCommand {
       }
 
       // 3. 인증 방식 선택 (기본값: api-key)
-      const authMethodResult = await this.selectAuthMethod(false);
+      // WHY: --yes 플래그가 없으면 interactive=true → inquirer 프롬프트 표시
+      const authMethodResult = await this.selectAuthMethod(
+        !((options.yes as boolean | undefined) ?? false),
+      );
       if (!authMethodResult.ok) {
         return err(authMethodResult.error);
       }

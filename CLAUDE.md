@@ -5,7 +5,7 @@ Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발�
 
 상세 컨벤션: `.claude/CLAUDE.md`
 아키텍처: `ARCHITECTURE.md`
-전체 스펙: `SPEC.md`
+전체 스펙: `adev-spec-full-v2_4.md`
 구현 가이드: `IMPLEMENTATION-GUIDE.md`
 
 ---

@@ -8,7 +8,7 @@ CLI `adev`. TypeScript + Bun. Claude Agent SDK (V2 Session API) 단독 런타임
 
 작업 전 반드시 관련 문서를 먼저 읽을 것:
 - `ARCHITECTURE.md` — 3계층 구조, 모듈 의존성
-- `SPEC.md` — v2.4 전체 스펙
+- `adev-spec-full-v2_4.md` — v2.4 전체 스펙
 - `IMPLEMENTATION-GUIDE.md` — 구현 순서
 - `docs/references/` — 에이전트, Phase, 테스트, Contract 상세
 - `CLAUDE.md` - 클로드 코드 코딩 지침서

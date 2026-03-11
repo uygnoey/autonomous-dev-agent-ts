@@ -19,7 +19,8 @@ import { ConsoleLogger } from 'core/logger.js';
 const logger = new ConsoleLogger('error');
 
 function makeOptions(projectPath: string): CliOptions {
-  return { projectPath, flags: {} };
+  // WHY: yes=true → non-interactive (테스트에서 inquirer 프롬프트 hang 방지)
+  return { projectPath, yes: true, flags: {} };
 }
 
 // ── InitCommand 생성자 ────────────────────────────────────────
@@ -1555,7 +1556,7 @@ describe('InitCommand CliOptions 경계값', () => {
     await mkdir(tempDir, { recursive: true });
     try {
       const cmd = new InitCommand(logger);
-      const r = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      const r = await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
       expect(typeof r.ok).toBe('boolean');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -1568,7 +1569,7 @@ describe('InitCommand CliOptions 경계값', () => {
     try {
       const cmd = new InitCommand(logger);
       const abs = resolve(tempDir);
-      const r = await cmd.execute([], { projectPath: abs, flags: {} });
+      const r = await cmd.execute([], { projectPath: abs, yes: true, flags: {} });
       expect(typeof r.ok).toBe('boolean');
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -1723,6 +1724,114 @@ describe('InitCommand 생성자 + execute 복합 시나리오', () => {
     } finally {
       await rm(tempDir1, { recursive: true, force: true });
       await rm(tempDir2, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── selectAuthMethod non-interactive ─────────────────────────────
+
+describe('InitCommand.selectAuthMethod — non-interactive 모드', () => {
+  it('interactive=false이면 기본값 api-key를 반환한다', async () => {
+    const cmd = new InitCommand(logger);
+    const result = await cmd.selectAuthMethod(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toBe('api-key');
+  });
+
+  it('interactive=false로 5번 호출 → 항상 api-key', async () => {
+    const cmd = new InitCommand(logger);
+    for (let i = 0; i < 5; i++) {
+      const result = await cmd.selectAuthMethod(false);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value).toBe('api-key');
+    }
+  });
+
+  it('interactive=false이면 ok 타입 반환', async () => {
+    const cmd = new InitCommand(logger);
+    const result = await cmd.selectAuthMethod(false);
+    expect(typeof result.ok).toBe('boolean');
+    expect(result.ok).toBe(true);
+  });
+
+  it('interactive=false이면 value가 api-key 또는 subscription', async () => {
+    const cmd = new InitCommand(logger);
+    const result = await cmd.selectAuthMethod(false);
+    if (result.ok) {
+      expect(['api-key', 'subscription']).toContain(result.value);
+    }
+  });
+
+  it('다른 인스턴스로 selectAuthMethod(false) → 동일 결과', async () => {
+    const cmd1 = new InitCommand(logger);
+    const cmd2 = new InitCommand(logger);
+    const r1 = await cmd1.selectAuthMethod(false);
+    const r2 = await cmd2.selectAuthMethod(false);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) expect(r1.value).toBe(r2.value);
+  });
+});
+
+// ── --yes 플래그 → non-interactive (execute 레벨) ─────────────────
+
+describe('InitCommand.execute — --yes 플래그 (non-interactive)', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `adev-yes-flag-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('yes=true 옵션으로 실행 → non-interactive, Result 반환', async () => {
+    const cmd = new InitCommand(logger, join(tempDir, 'registry'));
+    const result = await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+    // WHY: yes=true → !((true) ?? false) = !(true) = false → non-interactive → 기본 api-key
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('yes=true로 실행 후 same path 재실행 → already_exists 에러', async () => {
+    const cmd = new InitCommand(logger, join(tempDir, 'registry'));
+    await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+    const result2 = await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+    expect(result2.ok).toBe(false);
+    if (!result2.ok) expect(result2.error.code).toBe('cli_init_already_exists');
+  });
+
+  it('yes=true로 첫 번째 실행 → ok=true (auth 설정 없어도 파일 생성)', async () => {
+    const registryDir = join(tempDir, 'registry');
+    const cmd = new InitCommand(logger, registryDir);
+    const result = await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+    // WHY: non-interactive는 api-key 기본값 사용 → 실제 API 호출 없이 파일만 생성
+    expect(result.ok).toBe(true);
+  });
+
+  it('yes=true 실행 후 .adev/agents/ 디렉토리가 생성된다', async () => {
+    const registryDir = join(tempDir, 'registry');
+    const cmd = new InitCommand(logger, registryDir);
+    await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+
+    const { stat } = await import('node:fs/promises');
+    const agentsDir = join(tempDir, '.adev', 'agents');
+    const agentsStat = await stat(agentsDir);
+    expect(agentsStat.isDirectory()).toBe(true);
+  });
+
+  it('yes=true 실행 후 7개 기본 agent.md 파일이 생성된다', async () => {
+    const registryDir = join(tempDir, 'registry');
+    const cmd = new InitCommand(logger, registryDir);
+    await cmd.execute([], { projectPath: tempDir, yes: true, flags: {} });
+
+    const { stat } = await import('node:fs/promises');
+    const agentNames = ['architect', 'qa', 'coder', 'tester', 'qc', 'reviewer', 'documenter'];
+    for (const name of agentNames) {
+      const filePath = join(tempDir, '.adev', 'agents', `${name}.md`);
+      const fileStat = await stat(filePath);
+      expect(fileStat.isFile()).toBe(true);
     }
   });
 });

@@ -38,6 +38,8 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir ./dist --target bun",
+    "prepare": "bun build src/index.ts --outdir ./dist --target bun",
+    "prepublishOnly": "bun run check",
     "test": "bun run test:unit && bun run test:module && bun run test:e2e",
     "test:unit": "bun test tests/unit/",
     "test:module": "bun test tests/module/cli-integration.test.ts tests/module/core-auth.test.ts tests/module/core-mcp.test.ts tests/module/layer1-rag.test.ts tests/module/layer2-auth.test.ts tests/module/layer2-layer1.test.ts tests/module/layer3-layer2.test.ts && bash scripts/test-lancedb.sh tests/module/core-rag.test.ts",
@@ -67,5 +69,9 @@
   },
   "engines": {
     "bun": ">=1.1.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

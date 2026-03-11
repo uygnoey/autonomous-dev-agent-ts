@@ -1533,3 +1533,87 @@ describe('StartCommand generateContract 경계값', () => {
     }
   });
 });
+
+// ── agent.md 생성 통합 — StartCommand 구조 검증 ───────────────
+
+describe('StartCommand — agent.md 생성 통합 구조', () => {
+  it('execute 메서드가 함수이다', () => {
+    const cmd = new StartCommand(logger);
+    expect(typeof cmd.execute).toBe('function');
+  });
+
+  it('미초기화 프로젝트에서 execute → cli_start_not_initialized 반환', async () => {
+    const tempDir = join(tmpdir(), `adev-agentmd-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    try {
+      const cmd = new StartCommand(logger);
+      const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('cli_start_not_initialized');
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('.adev/config.json 있어도 auth 실패 시 세션 초기화 에러 반환', async () => {
+    // WHY: AgentMdGenerator 경로는 generateContract 후 도달 — auth 실패 시 먼저 에러
+    const tempDir = await makeProjectDir();
+    try {
+      const cmd = new StartCommand(logger);
+      const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      // auth 실패 또는 session 초기화 실패 → ok=false
+      expect(result.ok).toBe(false);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('에러 반환값은 AdevError 구조를 가진다 (code + message)', async () => {
+    const tempDir = await makeProjectDir();
+    try {
+      const cmd = new StartCommand(logger);
+      const result = await cmd.execute([], { projectPath: tempDir, flags: {} });
+      if (!result.ok) {
+        expect(typeof result.error.code).toBe('string');
+        expect(typeof result.error.message).toBe('string');
+        expect(result.error.code.length).toBeGreaterThan(0);
+      }
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('여러 인스턴스가 독립적으로 동작한다', () => {
+    const c1 = new StartCommand(logger);
+    const c2 = new StartCommand(logger);
+    expect(c1).not.toBe(c2);
+    expect(c1.name).toBe(c2.name);
+  });
+
+  it('projectPath 옵션이 없으면 현재 디렉토리에서 실행 시도', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { flags: {} });
+    // 현재 디렉토리가 adev init 안 된 상태 → 에러 반환
+    expect(typeof result.ok).toBe('boolean');
+  });
+
+  it('빈 projectPath 옵션 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('존재하지 않는 경로 → ok=false', async () => {
+    const cmd = new StartCommand(logger);
+    const result = await cmd.execute([], { projectPath: '/no/such/path/xyz', flags: {} });
+    expect(result.ok).toBe(false);
+  });
+
+  it('같은 cmd로 두 번 실행 → 두 번 모두 Result 반환', async () => {
+    const cmd = new StartCommand(logger);
+    const r1 = await cmd.execute([], { projectPath: '/no/such/path/1', flags: {} });
+    const r2 = await cmd.execute([], { projectPath: '/no/such/path/2', flags: {} });
+    expect(typeof r1.ok).toBe('boolean');
+    expect(typeof r2.ok).toBe('boolean');
+  });
+});

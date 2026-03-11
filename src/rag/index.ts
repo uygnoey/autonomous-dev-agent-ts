@@ -55,6 +55,17 @@ export { CodeIndexer } from 'rag/code-indexer.js';
 
 export { RagSearcher } from 'rag/search.js';
 
+// ── 임베딩 팩토리 ───────────────────────────────────────────────
+
+export {
+  createEmbeddingProvider,
+  parseEmbeddingProviderType,
+} from 'rag/embedding-factory.js';
+export type {
+  EmbeddingFactoryConfig,
+  EmbeddingProviderType,
+} from 'rag/embedding-factory.js';
+
 // ── 벡터라이저 (최상위 API) ─────────────────────────────────────
 
 export { Vectorizer } from 'rag/vectorizer.js';
