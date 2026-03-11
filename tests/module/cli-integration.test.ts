@@ -141,6 +141,7 @@ describe('CLI 통합 / CLI integration', () => {
 
     const result = await initCmd.execute([], {
       projectPath: tmpDir,
+      yes: true,
       flags: {},
     });
     expect(result.ok).toBe(true);
@@ -172,11 +173,11 @@ describe('CLI 통합 / CLI integration', () => {
     const initCmd = new InitCommand(logger, registryDir);
 
     // 첫 번째 초기화 / First init
-    const first = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const first = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(first.ok).toBe(true);
 
     // 두 번째 초기화 시 에러 / Second init should fail
-    const second = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const second = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(second.ok).toBe(false);
     if (second.ok) return;
     expect(second.error.code).toBe('cli_init_already_exists');
@@ -185,30 +186,30 @@ describe('CLI 통합 / CLI integration', () => {
   it('ConfigCommand list가 설정 로드 연동', async () => {
     // WHY: 먼저 init으로 config.json 생성
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
   });
 
   it('ConfigCommand get/set으로 설정 값 읽기/쓰기', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
 
     // set으로 값 설정 / Set a value
     const setResult = await configCmd.execute(
       ['set', 'custom.key', 'test-value'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(setResult.ok).toBe(true);
 
     // get으로 값 조회 / Get the value
     const getResult = await configCmd.execute(
       ['get', 'custom.key'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(getResult.ok).toBe(true);
   });
@@ -373,7 +374,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 빈 projectPath → 에러 또는 현재 디렉토리 사용', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: '', flags: {} });
+    const result = await initCmd.execute([], { projectPath: '', yes: true, flags: {} });
     // WHY: 빈 경로는 에러이거나 cwd를 사용해야 함
     expect(result.ok === true || result.ok === false).toBe(true);
   });
@@ -381,20 +382,20 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 존재하지 않는 상위 경로에 초기화 → 디렉토리 자동 생성', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const deepPath = join(tmpDir, 'deep', 'nested', 'project');
-    const result = await initCmd.execute([], { projectPath: deepPath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: deepPath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('InitCommand: 한글 경로에 초기화', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const koreanPath = join(tmpDir, '한글경로');
-    const result = await initCmd.execute([], { projectPath: koreanPath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: koreanPath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('InitCommand: 초기화 후 config.json이 유효한 JSON', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const result = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
 
     const configPath = join(tmpDir, '.adev', 'config.json');
@@ -407,7 +408,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 초기화 후 data 디렉토리가 존재함', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const dataDir = join(tmpDir, '.adev', 'data');
     const { access: fsAccess } = await import('node:fs/promises');
@@ -421,8 +422,8 @@ describe('CLI 통합 / CLI integration', () => {
     const path1 = join(tmpDir, 'proj1');
     const path2 = join(tmpDir, 'proj2');
 
-    const r1 = await initCmd.execute([], { projectPath: path1, flags: {} });
-    const r2 = await initCmd.execute([], { projectPath: path2, flags: {} });
+    const r1 = await initCmd.execute([], { projectPath: path1, yes: true, flags: {} });
+    const r2 = await initCmd.execute([], { projectPath: path2, yes: true, flags: {} });
 
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
@@ -438,37 +439,37 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: get 인자 없음 → 에러', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['get'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['get'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: set 키 없음 → 에러', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['set'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: 중첩 키 (a.b.c) get/set', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const setResult = await configCmd.execute(
       ['set', 'a.b.c', 'nested-value'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(setResult.ok === true || setResult.ok === false).toBe(true);
 
     if (setResult.ok) {
       const getResult = await configCmd.execute(
         ['get', 'a.b.c'],
-        { projectPath: tmpDir, flags: {} },
+        { projectPath: tmpDir, yes: true, flags: {} },
       );
       expect(getResult.ok).toBe(true);
     }
@@ -476,24 +477,24 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: 한글 값 설정/조회', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const setResult = await configCmd.execute(
       ['set', 'description', '한글 설명 값'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(setResult.ok === true || setResult.ok === false).toBe(true);
   });
 
   it('ConfigCommand: 특수문자 값 설정', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const setResult = await configCmd.execute(
       ['set', 'special', '@#$%^&*()_+-='],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(setResult.ok === true || setResult.ok === false).toBe(true);
   });
@@ -506,10 +507,10 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: list가 문자열 결과 반환', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
   });
 
@@ -697,13 +698,13 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 경로에 공백 포함', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const spacePath = join(tmpDir, 'my project folder');
-    const result = await initCmd.execute([], { projectPath: spacePath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: spacePath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('InitCommand: 초기화 후 agents 디렉토리가 존재함', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const agentsDir = join(tmpDir, '.adev', 'agents');
     const { access: fsAccess } = await import('node:fs/promises');
@@ -713,7 +714,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 초기화 후 sessions 디렉토리가 존재함', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const sessionsDir = join(tmpDir, '.adev', 'sessions');
     const { access: fsAccess } = await import('node:fs/promises');
@@ -723,7 +724,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: config.json에 projectPath 필드 있음', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configPath = join(tmpDir, '.adev', 'config.json');
     const text = await Bun.file(configPath).text();
@@ -785,24 +786,24 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: set 값에 JSON 문자열 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const result = await configCmd.execute(
       ['set', 'json.value', '{"key":"value"}'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: set 값에 숫자 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const result = await configCmd.execute(
       ['set', 'num.value', '42'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(result.ok === true || result.ok === false).toBe(true);
   });
@@ -829,7 +830,7 @@ describe('CLI 통합 / CLI integration', () => {
     const router = new CommandRouter(logger);
     router.register(new InitCommand(logger, registryDir));
 
-    const result = await router.execute(['init', '--project-path=' + tmpDir + '/new-proj']);
+    const result = await router.execute(['init', '--project-path=' + tmpDir + '/new-proj', '--yes']);
     expect('ok' in result).toBe(true);
   });
 
@@ -884,16 +885,16 @@ describe('CLI 통합 / CLI integration', () => {
     const parsed = router.parse(['init']);
     expect(parsed.ok === true || parsed.ok === false).toBe(true);
 
-    const exec = await router.execute(['init', '--project-path=' + tmpDir + '/exec-test']);
+    const exec = await router.execute(['init', '--project-path=' + tmpDir + '/exec-test', '--yes']);
     expect(exec.ok === true || exec.ok === false).toBe(true);
   });
 
   it('InitCommand: --force 플래그로 재초기화 시도', async () => {
     const initCmd = new InitCommand(logger, registryDir);
 
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
-    const second = await initCmd.execute([], { projectPath: tmpDir, flags: { force: true } });
+    const second = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: { force: true } });
     // force 플래그로 재초기화 → ok 또는 에러 (구현 의존)
     expect(second.ok === true || second.ok === false).toBe(true);
   });
@@ -901,40 +902,40 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 절대 경로 vs 상대 경로 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const absolutePath = tmpDir + '/abs-test';
-    const result = await initCmd.execute([], { projectPath: absolutePath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: absolutePath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: 동일 키 연속 set → 마지막 값 유지', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    await configCmd.execute(['set', 'my.key', 'value-1'], { projectPath: tmpDir, flags: {} });
-    const setResult = await configCmd.execute(['set', 'my.key', 'value-2'], { projectPath: tmpDir, flags: {} });
+    await configCmd.execute(['set', 'my.key', 'value-1'], { projectPath: tmpDir, yes: true, flags: {} });
+    const setResult = await configCmd.execute(['set', 'my.key', 'value-2'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(setResult.ok === true || setResult.ok === false).toBe(true);
 
-    const getResult = await configCmd.execute(['get', 'my.key'], { projectPath: tmpDir, flags: {} });
+    const getResult = await configCmd.execute(['get', 'my.key'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(getResult.ok === true || getResult.ok === false).toBe(true);
   });
 
   it('ConfigCommand: 매우 긴 키 이름 → 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const longKey = 'a'.repeat(100) + '.key';
-    const result = await configCmd.execute(['set', longKey, 'value'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set', longKey, 'value'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: 매우 긴 값 → 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const longValue = 'v'.repeat(5000);
-    const result = await configCmd.execute(['set', 'large.value', longValue], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set', 'large.value', longValue], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
@@ -997,7 +998,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 초기화 후 .adev 디렉토리 내용 확인', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const result = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
 
     const { readdir } = await import('node:fs/promises');
@@ -1021,10 +1022,10 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: list 결과는 문자열이거나 ok=false', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(typeof result.ok).toBe('boolean');
   });
 
@@ -1041,7 +1042,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 초기화 결과 ok 필드는 boolean', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const result = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(typeof result.ok).toBe('boolean');
   });
 
@@ -1053,10 +1054,10 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: set 결과 ok 필드는 boolean', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['set', 'test.key', 'val'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set', 'test.key', 'val'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(typeof result.ok).toBe('boolean');
   });
 
@@ -1072,9 +1073,9 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 중복 초기화 에러 코드 확인', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
-    const second = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const second = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     if (!second.ok) {
       expect(typeof second.error.code).toBe('string');
       expect(second.error.code.length).toBeGreaterThan(0);
@@ -1127,14 +1128,14 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: projectPath에 날짜 형식 경로', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const datePath = join(tmpDir, '2026-03-09');
-    const result = await initCmd.execute([], { projectPath: datePath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: datePath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('InitCommand: projectPath에 버전 형식 경로 (v1.2.3)', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const versionPath = join(tmpDir, 'v1.2.3');
-    const result = await initCmd.execute([], { projectPath: versionPath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: versionPath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
@@ -1166,7 +1167,7 @@ describe('CLI 통합 / CLI integration', () => {
     router.register(new ConfigCommand(logger));
     router.register(new ProjectCommand(logger, tmpDir));
 
-    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'fast-seq')]);
+    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'fast-seq'), '--yes']);
     const r2 = await router.execute(['project', 'list']);
     const r3 = await router.execute(['config', 'list']);
 
@@ -1206,7 +1207,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 초기화 완료 후 error 없음', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const result = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
     if (!result.ok) {
       expect(result.error.code).toBeDefined();
@@ -1215,12 +1216,12 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: set 후 get → 저장된 값 조회', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    await configCmd.execute(['set', 'verify.value', 'verified-123'], { projectPath: tmpDir, flags: {} });
+    await configCmd.execute(['set', 'verify.value', 'verified-123'], { projectPath: tmpDir, yes: true, flags: {} });
 
-    const getResult = await configCmd.execute(['get', 'verify.value'], { projectPath: tmpDir, flags: {} });
+    const getResult = await configCmd.execute(['get', 'verify.value'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(getResult.ok === true || getResult.ok === false).toBe(true);
   });
 
@@ -1236,7 +1237,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: execute 반환값이 Result 패턴 준수', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    const result = await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
     expect('ok' in result).toBe(true);
   });
 
@@ -1256,7 +1257,7 @@ describe('CLI 통합 / CLI integration', () => {
     const router = new CommandRouter(logger);
     router.register(new InitCommand(logger, registryDir));
 
-    const result = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-pattern')]);
+    const result = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-pattern'), '--yes']);
     expect('ok' in result).toBe(true);
   });
 
@@ -1272,6 +1273,7 @@ describe('CLI 통합 / CLI integration', () => {
     const initCmd = new InitCommand(logger, registryDir);
     const result = await initCmd.execute([], {
       projectPath: join(tmpDir, 'unknown-flag-test'),
+      yes: true,
       flags: { unknownFlag: true, anotherFlag: 'value' },
     });
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -1302,26 +1304,26 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: set 숫자형 key → 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['set', '123.key', 'value'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set', '123.key', 'value'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: set 이모지 키 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['set', '🔑.value', 'emoji-key-val'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['set', '🔑.value', 'emoji-key-val'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('InitCommand: 연속 init 두 번 → 두 번째는 이미 존재 에러', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const first = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), flags: {} });
-    const second = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), flags: {} });
+    const first = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), yes: true, flags: {} });
+    const second = await initCmd.execute([], { projectPath: join(tmpDir, 'double-init'), yes: true, flags: {} });
 
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(false);
@@ -1364,7 +1366,7 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('InitCommand: 결과 ok=true일 때 error 필드 없음', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    const result = await initCmd.execute([], { projectPath: join(tmpDir, 'no-err-test'), flags: {} });
+    const result = await initCmd.execute([], { projectPath: join(tmpDir, 'no-err-test'), yes: true, flags: {} });
     if (result.ok) {
       expect('error' in result).toBe(false);
     }
@@ -1402,7 +1404,7 @@ describe('CLI 통합 / CLI integration', () => {
     const router = new CommandRouter(logger);
     router.register(new InitCommand(logger, registryDir));
 
-    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-ok-check')]);
+    const r1 = await router.execute(['init', '--project-path=' + join(tmpDir, 'result-ok-check'), '--yes']);
     const r2 = await router.execute(['unknown-xyz']);
 
     expect('ok' in r1).toBe(true);
@@ -1412,18 +1414,18 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 매우 깊은 중첩 경로 생성 → ok 또는 에러', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const deepPath = join(tmpDir, 'a', 'b', 'c', 'd', 'e', 'f');
-    const result = await initCmd.execute([], { projectPath: deepPath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: deepPath, yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('ConfigCommand: get/set 키에 점(.) 3개 이상 → ok 또는 에러', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
     const result = await configCmd.execute(
       ['set', 'a.b.c.d.e', 'deep-nested'],
-      { projectPath: tmpDir, flags: {} },
+      { projectPath: tmpDir, yes: true, flags: {} },
     );
     expect(result.ok === true || result.ok === false).toBe(true);
   });
@@ -1457,7 +1459,7 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: projectPath가 상대경로 형태 → 처리', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     // WHY: 절대 경로가 아닌 경우 구현이 cwd를 기준으로 처리할 수 있음
-    const result = await initCmd.execute([], { projectPath: './relative-test', flags: {} });
+    const result = await initCmd.execute([], { projectPath: './relative-test', yes: true, flags: {} });
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
@@ -1485,7 +1487,7 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 성공 후 .adev/config.json 파싱 → 유효 JSON 구조', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const projPath = join(tmpDir, 'config-json-check');
-    const result = await initCmd.execute([], { projectPath: projPath, flags: {} });
+    const result = await initCmd.execute([], { projectPath: projPath, yes: true, flags: {} });
     expect(result.ok).toBe(true);
 
     const configPath = join(projPath, '.adev', 'config.json');
@@ -1508,10 +1510,10 @@ describe('CLI 통합 / CLI integration', () => {
 
   it('ConfigCommand: list → 결과가 JSON 파싱 가능 또는 텍스트 형태', async () => {
     const initCmd = new InitCommand(logger, registryDir);
-    await initCmd.execute([], { projectPath: tmpDir, flags: {} });
+    await initCmd.execute([], { projectPath: tmpDir, yes: true, flags: {} });
 
     const configCmd = new ConfigCommand(logger);
-    const result = await configCmd.execute(['list'], { projectPath: tmpDir, flags: {} });
+    const result = await configCmd.execute(['list'], { projectPath: tmpDir, yes: true, flags: {} });
     expect(result.ok).toBe(true);
   });
 
@@ -1536,9 +1538,9 @@ describe('CLI 통합 / CLI integration', () => {
   it('InitCommand: 두 번째 init 에러 코드 → cli_init_already_exists', async () => {
     const initCmd = new InitCommand(logger, registryDir);
     const projPath = join(tmpDir, 'already-exists-check');
-    await initCmd.execute([], { projectPath: projPath, flags: {} });
+    await initCmd.execute([], { projectPath: projPath, yes: true, flags: {} });
 
-    const second = await initCmd.execute([], { projectPath: projPath, flags: {} });
+    const second = await initCmd.execute([], { projectPath: projPath, yes: true, flags: {} });
     if (!second.ok) {
       expect(second.error.code).toBe('cli_init_already_exists');
     }

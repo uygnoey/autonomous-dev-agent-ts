@@ -21,7 +21,7 @@ import { loadRegistry } from 'cli/commands/project.js';
 
 const logger = new ConsoleLogger('error');
 
-const DEFAULT_OPTIONS: CliOptions = { flags: {} };
+const DEFAULT_OPTIONS: CliOptions = { yes: true, flags: {} };
 
 let tmpDir: string;
 let registryDir: string;
@@ -217,7 +217,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
     const projectPath = join(tmpDir, 'proj-router');
 
     // WHY: 별칭 'i'로 init 명령 실행
-    const result = await router.execute(['i', `--project-path=${projectPath}`]);
+    const result = await router.execute(['i', '--yes', `--project-path=${projectPath}`]);
     expect(result.ok).toBe(true);
 
     const configFile = Bun.file(join(projectPath, '.adev', 'config.json'));
@@ -407,7 +407,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
     const projectPath = join(tmpDir, 'router-alias-proj');
     router.register(new InitCommand(logger, registryDir));
 
-    const result = await router.execute(['i', `--project-path=${projectPath}`]);
+    const result = await router.execute(['i', '--yes', `--project-path=${projectPath}`]);
     expect(result.ok).toBe(true);
 
     const agentsDir = join(projectPath, '.adev', 'agents');
@@ -939,7 +939,7 @@ describe('프로젝트 생명주기 E2E / Project Lifecycle E2E', () => {
     router.register(new InitCommand(logger, registryDir));
     router.register(new ProjectCommand(logger, registryDir));
     const projectPath = join(tmpDir, 'router-multi-reg');
-    const result = await router.execute(['init', `--project-path=${projectPath}`]);
+    const result = await router.execute(['init', '--yes', `--project-path=${projectPath}`]);
     expect(result.ok).toBe(true);
   });
 
@@ -1481,7 +1481,7 @@ describe('프로젝트 생명주기 E2E 배치64 — CommandRouter 상세', () =
     const router = new CommandRouter(logger);
     router.register(new InitCommand(logger, registryDir));
     const projectPath = join(tmpDir, 'router-init-test');
-    const r = await router.execute(['init', `--project-path=${projectPath}`]);
+    const r = await router.execute(['init', '--yes', `--project-path=${projectPath}`]);
     expect(typeof r.ok).toBe('boolean');
   });
 });

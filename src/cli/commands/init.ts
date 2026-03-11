@@ -200,8 +200,8 @@ export class InitCommand implements IInitCommand {
    */
   async selectAuthMethod(interactive: boolean): Promise<Result<AuthMethod, ConfigError>> {
     try {
-      // 대화형 모드가 아니면 기본값 'api-key' 반환
-      if (!interactive) {
+      // WHY: non-TTY 환경(CI, 테스트)에서는 inquirer가 hang → 기본값 반환
+      if (!(interactive && process.stdin.isTTY)) {
         return ok('api-key');
       }
 
