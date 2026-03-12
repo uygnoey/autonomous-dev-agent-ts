@@ -6,14 +6,14 @@
  * EN: Interface and type definitions used by ParallelCoderRunner.
  */
 
-import { AgentError } from 'core/errors.js';
+import type { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { CoderAllocator } from 'layer2/coder-allocator.js';
 import type { SessionManager } from 'layer2/session-manager.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { AgentEvent } from 'layer2/types.js';
-import type { Logger } from 'core/logger.js';
 
 // ── 공개 타입 / Public types ──────────────────────────────────────
 
@@ -47,4 +47,12 @@ export interface ParallelCoderRunnerDeps {
   readonly streamMonitor: StreamMonitor;
   readonly coderAllocator: CoderAllocator;
   readonly logger: Logger;
+  /**
+   * 동시 실행 최대 Coder 수 (스펙 §8.4 parallel_workers) / Max concurrent coders
+   *
+   * @description
+   * KR: 미제공 시 할당된 모든 Coder를 한 번에 병렬 실행한다.
+   * EN: If omitted, all allocated coders run concurrently at once.
+   */
+  readonly maxWorkers?: number;
 }

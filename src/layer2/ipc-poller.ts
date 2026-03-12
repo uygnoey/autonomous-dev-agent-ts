@@ -2,9 +2,9 @@
  * 디스크 IPC 폴러 / Disk-based IPC poller
  *
  * @description
- * KR: ~/.claude/teams/{teamId}/messages/ 및 ~/.claude/tasks/*.json 을
+ * KR: ~/.claude/teams/{teamId}/inboxes/ 및 ~/.claude/tasks/*.json 을
  *     500ms 간격으로 폴링하여 새 파일 및 mtime 변경을 감지한다.
- * EN: Polls ~/.claude/teams/{teamId}/messages/ and ~/.claude/tasks/*.json
+ * EN: Polls ~/.claude/teams/{teamId}/inboxes/ and ~/.claude/tasks/*.json
  *     every 500 ms to detect new files and mtime changes.
  */
 
@@ -110,9 +110,9 @@ export class IpcPoller {
   }
 
   /**
-   * 팀 메시지 디렉토리 감시 / Scan team message directories
+   * 팀 inbox 디렉토리 감시 / Scan team inbox directories
    *
-   * 구조: {teamsDir}/{teamId}/messages/{file}
+   * 구조: {teamsDir}/{teamId}/inboxes/{agent}.json (PoC §16 확인값)
    */
   private async pollTeams(callback: IpcPollerCallback): Promise<void> {
     let teamEntries: string[];
@@ -131,14 +131,15 @@ export class IpcPoller {
         this.logger.warn('IpcPoller: path traversal blocked', { teamId });
         continue;
       }
-      const messagesDir = join(teamDir, 'messages');
+      // WHY: PoC §16 확인 — 실제 디스크 구조는 inboxes/ (messages/ 아님)
+      const messagesDir = join(teamDir, 'inboxes');
 
       let files: string[];
       try {
         files = await readdir(messagesDir);
       } catch (err: unknown) {
         if (isEnoent(err)) continue;
-        this.logger.warn('IpcPoller: messages readdir failed', {
+        this.logger.warn('IpcPoller: inboxes readdir failed', {
           teamId,
           error: String(err),
         });

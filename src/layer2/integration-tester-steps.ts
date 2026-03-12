@@ -8,6 +8,7 @@
  *     integration tests and related feature auto-identification logic.
  */
 
+import type { TestingConfig } from 'core/config-schema.js';
 import type { TestScope } from 'layer2/phase-types.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
@@ -98,6 +99,56 @@ export const TEST_STEPS: readonly TestStep[] = [
     description: '전체 통합 최종',
   },
 ] as const;
+
+// ── 동적 단계 빌더 / Dynamic step builder ───────────────────────
+
+/**
+ * TestingConfig에서 4단계 테스트 설정을 생성한다 / Builds 4-step configs from TestingConfig
+ *
+ * @description
+ * KR: 스펙 §8.4 — 설정값으로 각 단계의 targetCount를 동적으로 결정한다.
+ *     Step 1: e2eCount, Step 2: moduleCount, Step 3: unitCount, Step 4: integrationE2eCount
+ * EN: Spec §8.4 — dynamically sets each step's targetCount from config values.
+ *
+ * @param testing - 테스트 수량 설정 / Testing configuration
+ * @returns 단계 설정 배열 / Step configuration array
+ */
+export function buildTestSteps(testing: TestingConfig): readonly TestStep[] {
+  return [
+    {
+      stepNumber: 1 as const,
+      targetCount: testing.e2eCount,
+      scope: 'modified' as const,
+      name: 'modified-e2e',
+      testPath: 'tests/unit',
+      description: '수정된 기능 E2E 전체',
+    },
+    {
+      stepNumber: 2 as const,
+      targetCount: testing.moduleCount,
+      scope: 'related' as const,
+      name: 'related-regression',
+      testPath: 'tests/module',
+      description: '연관 기능 회귀',
+    },
+    {
+      stepNumber: 3 as const,
+      targetCount: testing.unitCount,
+      scope: 'unrelated' as const,
+      name: 'unrelated-smoke',
+      testPath: 'tests/integration',
+      description: '비연관 기능 스모크',
+    },
+    {
+      stepNumber: 4 as const,
+      targetCount: testing.integrationE2eCount,
+      scope: 'full' as const,
+      name: 'full-integration',
+      testPath: 'tests/e2e',
+      description: '전체 통합 최종',
+    },
+  ];
+}
 
 // ── 연관 기능 식별 / Related feature identification ──────────────
 

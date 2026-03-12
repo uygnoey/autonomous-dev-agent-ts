@@ -9,6 +9,7 @@
 import type { AuthProvider } from '../../auth/types.js';
 import type { ClaudeApi } from '../../layer1/claude-api.js';
 import type { ContractBuilder } from '../../layer1/contract-builder.js';
+import type { ContractVerifier } from '../../layer1/contract-verifier.js';
 import type { ConversationManager } from '../../layer1/conversation.js';
 import type { Designer } from '../../layer1/designer.js';
 import type { Planner } from '../../layer1/planner.js';
@@ -63,6 +64,8 @@ export interface Layer1SessionState {
   readonly conversationManager: ConversationManager;
   /** Contract 빌더 / Contract builder */
   readonly contractBuilder: ContractBuilder;
+  /** Contract 검증기 / Contract verifier */
+  readonly contractVerifier: ContractVerifier;
   /** 기획자 / Planner */
   readonly planner: Planner;
   /** 설계자 / Designer */

@@ -17,9 +17,15 @@ import { extractModulesFromSpec } from 'layer2/parallel-coder-runner-helpers.js'
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent, CoderAllocation } from 'layer2/types.js';
 
-export type { CoderRunResult, ParallelCoderRunnerDeps } from 'layer2/parallel-coder-runner-types.js';
+export type {
+  CoderRunResult,
+  ParallelCoderRunnerDeps,
+} from 'layer2/parallel-coder-runner-types.js';
 
-import type { CoderRunResult, ParallelCoderRunnerDeps } from 'layer2/parallel-coder-runner-types.js';
+import type {
+  CoderRunResult,
+  ParallelCoderRunnerDeps,
+} from 'layer2/parallel-coder-runner-types.js';
 
 // ── 구현 / Implementation ─────────────────────────────────────────
 
@@ -76,9 +82,8 @@ export class ParallelCoderRunner {
       coderCount: allocations.length,
     });
 
-    // WHY: Promise.all로 병렬 실행 — 일부 실패해도 다른 Coder는 계속 진행
-    const promises = allocations.map((allocation) => this.runOneCoder(allocation, handoffPackage));
-    const results = await Promise.all(promises);
+    // WHY: maxWorkers로 배치 크기 제한 — 무한 병렬 실행 방지 (스펙 §8.4)
+    const results = await this.runInBatches(allocations, handoffPackage);
 
     // WHY: allocation 순서대로 이벤트를 yield하여 결과 일관성 보장
     for (const result of results) {
@@ -100,6 +105,37 @@ export class ParallelCoderRunner {
 
     // WHY: coder 완료 후 architect(스펙 준수) → reviewer(코드 품질) 순서로 감독 세션 실행
     yield* this.runSupervisionPhase(featureId, handoffPackage);
+  }
+
+  /**
+   * 배치 단위로 Coder를 병렬 실행한다 / Runs coders in parallel batches
+   *
+   * @description
+   * KR: maxWorkers 크기 배치로 나눠 순차 처리. 배치 내에서는 Promise.all 병렬 실행.
+   * EN: Splits into batches of maxWorkers, processes batches sequentially,
+   *     runs within each batch in parallel via Promise.all.
+   *
+   * @param allocations - Coder 할당 목록 / Coder allocations
+   * @param handoffPackage - 인수 패키지 / Handoff package
+   * @returns 전체 실행 결과 / All coder run results
+   */
+  private async runInBatches(
+    allocations: readonly CoderAllocation[],
+    handoffPackage: HandoffPackage,
+  ): Promise<CoderRunResult[]> {
+    const maxWorkers = this.deps.maxWorkers ?? allocations.length;
+    const results: CoderRunResult[] = [];
+
+    for (let i = 0; i < allocations.length; i += maxWorkers) {
+      const batch = allocations.slice(i, i + maxWorkers);
+      // WHY: 배치 내 Promise.all — 일부 실패해도 다른 Coder는 계속 진행
+      const batchResults = await Promise.all(
+        batch.map((allocation) => this.runOneCoder(allocation, handoffPackage)),
+      );
+      results.push(...batchResults);
+    }
+
+    return results;
   }
 
   /**

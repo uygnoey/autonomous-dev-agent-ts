@@ -144,9 +144,9 @@ describe('start() / stop() 라이프사이클', () => {
 // ── 새 파일 감지 (team_message) ───────────────────────────────
 
 describe('새 파일 감지 — team_message', () => {
-  it('팀 messages/ 하위 새 파일 → team_message 이벤트 emit', async () => {
+  it('팀 inboxes/ 하위 새 파일 → team_message 이벤트 emit', async () => {
     const teamId = 'team-alpha';
-    const messagesDir = join(teamsDir, teamId, 'messages');
+    const messagesDir = join(teamsDir, teamId, 'inboxes');
     await mkdir(messagesDir, { recursive: true });
 
     const p = new IpcPoller(makeOptions({ teamsDir, tasksDir, intervalMs: 30 }));
@@ -166,7 +166,7 @@ describe('새 파일 감지 — team_message', () => {
 
   it('여러 팀 동시 감지', async () => {
     for (const tid of ['team-a', 'team-b']) {
-      const dir = join(teamsDir, tid, 'messages');
+      const dir = join(teamsDir, tid, 'inboxes');
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, 'x.json'), JSON.stringify({ tid }));
     }
@@ -180,7 +180,7 @@ describe('새 파일 감지 — team_message', () => {
   });
 
   it('파싱 가능한 JSON이 아닌 파일 → payload {}로 emit (에러 없음)', async () => {
-    const messagesDir = join(teamsDir, 'team-bad', 'messages');
+    const messagesDir = join(teamsDir, 'team-bad', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
     await writeFile(join(messagesDir, 'bad.json'), 'NOT_JSON!!!');
 
@@ -193,7 +193,7 @@ describe('새 파일 감지 — team_message', () => {
   });
 
   it('JSON 배열 파일 → payload { value: [...] }로 emit', async () => {
-    const messagesDir = join(teamsDir, 'team-arr', 'messages');
+    const messagesDir = join(teamsDir, 'team-arr', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
     await writeFile(join(messagesDir, 'arr.json'), JSON.stringify([1, 2, 3]));
 
@@ -332,7 +332,7 @@ describe('존재하지 않는 디렉토리 — ENOENT skip', () => {
     expect(events.length).toBe(0);
   });
 
-  it('팀 디렉토리 내 messages/ 없으면 에러 없이 skip', async () => {
+  it('팀 디렉토리 내 inboxes/ 없으면 에러 없이 skip', async () => {
     // team 디렉토리는 있지만 messages/ 서브디렉토리 없음
     await mkdir(join(teamsDir, 'team-no-msg'), { recursive: true });
 
@@ -374,7 +374,7 @@ describe('존재하지 않는 디렉토리 — ENOENT skip', () => {
 
 describe('seenFiles 중복 방지', () => {
   it('같은 team_message 파일 → 한 번만 emit', async () => {
-    const messagesDir = join(teamsDir, 'team-dedup', 'messages');
+    const messagesDir = join(teamsDir, 'team-dedup', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
     await writeFile(join(messagesDir, 'dup.json'), JSON.stringify({ x: 1 }));
 
@@ -437,7 +437,7 @@ describe('edge case', () => {
   });
 
   it('콜백 내에서 throw → poller 계속 실행', async () => {
-    const messagesDir = join(teamsDir, 'team-throw', 'messages');
+    const messagesDir = join(teamsDir, 'team-throw', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
     await writeFile(join(messagesDir, 'a.json'), '{}');
     await writeFile(join(tasksDir, 't.json'), '{}');
@@ -497,7 +497,7 @@ describe('edge case', () => {
   it('팀 이름에 특수문자 포함 → 정상 처리 (실제 디렉토리로 생성 가능한 경우)', async () => {
     // 하이픈, 숫자, 언더스코어는 유효한 디렉토리명
     const teamId = 'team_01-alpha';
-    const dir = join(teamsDir, teamId, 'messages');
+    const dir = join(teamsDir, teamId, 'inboxes');
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, 'msg.json'), JSON.stringify({ ok: true }));
 
@@ -511,7 +511,7 @@ describe('edge case', () => {
   });
 
   it('동시에 많은 파일 생성 → 모두 감지', async () => {
-    const messagesDir = join(teamsDir, 'team-bulk', 'messages');
+    const messagesDir = join(teamsDir, 'team-bulk', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
 
     const COUNT = 10;
@@ -527,7 +527,7 @@ describe('edge case', () => {
   });
 
   it('task + team 동시 → 각각 올바른 타입으로 emit', async () => {
-    const messagesDir = join(teamsDir, 'team-mixed', 'messages');
+    const messagesDir = join(teamsDir, 'team-mixed', 'inboxes');
     await mkdir(messagesDir, { recursive: true });
     await writeFile(join(messagesDir, 'msg.json'), JSON.stringify({ src: 'team' }));
     await writeFile(join(tasksDir, 'mixed-task.json'), JSON.stringify({ src: 'task' }));

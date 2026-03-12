@@ -12,23 +12,22 @@
  *     Each step stops immediately on first failure.
  */
 
+import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
 import type { ProcessExecutor } from 'core/process-executor.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { CleanEnvManager } from 'layer2/clean-env-manager.js';
 import { parseBunTestOutput } from 'layer2/integration-tester-helpers.js';
-import {
-  TEST_TIMEOUT_MS,
-  type StaircaseTestResult,
-} from 'layer2/integration-tester-types.js';
 import type { ModifiedFiles, TestStep } from 'layer2/integration-tester-steps.js';
 import {
   TEST_STEPS,
+  buildTestSteps,
   identifyModifiedTestPaths,
   identifyRelatedTestPaths,
   identifyUnrelatedTestPaths,
 } from 'layer2/integration-tester-steps.js';
+import { type StaircaseTestResult, TEST_TIMEOUT_MS } from 'layer2/integration-tester-types.js';
 import type { IntegrationStepResult } from 'layer2/types.js';
 
 export type { StaircaseTestResult } from 'layer2/integration-tester-types.js';
@@ -49,6 +48,7 @@ export class IntegrationTester {
   private readonly logger: Logger;
   private readonly processExecutor: ProcessExecutor;
   private readonly envManager: CleanEnvManager;
+  private readonly testSteps: readonly TestStep[];
   private readonly results: IntegrationStepResult[] = [];
   private currentStep = 0;
 
@@ -56,11 +56,19 @@ export class IntegrationTester {
    * @param logger - 로거 인스턴스 / Logger instance
    * @param processExecutor - 프로세스 실행기 / Process executor
    * @param envManager - 클린 환경 관리자 / Clean environment manager
+   * @param testing - 테스트 수량 설정 (생략 시 기본값 사용) / Testing config (defaults used if omitted)
    */
-  constructor(logger: Logger, processExecutor: ProcessExecutor, envManager: CleanEnvManager) {
+  constructor(
+    logger: Logger,
+    processExecutor: ProcessExecutor,
+    envManager: CleanEnvManager,
+    testing?: TestingConfig,
+  ) {
     this.logger = logger.child({ module: 'integration-tester' });
     this.processExecutor = processExecutor;
     this.envManager = envManager;
+    // WHY: TestingConfig 제공 시 동적 단계 빌드, 미제공 시 스펙 기본값 사용
+    this.testSteps = testing ? buildTestSteps(testing) : TEST_STEPS;
   }
 
   /**
@@ -95,8 +103,8 @@ export class IntegrationTester {
     try {
       const stepResults: IntegrationStepResult[] = [];
 
-      // WHY: 4단계 순차 실행 (Fail-Fast)
-      for (const step of TEST_STEPS) {
+      // WHY: 4단계 순차 실행 (Fail-Fast) — TestingConfig 주입 시 동적 단계 사용
+      for (const step of this.testSteps) {
         const testPaths = this.resolveTestPaths(step, modifiedFiles, allTestPaths);
         const stepResult = await this.runStep(step, projectPath, testPaths);
 

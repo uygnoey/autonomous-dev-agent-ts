@@ -12,6 +12,10 @@ import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
+import {
+  formatVerificationOutput,
+  saveVerificationReport,
+} from '../../layer1/contract-verification-reporter.js';
 import type { HandoffPackage } from '../../layer1/types.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
@@ -167,6 +171,41 @@ export async function generateContract(
     await Bun.write(handoffPath, JSON.stringify(handoffResult.value, null, 2));
 
     logger.info('Contract + HandoffPackage 생성 완료', { contractPath, handoffPath });
+
+    // 9. Contract 검증 (구조 + AI 정합성) — 스펙 §6.7
+    chat.startSpinner('Contract 검증 중...');
+    const verifyResult = await session.contractVerifier.verifyContract(handoffResult.value);
+    chat.stopSpinner();
+
+    if (verifyResult.ok) {
+      // CLI 출력 (✅/⚠️/❌ 형식)
+      const cliOutput = formatVerificationOutput(verifyResult.value, handoffResult.value);
+      chat.showMessage({ role: 'assistant', content: cliOutput });
+
+      // 상세 리포트 파일 저장
+      await saveVerificationReport(
+        session.projectInfo.path,
+        verifyResult.value,
+        handoffResult.value,
+        logger,
+      );
+
+      // error 이슈 있으면 개발 진입 불가
+      const hasErrors = verifyResult.value.issues.some((i) => i.severity === 'error');
+      if (hasErrors) {
+        return err(
+          new AdevError(
+            'cli_start_contract_generation_failed',
+            'Contract 검증 실패 (error 이슈 존재) — 이슈를 해결한 후 다시 시도하세요.',
+          ),
+        );
+      }
+    } else {
+      // 검증 API 실패는 warning 처리 (개발 진입은 허용)
+      logger.warn('Contract 검증 API 실패 — 검증 없이 진행', {
+        error: verifyResult.error.message,
+      });
+    }
 
     return ok(handoffResult.value);
   } catch (error: unknown) {

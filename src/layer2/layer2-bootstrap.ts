@@ -12,6 +12,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AuthProvider } from 'auth/types.js';
+import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
 import { ProcessExecutor } from 'core/process-executor.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
@@ -35,6 +36,7 @@ import { TeamLeader } from 'layer2/team-leader.js';
 import { TokenMonitor } from 'layer2/token-monitor.js';
 import { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 import { VerificationGate } from 'layer2/verification-gate.js';
+import { resolveParallelWorkers } from 'layer2/worker-resolver.js';
 
 // ── Layer2BootstrapOptions ──────────────────────────────────────
 
@@ -48,6 +50,14 @@ export interface Layer2BootstrapOptions {
   readonly logger: Logger;
   /** 프로젝트 작업 디렉토리 / Project working directory */
   readonly projectCwd: string;
+  /**
+   * 테스트 수량 설정 (스펙 §8.4) / Testing configuration (spec §8.4)
+   *
+   * @description
+   * KR: 미제공 시 IntegrationTester 기본값, parallelWorkers 'auto' 산출값 사용.
+   * EN: If omitted, IntegrationTester defaults apply; parallelWorkers resolved as 'auto'.
+   */
+  readonly testing?: TestingConfig;
 }
 
 // ── Layer2Bootstrap ─────────────────────────────────────────────
@@ -72,6 +82,7 @@ export class Layer2Bootstrap {
   private readonly authProvider: AuthProvider;
   private readonly logger: Logger;
   private readonly projectCwd: string;
+  private readonly testing: TestingConfig | undefined;
 
   /**
    * @param options - 부트스트랩 옵션 / Bootstrap options
@@ -80,6 +91,7 @@ export class Layer2Bootstrap {
     this.authProvider = options.authProvider;
     this.logger = options.logger;
     this.projectCwd = options.projectCwd;
+    this.testing = options.testing;
   }
 
   /**
@@ -124,7 +136,13 @@ export class Layer2Bootstrap {
     // 3. 통합 테스터: ProcessExecutor + CleanEnvManager 필요
     const processExecutor = new ProcessExecutor(logger);
     const cleanEnvManager = new CleanEnvManager(logger);
-    const integrationTester = new IntegrationTester(logger, processExecutor, cleanEnvManager);
+    // WHY: testing 설정 주입 — TestingConfig 기반 동적 단계 수량 적용 (스펙 §8.4)
+    const integrationTester = new IntegrationTester(
+      logger,
+      processExecutor,
+      cleanEnvManager,
+      this.testing,
+    );
 
     // 4. 세션 스냅샷 저장소 초기화 (Batch 1 신규 컴포넌트)
     // WHY: LanceDB dbPath는 ~/.adev/data/snapshots 를 사용
@@ -154,6 +172,8 @@ export class Layer2Bootstrap {
 
     // 7. 병렬 Coder 실행기 (Batch 2 신규 컴포넌트)
     // WHY: CODE phase에서 다수 Coder를 병렬로 실행하여 구현 속도를 높인다
+    // WHY: parallel_workers 설정 해석 — 'auto'면 CPU/메모리 기반 자동 산출 (스펙 §8.4)
+    const maxWorkers = resolveParallelWorkers(this.testing?.parallelWorkers ?? 'auto', logger);
     const parallelCoderRunner = new ParallelCoderRunner({
       agentGenerator,
       agentSpawner,
@@ -161,6 +181,7 @@ export class Layer2Bootstrap {
       streamMonitor,
       coderAllocator,
       logger,
+      maxWorkers,
     });
 
     // 8. Git 브랜치 관리자 (Batch 2 신규 컴포넌트)
