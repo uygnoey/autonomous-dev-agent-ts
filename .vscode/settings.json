@@ -3,6 +3,6 @@
     "claudeCode.useCtrlEnterToSend": true,
     "claudeCode.preferredLocation": "sidebar",
     "claudeCode.initialPermissionMode": "bypassPermissions",
-    "typescript.tsdk": "node_modules/typescript/lib",
+    "js/ts.tsdk.path": "node_modules/typescript/lib",
     "github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": false
 }
