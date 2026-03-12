@@ -37,8 +37,10 @@ import {
 import {
   renderDeliverableMarkdown,
   writeDeliverableToDir,
+  writeDocx,
   writeHtml,
   writePdf,
+  writePptx,
 } from 'layer3/deliverable-writer.js';
 import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type {
@@ -192,8 +194,17 @@ export class DeliverableBuilder implements IDeliverableBuilder {
           error: pdfResult.error.message,
         });
       }
+    } else if (format === 'pptx') {
+      const pptxResult = await writePptx(outputDir, type, content, title, this.logger);
+      if (!pptxResult.ok) {
+        this.logger.warn('PPTX 저장 실패', { type, error: pptxResult.error.message });
+      }
+    } else if (format === 'docx') {
+      const docxResult = await writeDocx(outputDir, type, content, title, this.logger);
+      if (!docxResult.ok) {
+        this.logger.warn('DOCX 저장 실패', { type, error: docxResult.error.message });
+      }
     } else {
-      // WHY: docx/pptx는 아직 미지원이므로 HTML로 대체 저장
       const htmlResult = await writeHtml(outputDir, type, content, title, this.logger);
       if (!htmlResult.ok) {
         this.logger.warn('HTML 저장 실패', { type, error: htmlResult.error.message });

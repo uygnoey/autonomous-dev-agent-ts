@@ -57,9 +57,11 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@huggingface/transformers": "^3.0.0",
     "@lancedb/lancedb": "^0.15.0",
+    "docx": "^9.6.1",
     "handlebars": "^4.7.8",
     "inquirer": "^13.3.0",
     "pdfkit": "^0.17.2",
+    "pptxgenjs": "^4.0.1",
     "yargs": "^18.0.0"
   },
   "devDependencies": {
