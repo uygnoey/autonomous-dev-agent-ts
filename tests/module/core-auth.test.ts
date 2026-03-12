@@ -119,20 +119,18 @@ describe('core ↔ auth 통합 / core ↔ auth integration', () => {
     expect(authResult.error.code).toBe('auth_env_load_failed');
   });
 
-  it('두 키 동시 설정 시 ConfigError → AuthError로 전파', () => {
+  it('두 키 동시 설정 시 API Key 우선으로 ok=true 반환', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-both-key';
     process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-both-token';
 
     const envResult = loadEnvironment();
-    expect(envResult.ok).toBe(false);
-    if (envResult.ok) return;
-    expect(envResult.error).toBeInstanceOf(ConfigError);
-    expect(envResult.error.code).toBe('config_invalid_auth_both');
+    expect(envResult.ok).toBe(true);
+    if (!envResult.ok) return;
+    expect(envResult.value.authMode).toBe('api-key');
+    expect(envResult.value.anthropicApiKey).toBe('sk-ant-api01-both-key');
 
     const authResult = createAuthProvider(logger);
-    expect(authResult.ok).toBe(false);
-    if (authResult.ok) return;
-    expect(authResult.error).toBeInstanceOf(AuthError);
+    expect(authResult.ok).toBe(true);
   });
 
   it('maskSensitiveData가 API key 패턴을 마스킹', () => {
@@ -889,13 +887,13 @@ describe('core ↔ auth 통합 / core ↔ auth integration', () => {
     }
   });
 
-  it('loadEnvironment: 두 키 모두 설정 → error.code 존재', () => {
+  it('loadEnvironment: 두 키 모두 설정 → api-key 모드로 ok=true', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-api01-both';
     process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-both';
     const result = loadEnvironment();
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(typeof result.error.code).toBe('string');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.authMode).toBe('api-key');
     }
   });
 
