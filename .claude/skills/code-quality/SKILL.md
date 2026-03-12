@@ -1,5 +1,5 @@
 ---
-name: code-quality-standards
+name: code-quality
 description: 코드 품질 기준, Result 패턴, 에러 처리, 리뷰 체크리스트. 모든 코드 작성 시 참조.
 ---
 
