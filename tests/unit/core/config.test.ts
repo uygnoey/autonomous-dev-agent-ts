@@ -929,7 +929,7 @@ describe('deepMerge 추가 경계값', () => {
     const base = { items: [{ a: 1 }, { b: 2 }] };
     const override = { items: [{ c: 3 }] };
     const result = deepMerge(base, override);
-    expect(result.items).toEqual([{ c: 3 }]);
+    expect(result.items as unknown[]).toEqual([{ c: 3 }]);
   });
 
   it('string → number 타입 변환 오버라이드', () => {
