@@ -1,4 +1,5 @@
 ---
+name: coder
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
 isolation: worktree

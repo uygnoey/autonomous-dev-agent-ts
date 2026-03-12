@@ -44,3 +44,9 @@ export type {
   DeliverableType,
 } from 'layer3/deliverable-types.js';
 export { DEFAULT_BUSINESS_TEMPLATES, DEFAULT_PROJECT_TEMPLATES } from 'layer3/deliverable-types.js';
+
+export type { PdfWriteResult } from 'layer3/deliverable-writer.js';
+
+export type { HtmlDocumentOptions } from 'layer3/deliverable-html-renderer.js';
+
+export type { PdfDocumentOptions } from 'layer3/deliverable-pdf-renderer.js';

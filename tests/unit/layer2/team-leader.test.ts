@@ -70,6 +70,7 @@ function createMockAuthProvider(overrides: Partial<RateLimitStatus> = {}): AuthP
       inputTokensRemaining: null,
       outputTokensRemaining: null,
       retryAfterSeconds: null,
+      requestsLimit: null,
       isLimitApproaching: false,
       ...overrides,
     }),
@@ -335,8 +336,10 @@ describe('TeamLeader executeFeature() 기본 동작', () => {
 // ── executeFeature() — 최대 반복 초과 ────────────────────────────
 
 describe('TeamLeader executeFeature() 최대 반복 초과', () => {
+  // WHY: executeVerifyPhase()는 에이전트 오류 없으면 qa_qc/reviewer를 passed=true로 등록하여
+  //      즉시 통과한다. 반복 초과 시나리오는 에러 발생 mock executor로 강제한다.
   it('최대 반복 초과 시 error 이벤트 생성', async () => {
-    const { leader } = buildLeader();
+    const { leader } = buildLeader({ executorOpts: { eventType: 'error' } });
     const handoff = createMockHandoff();
     const events = await collectEvents(leader.executeFeature('feat-max', handoff), 500);
     const errorEvents = events.filter((e) => e.type === 'error');
@@ -344,18 +347,18 @@ describe('TeamLeader executeFeature() 최대 반복 초과', () => {
   });
 
   it('최대 반복 초과 이벤트에 최대 횟수 정보 포함', async () => {
-    const { leader } = buildLeader();
+    const { leader } = buildLeader({ executorOpts: { eventType: 'error' } });
     const handoff = createMockHandoff();
     const events = await collectEvents(leader.executeFeature('feat-over', handoff), 500);
-    const errorEvent = events.find((e) => e.type === 'error');
-    expect(errorEvent).toBeDefined();
-    if (errorEvent) {
-      expect(errorEvent.content).toMatch(/10|반복|초과|iteration/i);
-    }
+    // WHY: mock executor도 error 이벤트를 생성하므로 최대 반복 초과 메시지를 포함하는 이벤트를 찾음
+    const maxIterEvent = events.find(
+      (e) => e.type === 'error' && /10|반복|초과|iteration/i.test(e.content),
+    );
+    expect(maxIterEvent).toBeDefined();
   });
 
   it('최대 반복 초과 후 진행률은 0', async () => {
-    const { leader } = buildLeader();
+    const { leader } = buildLeader({ executorOpts: { eventType: 'error' } });
     const handoff = createMockHandoff();
     await collectEvents(leader.executeFeature('feat-loop', handoff), 500);
     // 완료되지 않았으므로 progress는 0
@@ -363,7 +366,7 @@ describe('TeamLeader executeFeature() 최대 반복 초과', () => {
   });
 
   it.each([1, 2, 3])('반복 %i 번째 기능 — 최대 반복 초과', async (i) => {
-    const { leader } = buildLeader();
+    const { leader } = buildLeader({ executorOpts: { eventType: 'error' } });
     const handoff = createMockHandoff({ projectId: `proj-loop-${i}` });
     const events = await collectEvents(leader.executeFeature(`feat-loop-${i}`, handoff), 500);
     const errorEvents = events.filter((e) => e.type === 'error');

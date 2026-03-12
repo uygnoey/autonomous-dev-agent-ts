@@ -2,74 +2,55 @@
  * 통합 테스터 / Integration Tester
  *
  * @description
- * KR: 4단계 통합 테스트를 실행한다.
- *     Step 1: 기능별 E2E (unit tests)
- *     Step 2: 관련 기능 회귀 (module tests)
- *     Step 3: 비관련 기능 스모크 (integration tests)
- *     Step 4: 전체 통합 E2E (e2e tests)
- *     Fail-Fast: 1개 실패 시 즉시 중단.
- * EN: Runs 4-step integration tests.
- *     Fail-Fast: stops immediately on first failure.
+ * KR: 4단계 계단식 Fail-Fast 통합 테스트를 실행한다.
+ *     Step 1: 수정된 기능 E2E 전체 (targetCount=100,000+)
+ *     Step 2: 연관 기능 회귀 (targetCount=10,000)
+ *     Step 3: 비연관 기능 스모크 (targetCount=1,000)
+ *     Step 4: 전체 통합 최종 (targetCount=1,000,000)
+ *     각 단계: 1개 실패 시 즉시 중단 → qc 분석 → coder 수정 → 해당 단계부터 재시작.
+ * EN: Runs 4-step staircase Fail-Fast integration tests.
+ *     Each step stops immediately on first failure.
  */
 
-import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { ProcessExecutor } from 'core/process-executor.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { CleanEnvManager } from 'layer2/clean-env-manager.js';
+import { parseBunTestOutput } from 'layer2/integration-tester-helpers.js';
+import {
+  TEST_TIMEOUT_MS,
+  type StaircaseTestResult,
+} from 'layer2/integration-tester-types.js';
+import type { ModifiedFiles, TestStep } from 'layer2/integration-tester-steps.js';
+import {
+  TEST_STEPS,
+  identifyModifiedTestPaths,
+  identifyRelatedTestPaths,
+  identifyUnrelatedTestPaths,
+} from 'layer2/integration-tester-steps.js';
 import type { IntegrationStepResult } from 'layer2/types.js';
 
-/**
- * 유효한 통합 테스트 단계 / Valid integration test steps
- */
-type IntegrationStep = 1 | 2 | 3 | 4;
-
-/**
- * 테스트 단계 정보 / Test step information
- */
-interface TestStepConfig {
-  readonly step: IntegrationStep;
-  readonly name: string;
-  readonly testPath: string;
-  readonly description: string;
-}
+export type { StaircaseTestResult } from 'layer2/integration-tester-types.js';
 
 /**
  * 통합 테스터 / Integration Tester
  *
  * @description
- * KR: 4단계 통합 테스트를 순차적으로 실행한다.
+ * KR: 4단계 계단식 Fail-Fast 통합 테스트를 순차적으로 실행한다.
  *     각 단계는 이전 단계 통과 후에만 진행한다.
- * EN: Runs 4-step integration tests sequentially.
- *     Each step proceeds only after the previous step passes.
+ * EN: Runs 4-step staircase Fail-Fast integration tests sequentially.
  *
  * @example
  * const tester = new IntegrationTester(logger, processExecutor, envManager);
- * const result = await tester.runIntegrationTests('my-project', '/path/to/project');
- * if (result.ok) console.log('All tests passed');
+ * const result = await tester.runStaircaseTests('proj-1', '/path', modifiedFiles);
  */
 export class IntegrationTester {
-  private readonly results: IntegrationStepResult[] = [];
-  private currentStep = 0;
   private readonly logger: Logger;
   private readonly processExecutor: ProcessExecutor;
   private readonly envManager: CleanEnvManager;
-
-  /**
-   * 테스트 단계 설정 / Test step configurations
-   */
-  private readonly stepConfigs: readonly TestStepConfig[] = [
-    { step: 1, name: 'unit', testPath: 'tests/unit', description: '기능별 E2E' },
-    { step: 2, name: 'module', testPath: 'tests/module', description: '관련 기능 회귀' },
-    {
-      step: 3,
-      name: 'integration',
-      testPath: 'tests/integration',
-      description: '비관련 기능 스모크',
-    },
-    { step: 4, name: 'e2e', testPath: 'tests/e2e', description: '전체 통합 E2E' },
-  ];
+  private readonly results: IntegrationStepResult[] = [];
+  private currentStep = 0;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
@@ -83,25 +64,25 @@ export class IntegrationTester {
   }
 
   /**
-   * 통합 테스트를 4단계로 실행한다 / Runs 4-step integration tests
-   *
-   * @description
-   * KR: Fail-Fast 원칙에 따라 4단계 통합 테스트를 순차 실행한다.
-   *     각 단계는 이전 단계가 통과해야만 진행한다.
-   *     1개 실패 시 즉시 중단하고 실패 결과를 반환한다.
-   * EN: Runs 4-step integration tests following Fail-Fast principle.
-   *     Each step proceeds only after previous step passes.
-   *     Stops immediately on first failure and returns failure result.
+   * 계단식 Fail-Fast 통합 테스트를 실행한다 / Runs staircase Fail-Fast integration tests
    *
    * @param projectId - 프로젝트 ID / Project ID
    * @param projectPath - 프로젝트 경로 / Project path
-   * @returns 통합 테스트 결과 / Integration test results
+   * @param modifiedFiles - 수정된 파일 목록 / Modified files list
+   * @param allTestPaths - 전체 테스트 경로 / All test paths
+   * @returns 계단식 테스트 결과 / Staircase test result
    */
-  async runIntegrationTests(
+  async runStaircaseTests(
     projectId: string,
     projectPath: string,
-  ): Promise<Result<readonly IntegrationStepResult[]>> {
-    this.logger.info('통합 테스트 시작', { projectId, projectPath });
+    modifiedFiles: ModifiedFiles,
+    allTestPaths: readonly string[] = [],
+  ): Promise<Result<StaircaseTestResult>> {
+    this.logger.info('계단식 Fail-Fast 통합 테스트 시작', {
+      projectId,
+      projectPath,
+      modifiedFileCount: modifiedFiles.paths.length,
+    });
 
     // WHY: 클린 환경 생성 (테스트 격리)
     const envResult = await this.envManager.create(projectId);
@@ -112,31 +93,46 @@ export class IntegrationTester {
     const { envPath } = envResult.value;
 
     try {
+      const stepResults: IntegrationStepResult[] = [];
+
       // WHY: 4단계 순차 실행 (Fail-Fast)
-      for (const config of this.stepConfigs) {
-        const stepResult = await this.runStep(config, projectPath);
+      for (const step of TEST_STEPS) {
+        const testPaths = this.resolveTestPaths(step, modifiedFiles, allTestPaths);
+        const stepResult = await this.runStep(step, projectPath, testPaths);
 
         if (!stepResult.ok) {
           return err(stepResult.error);
         }
 
+        stepResults.push(stepResult.value);
+
         // WHY: 실패 시 즉시 중단 (Fail-Fast)
         if (!stepResult.value.passed) {
-          this.logger.warn('통합 테스트 실패 - 즉시 중단', {
-            step: config.step,
+          this.logger.warn('계단식 테스트 실패 - 즉시 중단', {
+            step: step.stepNumber,
+            scope: step.scope,
             failCount: stepResult.value.failCount,
           });
-          break;
+
+          return ok({
+            stepResults,
+            allPassed: false,
+            failedAtStep: step.stepNumber,
+          });
         }
+
+        this.logger.info('단계 통과, 다음 단계 진행', {
+          completedStep: step.stepNumber,
+          scope: step.scope,
+        });
       }
 
-      this.logger.info('통합 테스트 완료', {
+      this.logger.info('계단식 통합 테스트 전체 통과', {
         projectId,
-        totalSteps: this.results.length,
-        allPassed: this.results.every((r) => r.passed),
+        totalSteps: stepResults.length,
       });
 
-      return ok(this.results);
+      return ok({ stepResults, allPassed: true });
     } finally {
       // WHY: 항상 클린 환경 정리
       await this.envManager.destroy(envPath);
@@ -144,92 +140,122 @@ export class IntegrationTester {
   }
 
   /**
-   * 통합 테스트 단계를 실행한다 / Runs an integration test step
+   * 기존 호환 메서드 / Legacy-compatible method
    *
-   * @description
-   * KR: 지정된 단계의 통합 테스트를 실행한다.
-   *     ProcessExecutor로 `bun test` 실행 후 결과를 파싱한다.
-   * EN: Runs the specified integration test step.
-   *     Executes `bun test` via ProcessExecutor and parses results.
-   *
-   * @param config - 테스트 단계 설정 / Test step configuration
+   * @param projectId - 프로젝트 ID / Project ID
    * @param projectPath - 프로젝트 경로 / Project path
+   * @returns 통합 테스트 결과 / Integration test results
+   */
+  async runIntegrationTests(
+    projectId: string,
+    projectPath: string,
+  ): Promise<Result<readonly IntegrationStepResult[]>> {
+    const result = await this.runStaircaseTests(projectId, projectPath, { paths: [] });
+    if (!result.ok) return err(result.error);
+    return ok(result.value.stepResults);
+  }
+
+  /**
+   * 단계별 테스트 경로를 결정한다 / Resolves test paths for each step
+   *
+   * @param step - 테스트 단계 설정 / Test step config
+   * @param modifiedFiles - 수정된 파일 목록 / Modified files
+   * @param allTestPaths - 전체 테스트 경로 / All test paths
+   * @returns 해당 단계의 테스트 경로 / Test paths for the step
+   */
+  private resolveTestPaths(
+    step: TestStep,
+    modifiedFiles: ModifiedFiles,
+    allTestPaths: readonly string[],
+  ): readonly string[] {
+    // WHY: 수정 파일 없으면 기본 경로 사용
+    if (modifiedFiles.paths.length === 0) return [step.testPath];
+
+    switch (step.scope) {
+      case 'modified':
+        return identifyModifiedTestPaths(modifiedFiles);
+      case 'related':
+        return identifyRelatedTestPaths(modifiedFiles);
+      case 'unrelated':
+        return identifyUnrelatedTestPaths(allTestPaths, modifiedFiles);
+      case 'full':
+        return [step.testPath];
+    }
+  }
+
+  /**
+   * 단일 테스트 단계를 실행한다 / Runs a single test step
+   *
+   * @param step - 테스트 단계 설정 / Test step configuration
+   * @param projectPath - 프로젝트 경로 / Project path
+   * @param testPaths - 실행할 테스트 경로 / Test paths to execute
    * @returns 단계 실행 결과 / Step execution result
    */
   private async runStep(
-    config: TestStepConfig,
+    step: TestStep,
     projectPath: string,
+    testPaths: readonly string[],
   ): Promise<Result<IntegrationStepResult>> {
     this.logger.info('테스트 단계 시작', {
-      step: config.step,
-      name: config.name,
-      description: config.description,
+      step: step.stepNumber,
+      scope: step.scope,
+      targetCount: step.targetCount,
+      description: step.description,
+      testPaths,
     });
 
-    // WHY: bun test 실행 (지정된 경로만)
-    const testResult = await this.processExecutor.execute('bun', ['test', config.testPath], {
-      cwd: projectPath,
-      timeoutMs: 300_000, // WHY: 테스트는 5분 타임아웃
-    });
-
-    if (!testResult.ok) {
-      return err(testResult.error);
+    // WHY: 테스트 경로가 없으면 해당 단계 스킵 (통과 처리)
+    if (testPaths.length === 0) {
+      this.logger.info('테스트 경로 없음 - 단계 스킵', {
+        step: step.stepNumber,
+        scope: step.scope,
+      });
+      return ok({
+        step: step.stepNumber,
+        scope: step.scope,
+        targetCount: step.targetCount,
+        executedCount: 0,
+        passed: true,
+        failCount: 0,
+      });
     }
 
-    const { exitCode, stdout, stderr } = testResult.value;
+    // WHY: bun test 실행 (지정된 경로)
+    const args = ['test', ...testPaths];
+    const testResult = await this.processExecutor.execute('bun', args, {
+      cwd: projectPath,
+      timeoutMs: TEST_TIMEOUT_MS,
+    });
 
-    // WHY: 테스트 결과 파싱
-    const parseResult = this.parseTestResult(stdout, stderr);
+    if (!testResult.ok) return err(testResult.error);
+
+    const { exitCode, stdout, stderr } = testResult.value;
+    const parseResult = parseBunTestOutput(stdout, stderr);
     const passed = exitCode === 0 && parseResult.failCount === 0;
 
     const stepResult: IntegrationStepResult = {
-      step: config.step,
+      step: step.stepNumber,
+      scope: step.scope,
+      targetCount: step.targetCount,
+      executedCount: parseResult.totalTests,
       passed,
       failCount: parseResult.failCount,
     };
 
+    // WHY: 상태 추적 (하위 호환)
     this.results.push(stepResult);
-    this.currentStep = config.step;
+    this.currentStep = step.stepNumber;
 
     this.logger.info('테스트 단계 완료', {
-      step: config.step,
-      name: config.name,
+      step: step.stepNumber,
+      scope: step.scope,
       passed,
       failCount: parseResult.failCount,
-      totalTests: parseResult.totalTests,
+      executedCount: parseResult.totalTests,
+      targetCount: step.targetCount,
     });
 
     return ok(stepResult);
-  }
-
-  /**
-   * Bun 테스트 출력을 파싱한다 / Parses Bun test output
-   *
-   * @description
-   * KR: stdout/stderr에서 테스트 결과를 추출한다.
-   *     Bun 테스트 출력 형식: "X tests | Y passed | Z failed"
-   * EN: Extracts test results from stdout/stderr.
-   *     Bun test output format: "X tests | Y passed | Z failed"
-   *
-   * @param stdout - 표준 출력 / Standard output
-   * @param stderr - 표준 에러 / Standard error
-   * @returns 파싱된 결과 / Parsed result
-   */
-  private parseTestResult(
-    stdout: string,
-    stderr: string,
-  ): { totalTests: number; failCount: number } {
-    const output = stdout + stderr;
-
-    // WHY: Bun 테스트 출력 패턴 매칭
-    // 예: "10 tests | 8 passed | 2 failed"
-    const testCountMatch = /(\d+)\s+tests?/i.exec(output);
-    const failCountMatch = /(\d+)\s+failed/i.exec(output);
-
-    const totalTests = testCountMatch?.[1] ? Number.parseInt(testCountMatch[1], 10) : 0;
-    const failCount = failCountMatch?.[1] ? Number.parseInt(failCountMatch[1], 10) : 0;
-
-    return { totalTests, failCount };
   }
 
   /**
@@ -244,7 +270,7 @@ export class IntegrationTester {
   /**
    * 전체 결과를 반환한다 / Returns all results
    *
-   * @returns 단계별 결과 배열 / Step results array
+   * @returns 단계별 결과 배열 (복사본) / Step results array (copy)
    */
   getResults(): IntegrationStepResult[] {
     return [...this.results];

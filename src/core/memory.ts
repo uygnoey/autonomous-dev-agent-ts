@@ -149,6 +149,35 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
     });
   }
 
+  /**
+   * 필터 기반 레코드 목록 조회 (비-벡터 쿼리) / List records by filter without vector search
+   *
+   * @description
+   * KR: 벡터 유사도 없이 SQL WHERE 절로 레코드를 조회한다.
+   *     getHistory 등 비-시맨틱 조회에 사용한다.
+   * EN: Queries records via SQL WHERE clause without vector similarity.
+   *     Used for non-semantic queries such as getHistory.
+   *
+   * @param filter - 필터 조건 / Filter conditions
+   * @param limit - 최대 조회 수 / Max record count
+   * @returns MemoryRecord 배열 / Array of MemoryRecord
+   */
+  async listByFilter(
+    filter: Record<string, string>,
+    limit: number,
+  ): Promise<Result<MemoryRecord[]>> {
+    return this.safeExecute('listByFilter', async () => {
+      if (this.table === null) return [];
+
+      const whereClause = buildWhereClause(filter);
+      // WHY: query()는 vectorSearch()와 달리 순수 SQL 필터로 동작하므로
+      //      camelCase 컬럼명 WHERE절 호환성이 더 높다
+      const q = whereClause ? this.table.query().where(whereClause) : this.table.query();
+      const results = await q.limit(limit).toArray();
+      return results.map((row) => fromFlat(row as unknown as FlatMemoryRecord));
+    });
+  }
+
   async getById(id: string): Promise<Result<MemoryRecord | null>> {
     return this.safeExecute('getById', async () => {
       if (this.table === null) return null;
@@ -224,15 +253,23 @@ function escapeString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
-/** filter 객체를 SQL where 절로 변환 */
+/**
+ * filter 객체를 SQL where 절로 변환 / Convert filter object to SQL where clause
+ *
+ * WHY: LanceDB DataFusion에서 이중 따옴표(")는 문자열 리터럴로 해석된다.
+ *      camelCase 컬럼명(projectId 등)은 백틱(`)으로 감싸야 식별자로 처리된다.
+ *      소문자 컬럼(id, type)도 백틱으로 감싸면 안전하게 사용 가능하다.
+ */
 function buildWhereClause(filter: Record<string, unknown>): string {
   const conditions: string[] = [];
 
   for (const [key, value] of Object.entries(filter)) {
+    // WHY: 백틱으로 컬럼명을 감싸서 camelCase 컬럼 호환성 확보
+    //      LanceDB DataFusion: "col" = string literal, `col` = identifier
     if (typeof value === 'string') {
-      conditions.push(`${key} = '${escapeString(value)}'`);
+      conditions.push(`\`${key}\` = '${escapeString(value)}'`);
     } else if (typeof value === 'number') {
-      conditions.push(`${key} = ${value}`);
+      conditions.push(`\`${key}\` = ${value}`);
     }
   }
 

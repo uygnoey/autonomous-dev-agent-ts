@@ -1,4 +1,5 @@
 ---
+name: tester
 model: sonnet
 tools: Read, Write, Edit, Bash(bun test *), Glob, Grep
 ---

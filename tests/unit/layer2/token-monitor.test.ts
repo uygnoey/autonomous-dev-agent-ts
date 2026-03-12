@@ -20,6 +20,7 @@ function makeStatus(overrides: Partial<RateLimitStatus> = {}): RateLimitStatus {
     inputTokensRemaining: null,
     outputTokensRemaining: null,
     retryAfterSeconds: null,
+    requestsLimit: 100,
     isLimitApproaching: false,
     ...overrides,
   };

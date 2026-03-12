@@ -118,7 +118,11 @@ export class CliApp implements ICliApp {
       // WHY: yargs로 명령어 파싱
       const parsed = await yargs(args)
         .command('init [path]', 'Initialize project', (y) =>
-          y.positional('path', { type: 'string', describe: 'Project path' }),
+          y.positional('path', { type: 'string', describe: 'Project path' }).option('yes', {
+            alias: 'y',
+            type: 'boolean',
+            description: '대화형 모드 스킵, 기본값 사용 / Skip interactive mode, use defaults',
+          }),
         )
         .command('start [feature]', 'Start Layer1 conversation', (y) =>
           y.positional('feature', { type: 'string', describe: 'Feature description' }),
@@ -134,11 +138,17 @@ export class CliApp implements ICliApp {
         .command('setting <sub>', 'Manage configuration (alias: config)', (y) =>
           y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
         )
-        .command('project <sub>', 'Manage projects', (y) =>
-          y.positional('sub', {
-            type: 'string',
-            describe: 'Subcommand (add/remove/list/switch/update)',
-          }),
+        .command('project <sub> [args..]', 'Manage projects', (y) =>
+          y
+            .positional('sub', {
+              type: 'string',
+              describe: 'Subcommand (add/remove/list/switch/update)',
+            })
+            .positional('args', {
+              type: 'string',
+              array: true,
+              describe: 'Subcommand arguments (e.g. path for add)',
+            }),
         )
         .option('verbose', {
           alias: 'v',

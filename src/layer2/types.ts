@@ -25,6 +25,7 @@ export type {
   BiasAlert,
   HookEventType,
   HookEvent,
+  TestScope,
   IntegrationStepResult,
 } from 'layer2/phase-types.js';
 

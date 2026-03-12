@@ -27,6 +27,8 @@ export interface RateLimitStatus {
   readonly outputTokensRemaining: number | null;
   /** 429 응답 시 재시도 대기 초 (null 시 해당 없음) / Retry-after seconds on 429 (null if N/A) */
   readonly retryAfterSeconds: number | null;
+  /** 요청 한도 (unknown 시 null) / Request limit from x-ratelimit-limit header (null if unknown) */
+  readonly requestsLimit: number | null;
   /** 한도 접근 경고 플래그 / Warning flag when approaching rate limit */
   readonly isLimitApproaching: boolean;
 }

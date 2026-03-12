@@ -125,6 +125,7 @@ export class SubscriptionAuth implements AuthProvider {
       inputTokensRemaining: null,
       outputTokensRemaining: null,
       retryAfterSeconds: null,
+      requestsLimit: this.estimatedLimit,
       isLimitApproaching: messageCount >= this.estimatedLimit * LIMIT_APPROACHING_THRESHOLD,
     };
   }

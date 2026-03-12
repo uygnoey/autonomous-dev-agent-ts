@@ -97,7 +97,8 @@ export async function* runTokenWaitLoop(
       createdAt: session.createdAt,
       lastActivity: session.lastActivity,
       metadata: session.metadata,
-      conversationHistory: [],
+      // WHY: SessionSnapshot에 대화 이력이 있으면 사용, 없으면 빈 배열 — 복원 시 컨텍스트 유지
+      conversationHistory: session.conversationHistory ?? [],
     };
 
     const saveResult = await deps.sessionSnapshotStore.save(snapshot);

@@ -7,6 +7,7 @@
  */
 
 import type { Logger } from 'core/logger.js';
+import type { Layer1Verifier } from 'layer1/verifier.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { BiasDetector } from 'layer2/bias-detector.js';
@@ -59,4 +60,6 @@ export interface TeamLeaderDeps {
   readonly parallelCoderRunner?: ParallelCoderRunner;
   /** Git 브랜치 관리자 (선택) — Coder 브랜치 생성 및 병합 / Git branch manager (optional) for branch setup and merge */
   readonly gitBranchManager?: GitBranchManager;
+  /** layer1 검증기 (선택) — VERIFY Phase에서 스펙 의도 검증에 사용 / Layer1 verifier (optional) for spec intent verification in VERIFY phase */
+  readonly layer1Verifier?: Layer1Verifier;
 }

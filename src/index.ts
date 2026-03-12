@@ -202,9 +202,9 @@ async function main(): Promise<void> {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
       const sub = parsed.sub as string | undefined;
-      // WHY: parsed._ = ['project', 'add', '/path'] — slice(1) → ['add', '/path']
-      const allPositionals = Array.isArray(parsed._) ? (parsed._ as string[]) : [];
-      const args = allPositionals.length > 1 ? allPositionals.slice(1) : sub ? [sub] : [];
+      // WHY: yargs [args..] positional은 parsed.args에, sub는 parsed.sub에 파싱됨
+      const subArgs = Array.isArray(parsed.args) ? (parsed.args as string[]) : [];
+      const args = sub ? [sub, ...subArgs] : [];
       const result = await projectCmd.execute(
         args,
         options as Parameters<typeof projectCmd.execute>[1],

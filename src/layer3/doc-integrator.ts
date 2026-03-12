@@ -13,7 +13,12 @@ import { Layer3Error } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
-import type { DocumentFragment, DocumentTemplate, IntegratedDocument } from 'layer3/types.js';
+import type {
+  DocumentFragment,
+  DocumentTemplate,
+  IntegratedDocument,
+  ProjectDocumentType,
+} from 'layer3/types.js';
 export type { IntegrateOptions, IDocIntegrator } from 'layer3/doc-integrator-types.js';
 import {
   buildMarkdownExport,
@@ -190,7 +195,61 @@ export class DocIntegrator implements IDocIntegrator {
 
       this.logger.info('모든 프로젝트 문서 생성 시작', { projectId, outputDir });
 
+      const templatesResult = await this.listTemplates(true);
+      if (!templatesResult.ok) {
+        return err(templatesResult.error);
+      }
+
+      const templates = templatesResult.value;
       const documents: IntegratedDocument[] = [];
+
+      // WHY: IntegrateOptions.type は ProjectDocumentType のみ受け付けるため、対象外はスキップ
+      const validProjectTypes = new Set<string>([
+        'readme',
+        'api-reference',
+        'architecture',
+        'user-manual',
+        'installation-guide',
+        'test-report',
+        'changelog',
+        'contributing-guide',
+      ]);
+
+      for (const template of templates) {
+        try {
+          if (!validProjectTypes.has(template.type)) {
+            this.logger.debug('프로젝트 문서 유형이 아님 — 건너뜀', { type: template.type });
+            continue;
+          }
+
+          const options: IntegrateOptions = {
+            projectId,
+            type: template.type as ProjectDocumentType,
+            fragmentPattern: `${outputDir}/**/*.md`,
+            outputPath: `${outputDir}/${template.type}.md`,
+            templateId: template.id,
+          };
+
+          const result = await this.integrate(options);
+          if (result.ok) {
+            documents.push(result.value);
+          } else {
+            // WHY: 개별 템플릿 실패 시 warn 로그 후 계속 진행 (partial success)
+            this.logger.warn('개별 문서 생성 실패 — 건너뜀', {
+              templateType: template.type,
+              templateId: template.id,
+              error: result.error.message,
+            });
+          }
+        } catch (templateError) {
+          // WHY: 개별 템플릿 예외 시에도 중단하지 않고 계속 진행
+          this.logger.warn('개별 문서 생성 중 예외 — 건너뜀', {
+            templateType: template.type,
+            templateId: template.id,
+            error: templateError instanceof Error ? templateError.message : String(templateError),
+          });
+        }
+      }
 
       this.logger.info('모든 프로젝트 문서 생성 완료', { projectId, count: documents.length });
       return ok(documents);

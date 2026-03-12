@@ -163,6 +163,30 @@ export class SessionSnapshotStore {
   }
 
   /**
+   * 모든 세션 스냅샷 목록을 조회한다 / List all session snapshots
+   *
+   * @description
+   * KR: 복원 순서 결정을 위해 전체 스냅샷 목록을 createdAt 오름차순으로 반환한다.
+   * EN: Returns all snapshots ordered by createdAt ascending for restoration ordering.
+   *
+   * @returns 스냅샷 배열 / Array of snapshots
+   */
+  async listSnapshots(): Promise<Result<PersistableSessionSnapshot[], RagError>> {
+    return this.safeExecute('listSnapshots', async () => {
+      if (this.table === null) return [];
+
+      const results = await this.table.query().toArray();
+
+      const snapshots = results.map((row) =>
+        fromFlatSnapshot(row as unknown as FlatSessionSnapshot),
+      );
+
+      // WHY: createdAt 오름차순 정렬 — 먼저 생성된 세션부터 복원해야 순서 보장
+      return snapshots.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    });
+  }
+
+  /**
    * 세션 ID로 스냅샷 삭제 / Delete snapshot by session ID
    *
    * @param sessionId - 세션 ID / Session ID

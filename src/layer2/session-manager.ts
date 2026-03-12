@@ -85,6 +85,38 @@ export class SessionManager {
   }
 
   /**
+   * 세션에 대화 이력을 추가한다 / Append conversation history to a session
+   *
+   * @description
+   * KR: 에이전트 이벤트를 대화 이력으로 축적한다. 토큰 한도 도달 시
+   *     스냅샷에 실제 대화 이력이 포함되어 복원 시 컨텍스트를 유지할 수 있다.
+   * EN: Accumulates agent events as conversation history. When token limit
+   *     is hit, snapshots include actual history for context-preserving restoration.
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @param entry - 대화 이력 항목 / Conversation history entry
+   * @returns 성공 시 ok, 세션 없으면 err / ok on success, err if session not found
+   */
+  appendConversationHistory(sessionId: string, entry: unknown): Result<void> {
+    const existing = this.sessions.get(sessionId);
+    if (!existing) {
+      return err(
+        new AgentError('agent_session_not_found', `세션을 찾을 수 없습니다: ${sessionId}`),
+      );
+    }
+
+    const currentHistory = existing.conversationHistory ?? [];
+    const updated: SessionSnapshot = {
+      ...existing,
+      conversationHistory: [...currentHistory, entry],
+      lastActivity: new Date(),
+    };
+
+    this.sessions.set(sessionId, updated);
+    return ok(undefined);
+  }
+
+  /**
    * 세션을 부분 업데이트한다 / Partially updates a session
    *
    * @param sessionId - 세션 ID / Session ID

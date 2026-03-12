@@ -2,30 +2,24 @@
  * project 명령 / Project command
  *
  * @description
- * KR: 프로젝트 레지스트리(~/.adev/projects.json)를 관리한다 (add, remove, list, switch).
- * EN: Manages project registry (~/.adev/projects.json) with add, remove, list, switch subcommands.
+ * KR: 프로젝트 레지스트리 관리 진입점. CRUD(project-crud)와 Registry I/O(project-registry)를 조합한다.
+ * EN: Project registry management entry point. Composes CRUD (project-crud) and Registry I/O (project-registry).
  */
 
-import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { basename, resolve } from 'node:path';
-import type { ProjectInfo, ProjectOptions, ProjectRegistry } from 'cli/types.js';
+import { listProjects } from 'cli/commands/project-crud-reads.js';
+import { ProjectCrudHandler } from 'cli/commands/project-crud.js';
+import { getDefaultGlobalAdevDir } from 'cli/commands/project-registry.js';
+import type { ProjectOptions } from 'cli/types.js';
 import { AdevError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
-import { err, ok } from 'core/types.js';
+import { err } from 'core/types.js';
 import type { Result } from 'core/types.js';
 
-// ── 경로 헬퍼 / Path Helpers ───────────────────────────────────
+// ── re-export (기존 import 호환) ────────────────────────────────
 
-/**
- * 기본 글로벌 adev 디렉토리 경로 / Default global adev directory path
- */
-function getDefaultGlobalAdevDir(): string {
-  return resolve(homedir(), '.adev');
-}
+export { loadRegistry, saveRegistry } from 'cli/commands/project-registry.js';
 
-// ── ProjectCommand ─────────────────────────────────────────────
+// ── ProjectCommand (Facade) ─────────────────────────────────────
 
 /**
  * 프로젝트 관리 명령 / Project management command
@@ -48,12 +42,14 @@ export class ProjectCommand {
   readonly name = 'project';
   readonly description = 'Project management / 프로젝트 관리 (add/remove/list/switch/update)';
   readonly aliases = ['proj'] as const;
+  private readonly crud: ProjectCrudHandler;
   private readonly logger: Logger;
   private readonly registryDir: string;
 
   constructor(logger: Logger, registryDir?: string) {
-    this.logger = logger.child({ module: 'cli:project' });
     this.registryDir = registryDir ?? getDefaultGlobalAdevDir();
+    this.logger = logger.child({ module: 'cli:project' });
+    this.crud = new ProjectCrudHandler(this.logger, this.registryDir);
   }
 
   /**
@@ -80,15 +76,15 @@ export class ProjectCommand {
 
     switch (subcommand) {
       case 'add':
-        return this.handleAdd(args.slice(1));
+        return this.crud.handleAdd(args.slice(1));
       case 'remove':
-        return this.handleRemove(args.slice(1), options);
+        return this.crud.handleRemove(args.slice(1), options);
       case 'list':
-        return this.handleList();
+        return listProjects(this.logger.child({ module: 'cli:project:list' }), this.registryDir);
       case 'switch':
-        return this.handleSwitch(args.slice(1));
+        return this.crud.handleSwitch(args.slice(1));
       case 'update':
-        return this.handleUpdate(args.slice(1), options);
+        return this.crud.handleUpdate(args.slice(1), options);
       default:
         return err(
           new AdevError(
@@ -97,361 +93,5 @@ export class ProjectCommand {
           ),
         );
     }
-  }
-
-  /**
-   * project add <path>: 프로젝트 등록 / Register a project
-   */
-  private async handleAdd(args: readonly string[]): Promise<Result<void, AdevError>> {
-    const rawPath = args[0];
-    if (!rawPath) {
-      return err(
-        new AdevError('cli_project_missing_path', 'project add: 프로젝트 경로를 지정하세요'),
-      );
-    }
-
-    const projectPath = resolve(rawPath);
-    const projectName = basename(projectPath);
-
-    const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) {
-      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
-    }
-
-    const registry = registryResult.value;
-
-    // WHY: 중복 등록 방지 -- 이름 또는 경로가 같은 프로젝트가 있는지 확인
-    const duplicate = registry.projects.find(
-      (p) => p.name === projectName || p.path === projectPath,
-    );
-    if (duplicate) {
-      return err(
-        new AdevError(
-          'cli_project_duplicate',
-          `이미 등록된 프로젝트입니다: '${duplicate.name}' (${duplicate.path})`,
-        ),
-      );
-    }
-
-    const now = new Date();
-    const projectId = crypto.randomUUID();
-    const newProject: ProjectInfo = {
-      id: projectId,
-      name: projectName,
-      path: projectPath,
-      createdAt: now,
-      lastAccessedAt: now,
-      status: 'active',
-    };
-
-    const updatedRegistry: ProjectRegistry = {
-      activeProject: registry.activeProject ?? projectName,
-      projects: [...registry.projects, newProject],
-    };
-
-    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
-    if (!saveResult.ok) return saveResult;
-
-    this.logger.info('프로젝트 등록 완료 / Project registered', {
-      name: projectName,
-      path: projectPath,
-    });
-    return ok(undefined);
-  }
-
-  /**
-   * project remove <name>: 프로젝트 삭제 / Unregister a project
-   *
-   * @description
-   * KR: 프로젝트를 레지스트리에서 제거한다.
-   *     --delete-data 플래그가 있으면 .adev/ 디렉토리도 삭제한다 (유저 확인 필요).
-   * EN: Removes project from registry.
-   *     With --delete-data flag, also deletes .adev/ directory (requires user confirmation).
-   */
-  private async handleRemove(
-    args: readonly string[],
-    options: ProjectOptions,
-  ): Promise<Result<void, AdevError>> {
-    const projectName = args[0];
-    if (!projectName) {
-      return err(
-        new AdevError('cli_project_missing_name', 'project remove: 프로젝트 이름을 지정하세요'),
-      );
-    }
-
-    const deleteData = options.deleteData === true;
-
-    const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) {
-      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
-    }
-
-    const registry = registryResult.value;
-    const target = registry.projects.find((p) => p.name === projectName);
-
-    if (!target) {
-      return err(
-        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
-      );
-    }
-
-    // WHY: --delete-data 플래그가 있으면 .adev/ 디렉토리도 삭제
-    if (deleteData) {
-      this.logger.warn('경고: .adev/ 디렉토리를 삭제합니다', {
-        projectPath: target.path,
-      });
-
-      try {
-        const adevDir = resolve(target.path, '.adev');
-        if (existsSync(adevDir)) {
-          await rm(adevDir, { recursive: true, force: true });
-          this.logger.info('.adev/ 디렉토리 삭제됨', { path: adevDir });
-        }
-      } catch (error: unknown) {
-        this.logger.error('.adev/ 디렉토리 삭제 실패', { error: String(error) });
-        // WHY: 디렉토리 삭제 실패해도 레지스트리에서는 제거
-      }
-    }
-
-    const filtered = registry.projects.filter((p) => p.name !== projectName);
-
-    const updatedRegistry: ProjectRegistry = {
-      activeProject:
-        registry.activeProject === target.name
-          ? (filtered[0]?.name ?? null)
-          : registry.activeProject,
-      projects: filtered,
-    };
-
-    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
-    if (!saveResult.ok) return saveResult;
-
-    this.logger.info('프로젝트 삭제 완료 / Project removed', {
-      name: projectName,
-      deletedData: deleteData,
-    });
-    return ok(undefined);
-  }
-
-  /**
-   * project list: 등록된 프로젝트 목록 표시 / List registered projects
-   */
-  private async handleList(): Promise<Result<void, AdevError>> {
-    const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) {
-      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
-    }
-
-    const registry = registryResult.value;
-
-    this.logger.info('등록된 프로젝트 목록 / Registered projects', {
-      activeProject: registry.activeProject,
-      count: registry.projects.length,
-      projects: registry.projects.map((p) => ({
-        id: p.id,
-        name: p.name,
-        path: p.path,
-        status: p.status,
-      })),
-    });
-
-    return ok(undefined);
-  }
-
-  /**
-   * project switch <name>: 활성 프로젝트 전환 / Switch active project
-   */
-  private async handleSwitch(args: readonly string[]): Promise<Result<void, AdevError>> {
-    const projectName = args[0];
-    if (!projectName) {
-      return err(
-        new AdevError('cli_project_missing_name', 'project switch: 프로젝트 이름을 지정하세요'),
-      );
-    }
-
-    const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) {
-      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
-    }
-
-    const registry = registryResult.value;
-    const target = registry.projects.find((p) => p.name === projectName);
-
-    if (!target) {
-      return err(
-        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
-      );
-    }
-
-    const updatedRegistry: ProjectRegistry = {
-      activeProject: target.name,
-      projects: registry.projects.map((p) =>
-        p.name === projectName ? { ...p, lastAccessedAt: new Date() } : p,
-      ),
-    };
-
-    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
-    if (!saveResult.ok) return saveResult;
-
-    this.logger.info('활성 프로젝트 전환 / Active project switched', {
-      name: projectName,
-      path: target.path,
-    });
-    return ok(undefined);
-  }
-
-  /**
-   * project update <name>: 프로젝트 정보 수정 / Update project info
-   *
-   * @description
-   * KR: 프로젝트 이름을 변경한다 (--name 플래그 사용).
-   * EN: Updates project name (using --name flag).
-   *
-   * @example
-   * adev project update proj-1 --name "새 이름"
-   */
-  private async handleUpdate(
-    args: readonly string[],
-    options: ProjectOptions,
-  ): Promise<Result<void, AdevError>> {
-    const projectName = args[0];
-    if (!projectName) {
-      return err(
-        new AdevError('cli_project_missing_name', 'project update: 프로젝트 이름을 지정하세요'),
-      );
-    }
-
-    const newName = options.name;
-    if (!newName) {
-      return err(
-        new AdevError(
-          'cli_project_missing_update_field',
-          'project update: --name 플래그를 지정하세요',
-        ),
-      );
-    }
-
-    const registryResult = await loadRegistry(this.registryDir);
-    if (!registryResult.ok) {
-      return err((registryResult as Extract<typeof registryResult, { ok: false }>).error);
-    }
-
-    const registry = registryResult.value;
-    const targetIndex = registry.projects.findIndex((p) => p.name === projectName);
-
-    if (targetIndex === -1) {
-      return err(
-        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
-      );
-    }
-
-    // WHY: 새 이름이 이미 사용 중인지 확인
-    const duplicateName = registry.projects.some(
-      (p, idx) => idx !== targetIndex && p.name === newName,
-    );
-
-    if (duplicateName) {
-      return err(
-        new AdevError(
-          'cli_project_duplicate_name',
-          `이미 사용 중인 프로젝트 이름입니다: '${newName}'`,
-        ),
-      );
-    }
-
-    const target = registry.projects[targetIndex];
-    if (!target) {
-      return err(
-        new AdevError('cli_project_not_found', `프로젝트를 찾을 수 없습니다: '${projectName}'`),
-      );
-    }
-
-    const updatedProjects = [...registry.projects];
-    updatedProjects[targetIndex] = {
-      ...target,
-      name: newName,
-    };
-
-    const updatedRegistry: ProjectRegistry = {
-      activeProject: registry.activeProject === projectName ? newName : registry.activeProject,
-      projects: updatedProjects,
-    };
-
-    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
-    if (!saveResult.ok) return saveResult;
-
-    this.logger.info('프로젝트 정보 수정 완료 / Project info updated', {
-      oldName: projectName,
-      newName,
-      path: target.path,
-    });
-    return ok(undefined);
-  }
-}
-
-// ── Registry I/O ───────────────────────────────────────────────
-
-/**
- * 프로젝트 레지스트리를 로드한다 / Load project registry
- *
- * @param registryDir - 레지스트리 디렉토리 (기본: ~/.adev) / Registry directory (default: ~/.adev)
- * @returns ProjectRegistry 또는 에러 / ProjectRegistry or error
- */
-export async function loadRegistry(
-  registryDir?: string,
-): Promise<Result<ProjectRegistry, AdevError>> {
-  const dir = registryDir ?? getDefaultGlobalAdevDir();
-  const registryPath = resolve(dir, 'projects.json');
-
-  try {
-    const file = Bun.file(registryPath);
-    if (!(await file.exists())) {
-      return ok({ activeProject: null, projects: [] });
-    }
-
-    const text = await file.text();
-    if (text.trim() === '') {
-      return ok({ activeProject: null, projects: [] });
-    }
-
-    const parsed = JSON.parse(text) as ProjectRegistry;
-    return ok(parsed);
-  } catch (error: unknown) {
-    return err(
-      new AdevError(
-        'cli_project_registry_read_failed',
-        `레지스트리 파일 읽기 실패: ${String(error)}`,
-        error,
-      ),
-    );
-  }
-}
-
-/**
- * 프로젝트 레지스트리를 저장한다 / Save project registry
- *
- * @param registry - 저장할 레지스트리 / Registry to save
- * @param registryDir - 레지스트리 디렉토리 (기본: ~/.adev) / Registry directory (default: ~/.adev)
- * @returns 성공 시 ok(void), 실패 시 err(AdevError)
- */
-export async function saveRegistry(
-  registry: ProjectRegistry,
-  registryDir?: string,
-): Promise<Result<void, AdevError>> {
-  const dir = registryDir ?? getDefaultGlobalAdevDir();
-  const registryPath = resolve(dir, 'projects.json');
-
-  try {
-    await mkdir(dir, { recursive: true });
-    await Bun.write(registryPath, JSON.stringify(registry, null, 2));
-    return ok(undefined);
-  } catch (error: unknown) {
-    return err(
-      new AdevError(
-        'cli_project_registry_write_failed',
-        `레지스트리 파일 쓰기 실패: ${String(error)}`,
-        error,
-      ),
-    );
   }
 }

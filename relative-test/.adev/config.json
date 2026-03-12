@@ -1,0 +1,14 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "embedding": {
+    "default": "xenova-minilm"
+  },
+  "testing": {
+    "bail": true
+  },
+  "verification": {
+    "layer1Model": "opus"
+  }
+}

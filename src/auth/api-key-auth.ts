@@ -93,6 +93,7 @@ export class ApiKeyAuth implements AuthProvider {
       inputTokensRemaining: this.inputTokensRemaining,
       outputTokensRemaining: this.outputTokensRemaining,
       retryAfterSeconds: this.retryAfterSeconds,
+      requestsLimit: this.requestsLimit,
       isLimitApproaching: this.computeIsLimitApproaching(),
     };
   }

@@ -79,3 +79,23 @@ export {
   DEFAULT_CONTINUOUS_E2E_CONFIG,
   DEFAULT_PROJECT_TEMPLATES,
 } from 'layer3/types.js';
+
+// ── HTML/PDF 작성기 / HTML/PDF writers ─────────────────────────
+
+export {
+  writeHtml,
+  writePdf,
+  type PdfWriteResult,
+} from 'layer3/deliverable-writer.js';
+
+export {
+  markdownToHtml,
+  convertMarkdownToHtmlBody,
+  type HtmlDocumentOptions,
+} from 'layer3/deliverable-html-renderer.js';
+
+export {
+  renderMarkdownToPdf,
+  writeDeliverableAsPdf,
+  type PdfDocumentOptions,
+} from 'layer3/deliverable-pdf-renderer.js';

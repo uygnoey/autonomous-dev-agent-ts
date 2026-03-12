@@ -3,7 +3,9 @@
  *
  * @description
  * KR: Git 명령을 래핑하여 MCP 도구로 제공한다.
+ *     도구 정의는 git-read.ts (읽기)와 git-write.ts (쓰기)에 분리.
  * EN: Wraps Git commands and provides them as MCP tools.
+ *     Tool definitions split into git-read.ts (read) and git-write.ts (write).
  */
 
 import { AdevError } from 'core/errors.js';
@@ -12,6 +14,11 @@ import type { ProcessExecutor } from 'core/process-executor.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { McpTool } from 'mcp/types.js';
+
+// ── re-export 분할 파일 / Re-export split files ──────────────
+
+export { GIT_READ_TOOLS } from 'mcp/builtin/git/git-read.js';
+export { GIT_WRITE_TOOLS } from 'mcp/builtin/git/git-write.js';
 
 // ── 타입 / Types ────────────────────────────────────────────
 
@@ -37,139 +44,16 @@ export interface GitOutput {
   readonly message: string;
 }
 
-// ── 도구 정의 / Tool Definitions ───────────────────────────
+// ── 통합 도구 목록 / Combined tool list ───────────────────────
+
+// WHY: 기존 GIT_TOOLS를 사용하는 코드 호환성 유지
+import { GIT_READ_TOOLS } from 'mcp/builtin/git/git-read.js';
+import { GIT_WRITE_TOOLS } from 'mcp/builtin/git/git-write.js';
 
 /**
- * Git MCP 도구 목록 / Git MCP tools
+ * Git MCP 도구 목록 (읽기 + 쓰기 통합) / Git MCP tools (read + write combined)
  */
-export const GIT_TOOLS: readonly McpTool[] = [
-  {
-    name: 'git_status',
-    description: 'Git 상태 조회 / Get Git status',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-      },
-    },
-  },
-  {
-    name: 'git_diff',
-    description: 'Git diff 조회 / Get Git diff',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        files: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '특정 파일만 diff / Specific files to diff',
-        },
-      },
-    },
-  },
-  {
-    name: 'git_add',
-    description: '파일 스테이징 / Stage files',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        files: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '스테이징할 파일 목록 / Files to stage',
-        },
-      },
-      required: ['files'],
-    },
-  },
-  {
-    name: 'git_commit',
-    description: '커밋 생성 / Create commit',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        message: { type: 'string', description: '커밋 메시지 / Commit message' },
-      },
-      required: ['message'],
-    },
-  },
-  {
-    name: 'git_push',
-    description: '원격 저장소 푸시 / Push to remote',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        remote: { type: 'string', description: '원격 저장소 이름 / Remote name' },
-        branch: { type: 'string', description: '브랜치 이름 / Branch name' },
-      },
-    },
-  },
-  {
-    name: 'git_pull',
-    description: '원격 저장소 풀 / Pull from remote',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        remote: { type: 'string', description: '원격 저장소 이름 / Remote name' },
-        branch: { type: 'string', description: '브랜치 이름 / Branch name' },
-      },
-    },
-  },
-  {
-    name: 'git_branch',
-    description: '브랜치 목록 조회 / List branches',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-      },
-    },
-  },
-  {
-    name: 'git_checkout',
-    description: '브랜치 체크아웃 / Checkout branch',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        branch: { type: 'string', description: '브랜치 이름 / Branch name' },
-      },
-      required: ['branch'],
-    },
-  },
-  {
-    name: 'git_log',
-    description: '커밋 로그 조회 / Get commit log',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-      },
-    },
-  },
-  {
-    name: 'git_exec',
-    description: '임의의 Git 명령 실행 / Execute arbitrary Git command',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
-        command: { type: 'string', description: 'Git 서브 명령 / Git subcommand' },
-        args: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '명령 인자 / Command arguments',
-        },
-      },
-      required: ['command'],
-    },
-  },
-];
+export const GIT_TOOLS: readonly McpTool[] = [...GIT_READ_TOOLS, ...GIT_WRITE_TOOLS];
 
 // ── 도구 실행기 / Tool Executor ────────────────────────────
 

@@ -80,10 +80,11 @@ function makeTokenMonitor(shouldPauseAllValues: boolean[]): {
     shouldThrottleSpawn: mock(() => false),
     getStatus: mock(() => ({
       requestsRemaining: 50,
+      inputTokensRemaining: null,
       outputTokensRemaining: null,
       retryAfterSeconds: null,
+      requestsLimit: null,
       isLimitApproaching: false,
-      lastUpdated: null,
     })),
     updateFromResponse: mock(() => ok(undefined)),
   };

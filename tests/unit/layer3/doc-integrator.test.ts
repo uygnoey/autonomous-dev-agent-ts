@@ -191,9 +191,9 @@ describe('DocIntegrator generateAll', () => {
     if (result.ok) expect(Array.isArray(result.value)).toBe(true);
   });
 
-  it('현재 구현은 빈 배열 반환', async () => {
+  it('8개 기본 문서를 생성한다', async () => {
     const result = await integrator.generateAll('proj-1', '.adev/docs');
-    if (result.ok) expect(result.value.length).toBe(0);
+    if (result.ok) expect(result.value.length).toBe(8);
   });
 
   it('빈 projectId → ok=false', async () => {

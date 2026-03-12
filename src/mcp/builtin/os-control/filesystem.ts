@@ -3,7 +3,9 @@
  *
  * @description
  * KR: 파일 읽기, 쓰기, 삭제, 목록 조회 등 파일 시스템 작업을 수행한다.
+ *     도구 정의는 fs-read.ts (읽기)와 fs-write.ts (쓰기)에 분리.
  * EN: Performs filesystem operations like read, write, delete, list files.
+ *     Tool definitions split into fs-read.ts (read) and fs-write.ts (write).
  */
 
 import { AdevError } from 'core/errors.js';
@@ -12,6 +14,11 @@ import type { ProcessExecutor } from 'core/process-executor.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { McpTool } from 'mcp/types.js';
+
+// ── re-export 분할 파일 / Re-export split files ──────────────
+
+export { FS_READ_TOOLS } from 'mcp/builtin/os-control/fs-read.js';
+export { FS_WRITE_TOOLS } from 'mcp/builtin/os-control/fs-write.js';
 
 // ── 타입 / Types ────────────────────────────────────────────
 
@@ -33,77 +40,16 @@ export interface FilesystemOutput {
   readonly message: string;
 }
 
-// ── 도구 정의 / Tool Definitions ───────────────────────────
+// ── 통합 도구 목록 / Combined tool list ───────────────────────
+
+// WHY: 기존 FILESYSTEM_TOOLS를 사용하는 코드 호환성 유지
+import { FS_READ_TOOLS } from 'mcp/builtin/os-control/fs-read.js';
+import { FS_WRITE_TOOLS } from 'mcp/builtin/os-control/fs-write.js';
 
 /**
- * 파일 시스템 MCP 도구 목록 / Filesystem MCP tools
+ * 파일 시스템 MCP 도구 목록 (읽기 + 쓰기 통합) / Filesystem MCP tools (read + write combined)
  */
-export const FILESYSTEM_TOOLS: readonly McpTool[] = [
-  {
-    name: 'fs_read_file',
-    description: '파일 내용 읽기 / Read file contents',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '파일 경로 / File path' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'fs_write_file',
-    description: '파일 쓰기 (덮어쓰기) / Write file (overwrite)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '파일 경로 / File path' },
-        content: { type: 'string', description: '파일 내용 / File content' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'fs_list_directory',
-    description: '디렉토리 목록 조회 / List directory contents',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '디렉토리 경로 / Directory path' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'fs_delete',
-    description: '파일/디렉토리 삭제 / Delete file or directory',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '삭제할 경로 / Path to delete' },
-        recursive: {
-          type: 'boolean',
-          description: '재귀 삭제 여부 / Recursive deletion',
-        },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'fs_create_directory',
-    description: '디렉토리 생성 / Create directory',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: '생성할 디렉토리 경로 / Directory path' },
-        recursive: {
-          type: 'boolean',
-          description: '부모 디렉토리도 생성 / Create parent directories',
-        },
-      },
-      required: ['path'],
-    },
-  },
-];
+export const FILESYSTEM_TOOLS: readonly McpTool[] = [...FS_READ_TOOLS, ...FS_WRITE_TOOLS];
 
 // ── 도구 실행기 / Tool Executor ────────────────────────────
 
@@ -223,10 +169,6 @@ export class FilesystemExecutor {
 
   /**
    * MCP 도구 실행 (통합 인터페이스) / Execute MCP tool
-   *
-   * @description
-   * KR: MCP 프로토콜에 따라 도구를 실행하고 결과를 반환한다.
-   * EN: Executes tool according to MCP protocol and returns result.
    */
   async executeTool(toolName: string, input: FilesystemInput): Promise<Result<FilesystemOutput>> {
     this.logger.debug('MCP 도구 실행', { toolName, input });

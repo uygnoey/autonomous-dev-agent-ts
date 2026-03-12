@@ -990,8 +990,8 @@ describe('layer2 ↔ auth 통합 / layer2 ↔ auth integration', () => {
     for (let i = 0; i < 5; i++) {
       monitor.updateFromResponse({}, { usage: { input_tokens: 100, output_tokens: 50 } });
     }
-    // WHY: remaining=5, estimatedMax=100 → ratio=5/100=5% = PAUSE_THRESHOLD(5%) → pause true
-    expect(monitor.shouldPauseAll()).toBe(true);
+    // WHY: remaining=5, requestsLimit=10 → ratio=5/10=50% > PAUSE_THRESHOLD(5%) → pause false
+    expect(monitor.shouldPauseAll()).toBe(false);
   });
 
   it('ApiKeyAuth: getRateLimitStatus 반환 객체는 null이 아님', () => {
@@ -1134,13 +1134,14 @@ describe('layer2 ↔ auth 통합 / layer2 ↔ auth integration', () => {
     expect(monitor.getStatus().isLimitApproaching).toBe(true);
   });
 
-  it('Subscription 모드: 한도 20, 15회 사용 → shouldThrottleSpawn true', () => {
+  it('Subscription 모드: 한도 20, 15회 사용 → shouldThrottleSpawn false (25% > 20%)', () => {
     const auth = new SubscriptionAuth('sk-ant-oat01-20-15-throttle', logger, 20);
     const monitor = new TokenMonitor(auth, logger);
     for (let i = 0; i < 15; i++) {
       monitor.updateFromResponse({}, { usage: { input_tokens: 10, output_tokens: 5 } });
     }
-    expect(monitor.shouldThrottleSpawn()).toBe(true);
+    // WHY: remaining=5, requestsLimit=20 → ratio=5/20=25% > THROTTLE_THRESHOLD(20%) → false
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
   });
 
   it('API key 모드: 잔여 5/100 = 5% → shouldPauseAll true', () => {

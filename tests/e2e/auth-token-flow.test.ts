@@ -1366,8 +1366,8 @@ describe('인증 + 토큰 모니터 플로우 E2E / Auth + Token Monitor Flow E2
     // 윈도우 만료
     fakeNow += 5 * 60 * 60 * 1000 + 5000;
 
-    // WHY: 항목 만료 후 remaining=10, ratio=10/100=0.1 ≤ THROTTLE_THRESHOLD(0.2) → true
-    expect(monitor.shouldThrottleSpawn()).toBe(true);
+    // WHY: 항목 만료 후 remaining=10, requestsLimit=10 → ratio=10/10=1.0 > THROTTLE_THRESHOLD(0.2) → false
+    expect(monitor.shouldThrottleSpawn()).toBe(false);
   });
 
   it('ApiKeyAuth: getAuthHeader 반환 객체 키 모두 소문자', () => {

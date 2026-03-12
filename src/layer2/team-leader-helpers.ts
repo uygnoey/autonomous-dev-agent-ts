@@ -24,6 +24,10 @@ import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { AgentEvent } from 'layer2/types.js';
 import type { RagSearcher } from 'rag/search.js';
 
+// WHY: VERIFY Phase 로직은 300줄 제한 준수를 위해 별도 파일로 분리
+export { executeVerifyPhase } from 'layer2/team-leader-verify.js';
+export type { ExecuteVerifyPhaseDeps } from 'layer2/team-leader-verify.js';
+
 /** executePhase에 필요한 의존성 / Deps needed by executePhase */
 export interface ExecutePhaseDeps {
   readonly phaseEngine: PhaseEngine;
@@ -118,8 +122,10 @@ export interface ExecuteCodePhaseDeps extends ExecutePhaseDeps {
  * @description
  * KR: parallelCoderRunner가 주입된 경우 병렬 Coder를 실행하고 각 브랜치를 병합한다.
  *     parallelCoderRunner가 없으면 단일 순차 실행으로 폴백한다.
+ *     코딩 완료 후 architect(스펙 준수 확인)와 reviewer(코드 품질 확인) 감독 세션을 실행한다.
  * EN: Runs parallel coders when parallelCoderRunner is injected and merges each branch.
  *     Falls back to single sequential execution when parallelCoderRunner is absent.
+ *     After coding, runs architect (spec compliance) and reviewer (code quality) supervision.
  *
  * @param deps - CODE Phase 의존성 / CODE phase dependencies
  * @param featureId - 기능 ID / Feature ID
@@ -137,7 +143,7 @@ export async function* executeCodePhase(
     return;
   }
 
-  // 병렬 Coder 실행
+  // WHY: runParallel 내부에서 coder 병렬 실행 + architect/reviewer 감독 세션까지 수행
   yield* deps.parallelCoderRunner.runParallel(featureId, handoffPackage);
 
   // WHY: 병렬 실행 완료 후 각 coder 브랜치를 main에 병합

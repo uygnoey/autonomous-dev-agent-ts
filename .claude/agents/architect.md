@@ -1,4 +1,5 @@
 ---
+name: architect
 model: sonnet
 tools: Read, Glob, Grep, Bash(bunx tsc --noEmit)
 ---

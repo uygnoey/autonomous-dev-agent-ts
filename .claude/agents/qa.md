@@ -1,4 +1,5 @@
 ---
+name: qa
 model: sonnet
 tools: Read, Glob, Grep, Bash(bunx tsc --noEmit), Bash(bunx biome check *)
 ---

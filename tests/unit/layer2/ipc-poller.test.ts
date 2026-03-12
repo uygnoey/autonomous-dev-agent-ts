@@ -236,6 +236,10 @@ describe('mtime 변경 감지 — task_update', () => {
         if (events.length === 1) {
           // 첫 이벤트 수신 후 파일 수정 (mtime 변경)
           await writeFile(filePath, JSON.stringify({ v: 2 }));
+          // WHY: 파일시스템 mtime 해상도(ms) 내 중복 쓰기 시 mtime이 동일할 수 있으므로
+          //      utimes로 미래 시간을 명시적으로 설정해 다음 poll에서 변경 감지 보장
+          const future = new Date(Date.now() + 1_000);
+          await utimes(filePath, future, future);
         }
         if (events.length === 2) {
           p.stop();

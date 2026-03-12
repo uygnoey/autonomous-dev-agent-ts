@@ -1,4 +1,5 @@
 ---
+name: documenter
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep
 background: true

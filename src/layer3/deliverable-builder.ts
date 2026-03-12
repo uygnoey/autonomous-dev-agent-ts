@@ -3,18 +3,23 @@
  *
  * @description
  * KR: 비즈니스 산출물 생성 (포트폴리오, 사업계획서, 투자제안서, 프레젠테이션).
- *     템플릿 기반 문서 생성 및 PDF/DOCX/PPTX 변환을 담당한다.
- *     DocCollaborator를 통해 layer1 + layer2 협업을 수행한다.
+ *     템플릿 로직은 deliverable-builder-template.ts에 분리.
+ *     파일 I/O는 deliverable-writer.ts에 분리.
  * EN: Creates business deliverables (portfolio, business plan, investment proposal, presentation).
- *     Handles template-based document generation and PDF/DOCX/PPTX conversion.
- *     Collaborates with layer1 + layer2 via DocCollaborator.
+ *     Template logic is in deliverable-builder-template.ts.
+ *     File I/O is in deliverable-writer.ts.
  */
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type Result, err, ok } from 'core/types.js';
+import {
+  listTemplates,
+  loadDefaultTemplates,
+  registerTemplate,
+  renderWithTemplate,
+} from 'layer3/deliverable-builder-template.js';
 import type { IDeliverableBuilder } from 'layer3/deliverable-builder-types.js';
 import {
   generateBusinessContent,
@@ -29,6 +34,12 @@ import {
   type DeliverableBuildOptions,
   type DeliverableMetadata,
 } from 'layer3/deliverable-types.js';
+import {
+  renderDeliverableMarkdown,
+  writeDeliverableToDir,
+  writeHtml,
+  writePdf,
+} from 'layer3/deliverable-writer.js';
 import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type {
   BusinessDeliverableType,
@@ -69,28 +80,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     this.templateRegistry = new Map();
     this.deliverables = new Map();
     this.simpleDeliverables = new Map();
-    this.loadDefaultTemplates();
-  }
-
-  /**
-   * 기본 비즈니스 산출물 템플릿 로드 / Load default business deliverable templates
-   */
-  private loadDefaultTemplates(): void {
-    for (const type of DEFAULT_BUSINESS_TEMPLATES) {
-      const template: DocumentTemplate = {
-        id: `default-${type}`,
-        name: type,
-        type,
-        templatePath: `templates/business/${type}.hbs`,
-        format: getDefaultFormat(type),
-        description: `Default ${type} template`,
-        custom: false,
-      };
-      this.templateRegistry.set(template.id ?? `default-${type}`, template);
-    }
-    this.logger.debug('기본 템플릿 로드 완료', {
-      count: DEFAULT_BUSINESS_TEMPLATES.length,
-    });
+    loadDefaultTemplates(this.templateRegistry, this.logger);
   }
 
   /**
@@ -122,9 +112,7 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return this.buildAsync(projectIdOrOptions);
   }
 
-  /**
-   * 간단 동기 빌드 / Simple sync build
-   */
+  /** 간단 동기 빌드 / Simple sync build */
   private buildSync(
     projectId: string,
     type: string,
@@ -133,7 +121,6 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     if (!docs || docs.length === 0) {
       return err(new AgentError('agent_invalid_input', '문서 목록이 비어 있습니다'));
     }
-
     if (!projectId || projectId.trim() === '') {
       return err(new AgentError('agent_invalid_input', '프로젝트 ID가 비어 있습니다'));
     }
@@ -164,23 +151,54 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return ok(deliverable);
   }
 
-  /**
-   * 비즈니스 산출물을 생성한다 (비동기) / Build a business deliverable (async)
-   *
-   * @param options - 빌드 옵션 / Build options
-   * @returns 생성된 산출물 / Generated deliverable
-   */
+  /** 비즈니스 산출물을 생성한다 (비동기) / Build a business deliverable (async) */
   private async buildAsync(options: DeliverableBuildOptions): Promise<Result<BusinessDeliverable>> {
-    const { projectId, type, metadata, outputPath } = options;
+    const { projectId, type, metadata, outputPath, templateId } = options;
 
     if (!projectId || projectId.trim() === '') {
       return err(new AgentError('agent_invalid_input', '프로젝트 ID가 비어 있습니다'));
     }
 
-    this.logger.info('산출물 생성 시작', { projectId, type });
+    this.logger.info('산출물 생성 시작', { projectId, type, templateId });
 
     const format = getDefaultFormat(type);
-    const content = generateBusinessContent(type, metadata);
+
+    // WHY: templateId가 지정된 경우 등록된 템플릿 사용, 없으면 기본 생성
+    let content: string;
+    if (templateId) {
+      const template = this.templateRegistry.get(templateId);
+      if (!template) {
+        return err(
+          new AgentError(
+            'layer3_deliverable_template_not_found',
+            `템플릿을 찾을 수 없습니다: ${templateId}`,
+          ),
+        );
+      }
+      content = renderWithTemplate(template, metadata);
+    } else {
+      content = generateBusinessContent(type, metadata);
+    }
+
+    // WHY: format에 따라 실제 파일을 디스크에 저장
+    const outputDir = dirname(outputPath);
+    const title = `${metadata.projectName} — ${type}`;
+
+    if (format === 'pdf') {
+      const pdfResult = await writePdf(outputDir, type, content, title, this.logger);
+      if (!pdfResult.ok) {
+        this.logger.warn('PDF 저장 실패, 마크다운으로 대체', {
+          type,
+          error: pdfResult.error.message,
+        });
+      }
+    } else {
+      // WHY: docx/pptx는 아직 미지원이므로 HTML로 대체 저장
+      const htmlResult = await writeHtml(outputDir, type, content, title, this.logger);
+      if (!htmlResult.ok) {
+        this.logger.warn('HTML 저장 실패', { type, error: htmlResult.error.message });
+      }
+    }
 
     this.deliverableCounter += 1;
     const deliverable: BusinessDeliverable = {
@@ -204,8 +222,8 @@ export class DeliverableBuilder implements IDeliverableBuilder {
       deliverableId: deliverable.id,
       projectId,
       type,
+      format,
     });
-
     return ok(deliverable);
   }
 
@@ -220,17 +238,17 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     for (const type of DEFAULT_BUSINESS_TEMPLATES) {
       const outputPath = join(outputDir, `${type}.${getDefaultFormat(type)}`);
 
-      const result = await this.build({
-        projectId,
-        type,
-        metadata,
-        outputPath,
-      });
+      // WHY: Markdown 파일을 outputDir에 직접 저장
+      const mdContent = renderDeliverableMarkdown(type, metadata);
+      const writeResult = await writeDeliverableToDir(outputDir, type, mdContent, this.logger);
+      if (!writeResult.ok) {
+        return err(new AgentError('agent_deliverable_write_failed', writeResult.error.message));
+      }
 
+      const result = await this.build({ projectId, type, metadata, outputPath });
       if (!result.ok) {
         return err(result.error as AgentError);
       }
-
       results.push(result.value);
     }
 
@@ -244,54 +262,31 @@ export class DeliverableBuilder implements IDeliverableBuilder {
     return [...business, ...simple];
   }
 
+  /**
+   * ID로 산출물을 조회한다 / Get a deliverable by ID
+   *
+   * @param deliverableId - 산출물 ID / Deliverable ID
+   * @returns 산출물 또는 undefined / Deliverable or undefined
+   */
+  getDeliverable(deliverableId: string): BusinessDeliverable | Deliverable | undefined {
+    for (const deliverables of this.deliverables.values()) {
+      const found = deliverables.find((d) => d.id === deliverableId);
+      if (found) return found;
+    }
+    for (const deliverables of this.simpleDeliverables.values()) {
+      const found = deliverables.find((d) => d.id === deliverableId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
   /** 사용 가능한 산출물 템플릿 목록을 조회한다 / List available deliverable templates */
   async listTemplates(includeCustom = true): Promise<Result<readonly DocumentTemplate[]>> {
-    const templates: DocumentTemplate[] = [];
-
-    for (const template of this.templateRegistry.values()) {
-      if (
-        DEFAULT_BUSINESS_TEMPLATES.includes(template.type as BusinessDeliverableType) ||
-        template.custom
-      ) {
-        if (!includeCustom && template.custom) {
-          continue;
-        }
-        templates.push(template);
-      }
-    }
-
-    return ok(templates);
+    return listTemplates(this.templateRegistry, includeCustom);
   }
 
   /** 커스텀 산출물 템플릿을 등록한다 / Register a custom deliverable template */
   async registerTemplate(template: DocumentTemplate): Promise<Result<void>> {
-    const templateId = template.id ?? `custom-${Date.now()}`;
-    if (this.templateRegistry.has(templateId)) {
-      return err(
-        new AgentError(
-          'layer3_deliverable_template_duplicate',
-          `템플릿 ID가 이미 존재합니다: ${templateId}`,
-        ),
-      );
-    }
-
-    // WHY: 커스텀 템플릿의 경우 templatePath가 실제로 존재하는지 검증
-    if (template.custom && template.templatePath && !existsSync(template.templatePath)) {
-      return err(
-        new AgentError(
-          'layer3_deliverable_template_not_found',
-          `템플릿 파일을 찾을 수 없습니다: ${template.templatePath}`,
-        ),
-      );
-    }
-
-    this.templateRegistry.set(templateId, template);
-
-    this.logger.info('커스텀 템플릿 등록 완료', {
-      templateId,
-      type: template.type,
-    });
-
-    return ok(undefined);
+    return registerTemplate(this.templateRegistry, template, this.logger);
   }
 }

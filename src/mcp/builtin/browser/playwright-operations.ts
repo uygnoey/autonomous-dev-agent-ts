@@ -1,273 +1,107 @@
 /**
- * Playwright 브라우저 자동화 도구 / Playwright browser automation tools
+ * Playwright 브라우저 자동화 도구 (호환성 re-export) / Playwright browser automation tools (compatibility re-export)
  *
  * @description
- * KR: Playwright CLI를 ProcessExecutor로 래핑하여 MCP 도구로 제공한다.
- *     실제 프로덕션에서는 Playwright 라이브러리 직접 사용 권장.
- * EN: Wraps Playwright CLI using ProcessExecutor as MCP tools.
- *     For production, direct Playwright library usage is recommended.
+ * KR: 이 파일은 기존 import 호환성을 위해 유지한다.
+ *     실제 구현은 아래 3개 파일로 분리되었다:
+ *     - chrome-control.ts  : 브라우저 제어 (navigate, click, type, eval)
+ *     - page-reader.ts     : 공유 타입 및 페이지 읽기 (BrowserInput, BrowserOutput)
+ *     - screenshot.ts      : 스크린샷 캡처 (browser_screenshot)
+ * EN: This file is kept for backward-compatible imports.
+ *     Actual implementation has been split into:
+ *     - chrome-control.ts  : Browser control (navigate, click, type, eval)
+ *     - page-reader.ts     : Shared types and page reading (BrowserInput, BrowserOutput)
+ *     - screenshot.ts      : Screenshot capture (browser_screenshot)
  */
 
-import { AdevError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { ProcessExecutor } from 'core/process-executor.js';
-import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
-import type { McpTool } from 'mcp/types.js';
+import { CHROME_CONTROL_TOOLS, ChromeControl } from './chrome-control.js';
+import type { BrowserInput, BrowserOutput } from './page-reader.js';
+import { PAGE_READER_TOOLS } from './page-reader.js';
+import { SCREENSHOT_TOOLS, ScreenshotTool } from './screenshot.js';
 
-// ── 타입 / Types ────────────────────────────────────────────
+// ── 공유 타입 re-export / Shared type re-exports ───────────
 
-/**
- * 브라우저 작업 입력 / Browser operation input
- */
-export interface BrowserInput {
-  readonly url?: string;
-  readonly selector?: string;
-  readonly text?: string;
-  readonly script?: string;
-  readonly outputPath?: string;
-  readonly timeout?: number;
-}
+export type { BrowserInput, BrowserOutput } from './page-reader.js';
+
+// ── 통합 도구 목록 / Combined tool list ────────────────────
 
 /**
- * 브라우저 작업 출력 / Browser operation output
- */
-export interface BrowserOutput {
-  readonly success: boolean;
-  readonly data?: unknown;
-  readonly message: string;
-}
-
-// ── 도구 정의 / Tool Definitions ───────────────────────────
-
-/**
- * 브라우저 MCP 도구 목록 / Browser MCP tools
- */
-export const BROWSER_TOOLS: readonly McpTool[] = [
-  {
-    name: 'browser_navigate',
-    description: 'URL로 이동 / Navigate to URL',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: '이동할 URL / URL to navigate' },
-      },
-      required: ['url'],
-    },
-  },
-  {
-    name: 'browser_screenshot',
-    description: '스크린샷 캡처 / Capture screenshot',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: '캡처할 URL / URL to capture' },
-        outputPath: {
-          type: 'string',
-          description: '저장 경로 / Output file path',
-        },
-      },
-      required: ['url', 'outputPath'],
-    },
-  },
-  {
-    name: 'browser_click',
-    description: '요소 클릭 / Click element',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        selector: {
-          type: 'string',
-          description: 'CSS 선택자 / CSS selector',
-        },
-      },
-      required: ['selector'],
-    },
-  },
-  {
-    name: 'browser_type',
-    description: '텍스트 입력 / Type text',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        selector: {
-          type: 'string',
-          description: 'CSS 선택자 / CSS selector',
-        },
-        text: { type: 'string', description: '입력할 텍스트 / Text to type' },
-      },
-      required: ['selector', 'text'],
-    },
-  },
-  {
-    name: 'browser_eval',
-    description: 'JavaScript 실행 / Execute JavaScript',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        script: {
-          type: 'string',
-          description: '실행할 스크립트 / Script to execute',
-        },
-      },
-      required: ['script'],
-    },
-  },
-];
-
-// ── 도구 실행기 / Tool Executor ────────────────────────────
-
-/**
- * Playwright 실행기 / Playwright executor
+ * 브라우저 MCP 도구 목록 (통합) / Browser MCP tools (combined)
  *
  * @description
- * KR: ProcessExecutor를 사용하여 Playwright CLI를 실행한다.
- *     간단한 구현으로, 실제 프로덕션에서는 Playwright 라이브러리 직접 사용 권장.
- * EN: Executes Playwright CLI using ProcessExecutor.
- *     Simple implementation; direct library usage recommended for production.
+ * KR: chrome-control, page-reader, screenshot 도구를 통합한 목록.
+ * EN: Combined tool list from chrome-control, page-reader, and screenshot.
+ */
+export const BROWSER_TOOLS = [
+  ...CHROME_CONTROL_TOOLS,
+  ...PAGE_READER_TOOLS,
+  ...SCREENSHOT_TOOLS,
+] as const;
+
+// ── 호환성 래퍼 / Compatibility Wrapper ────────────────────
+
+/**
+ * Playwright 실행기 (호환성 래퍼) / Playwright executor (compatibility wrapper)
  *
- * @note
- * 현재는 간소화된 구현. 실제 프로덕션에서는:
- * - playwright 패키지를 dependencies에 추가
- * - 라이브러리 직접 import하여 사용
- * - 브라우저 인스턴스 재사용 (성능 최적화)
+ * @description
+ * KR: 기존 코드 호환성을 위해 ChromeControl + ScreenshotTool을 통합하는 래퍼.
+ *     신규 코드에서는 ChromeControl, ScreenshotTool을 직접 사용 권장.
+ * EN: Compatibility wrapper combining ChromeControl and ScreenshotTool.
+ *     New code should use ChromeControl and ScreenshotTool directly.
+ *
+ * @example
+ * const executor = new PlaywrightExecutor(processExecutor, logger);
+ * const result = await executor.executeTool('browser_navigate', { url: 'https://example.com' });
  */
 export class PlaywrightExecutor {
-  constructor(
-    private readonly executor: ProcessExecutor,
-    private readonly logger: Logger,
-  ) {
-    this.logger = logger.child({ module: 'playwright-executor' });
+  private readonly chromeControl: ChromeControl;
+  private readonly screenshotTool: ScreenshotTool;
+
+  constructor(executor: ProcessExecutor, logger: Logger) {
+    this.chromeControl = new ChromeControl(executor, logger);
+    this.screenshotTool = new ScreenshotTool(executor, logger);
   }
 
   /**
    * URL로 이동 / Navigate to URL
    *
-   * @description
-   * KR: Playwright CLI로 URL을 방문한다.
-   * EN: Visits URL using Playwright CLI.
+   * @param url - 이동할 URL / URL to navigate
+   * @returns HTML 응답 또는 에러 / HTML response or error
    */
   async navigate(url: string): Promise<Result<string>> {
-    this.logger.debug('URL 이동', { url });
-
-    // WHY: 실제 구현에서는 playwright codegen이나 라이브러리 직접 사용
-    // 현재는 간단한 curl로 대체 (Playwright 미설치 환경 고려)
-    const result = await this.executor.execute('curl', ['-L', '-s', '--max-time', '10', url]);
-
-    if (!result.ok) {
-      return err(result.error);
-    }
-
-    if (result.value.exitCode !== 0) {
-      return err(new AdevError('browser_navigate_error', `URL 이동 실패: ${result.value.stderr}`));
-    }
-
-    return ok(result.value.stdout);
+    return this.chromeControl.navigate(url);
   }
 
   /**
    * 스크린샷 캡처 / Capture screenshot
    *
-   * @description
-   * KR: Playwright CLI로 스크린샷을 캡처한다.
-   * EN: Captures screenshot using Playwright CLI.
+   * @param url - 캡처할 URL / URL to capture
+   * @param outputPath - 저장 경로 / Output file path
+   * @returns void 또는 에러 / void or error
    */
   async screenshot(url: string, outputPath: string): Promise<Result<void>> {
-    this.logger.debug('스크린샷 캡처', { url, outputPath });
-
-    // WHY: playwright screenshot 명령 사용 (Playwright 설치 필요)
-    const result = await this.executor.execute(
-      'bunx',
-      ['playwright', 'screenshot', url, outputPath],
-      {
-        timeoutMs: 30_000, // WHY: 브라우저 시작 시간 고려
-      },
-    );
-
-    if (!result.ok) {
-      return err(result.error);
-    }
-
-    if (result.value.exitCode !== 0) {
-      return err(
-        new AdevError('browser_screenshot_error', `스크린샷 캡처 실패: ${result.value.stderr}`),
-      );
-    }
-
-    return ok(undefined);
+    return this.screenshotTool.capture(url, outputPath);
   }
 
   /**
    * MCP 도구 실행 (통합 인터페이스) / Execute MCP tool
    *
    * @description
-   * KR: MCP 프로토콜에 따라 브라우저 도구를 실행한다.
-   * EN: Executes browser tool according to MCP protocol.
+   * KR: 도구 이름에 따라 ChromeControl 또는 ScreenshotTool로 라우팅한다.
+   * EN: Routes to ChromeControl or ScreenshotTool based on tool name.
    *
-   * @note
-   * browser_click, browser_type, browser_eval은 간소화된 구현.
-   * 실제 프로덕션에서는 Playwright 라이브러리를 직접 사용하여 구현 필요.
+   * @param toolName - 도구 이름 / Tool name
+   * @param input - 도구 입력 / Tool input
+   * @returns 실행 결과 / Execution result
    */
   async executeTool(toolName: string, input: BrowserInput): Promise<Result<BrowserOutput>> {
-    this.logger.debug('MCP 도구 실행', { toolName, input });
-
-    switch (toolName) {
-      case 'browser_navigate': {
-        if (!input.url) {
-          return ok({
-            success: false,
-            message: 'url 필드 필수',
-          });
-        }
-
-        const result = await this.navigate(input.url);
-        if (!result.ok) {
-          return ok({
-            success: false,
-            message: result.error.message,
-          });
-        }
-
-        return ok({
-          success: true,
-          data: result.value,
-          message: 'URL 이동 성공',
-        });
-      }
-
-      case 'browser_screenshot': {
-        if (!(input.url && input.outputPath)) {
-          return ok({
-            success: false,
-            message: 'url, outputPath 필드 필수',
-          });
-        }
-
-        const result = await this.screenshot(input.url, input.outputPath);
-        if (!result.ok) {
-          return ok({
-            success: false,
-            message: result.error.message,
-          });
-        }
-
-        return ok({
-          success: true,
-          message: '스크린샷 캡처 성공',
-        });
-      }
-
-      case 'browser_click':
-      case 'browser_type':
-      case 'browser_eval':
-        // WHY: 간소화된 구현. 실제 구현은 Playwright 라이브러리 필요
-        return ok({
-          success: false,
-          message: `${toolName}은 Playwright 라이브러리 직접 사용 필요 (향후 구현 예정)`,
-        });
-
-      default:
-        return err(new AdevError('unknown_tool', `알 수 없는 도구: ${toolName}`));
+    if (toolName === 'browser_screenshot') {
+      return this.screenshotTool.executeTool(toolName, input);
     }
+
+    return this.chromeControl.executeTool(toolName, input);
   }
 }

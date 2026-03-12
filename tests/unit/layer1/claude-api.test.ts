@@ -30,6 +30,7 @@ class MockAuthProvider implements AuthProvider {
       inputTokensRemaining: null,
       outputTokensRemaining: null,
       retryAfterSeconds: null,
+      requestsLimit: null,
       isLimitApproaching: false,
     };
   }

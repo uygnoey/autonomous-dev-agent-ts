@@ -1,4 +1,5 @@
 ---
+name: qc
 model: sonnet
 tools: Read, Glob, Grep, Bash(bun test *)
 ---

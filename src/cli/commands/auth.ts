@@ -23,7 +23,25 @@ import { AuthError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
-import inquirer from 'inquirer';
+import * as readline from 'node:readline';
+
+// ── 헬퍼 / Helpers ────────────────────────────────────────────
+
+/**
+ * stdin에서 한 줄을 읽는다 / Read one line from stdin
+ *
+ * WHY: inquirer v13 + Bun 환경에서 list/confirm 타입 렌더링 버그 우회.
+ *      readline으로 직접 읽으면 모든 터미널에서 안정적으로 동작한다.
+ */
+function readLine(): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise<string>((resolve) => {
+    rl.once('line', (line) => {
+      rl.close();
+      resolve(line);
+    });
+  });
+}
 
 const ADEV_DIR = join(homedir(), '.adev');
 const ENV_FILE = join(ADEV_DIR, '.env');
@@ -164,16 +182,12 @@ export class AuthCommand {
       return ok(undefined);
     }
 
-    const { confirmed } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirmed',
-        message: `${status.method} (${status.masked}) 인증 정보를 삭제하시겠습니까?`,
-        default: false,
-      },
-    ]);
+    process.stdout.write(
+      `\n${status.method} (${status.masked}) 인증 정보를 삭제하시겠습니까? [y/N]: `,
+    );
+    const confirmed = await readLine();
 
-    if (confirmed) {
+    if (confirmed.trim().toLowerCase() === 'y') {
       await clearAuthFromEnv();
       process.stdout.write('\n✅ 인증 정보가 삭제되었습니다 / Auth credentials cleared\n\n');
     } else {
@@ -194,24 +208,13 @@ export class AuthCommand {
       process.stdout.write(`   현재 설정 / Current: ${existing.method} (${existing.masked})\n\n`);
     }
 
-    const { method } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'method',
-        message: '인증 방법을 선택하세요 / Choose authentication method:',
-        choices: [
-          {
-            name: 'Anthropic API Key  (api.anthropic.com에서 발급)',
-            value: 'apikey',
-          },
-          {
-            name: 'Claude Code OAuth Token  (Pro/Max 구독자)',
-            value: 'oauth',
-          },
-          { name: '취소 / Cancel', value: 'cancel' },
-        ],
-      },
-    ]);
+    process.stdout.write('인증 방법을 선택하세요 / Choose authentication method:\n');
+    process.stdout.write('  1) Anthropic API Key  (api.anthropic.com에서 발급)\n');
+    process.stdout.write('  2) Claude Code OAuth Token  (Pro/Max 구독자)\n');
+    process.stdout.write('  3) 취소 / Cancel\n');
+    process.stdout.write('\n선택 (1-3): ');
+    const methodInput = await readLine();
+    const method = methodInput.trim() === '2' ? 'oauth' : methodInput.trim() === '3' ? 'cancel' : 'apikey';
 
     if (method === 'cancel') {
       process.stdout.write('\n취소되었습니다 / Cancelled\n\n');
@@ -221,19 +224,16 @@ export class AuthCommand {
     if (method === 'apikey') {
       process.stdout.write('\n📘 API Key 발급: https://console.anthropic.com/settings/keys\n\n');
 
-      const { apiKey } = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'Anthropic API Key (sk-ant-...):',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input.trim()) return '❌ API Key를 입력하세요';
-            if (!input.startsWith('sk-ant-')) return '❌ sk-ant- 로 시작해야 합니다';
-            return true;
-          },
-        },
-      ]);
+      process.stdout.write('Anthropic API Key (sk-ant-...): ');
+      const apiKey = await readLine();
+      if (!apiKey.trim()) {
+        process.stdout.write('\n❌ API Key를 입력하세요\n\n');
+        return ok(undefined);
+      }
+      if (!apiKey.trim().startsWith('sk-ant-')) {
+        process.stdout.write('\n❌ sk-ant- 로 시작해야 합니다\n\n');
+        return ok(undefined);
+      }
 
       await saveToEnv('ANTHROPIC_API_KEY', apiKey.trim());
       this.logger.info('API Key 저장 완료');
@@ -242,19 +242,16 @@ export class AuthCommand {
       process.stdout.write('\n📘 OAuth Token 확인:\n');
       process.stdout.write('   cat ~/.claude/.credentials.json | grep oauthToken\n\n');
 
-      const { oauthToken } = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'oauthToken',
-          message: 'Claude Code OAuth Token (sk-ant-oat01-...):',
-          mask: '*',
-          validate: (input: string) => {
-            if (!input.trim()) return '❌ OAuth Token을 입력하세요';
-            if (!input.startsWith('sk-ant-')) return '❌ sk-ant- 로 시작해야 합니다';
-            return true;
-          },
-        },
-      ]);
+      process.stdout.write('Claude Code OAuth Token (sk-ant-oat01-...): ');
+      const oauthToken = await readLine();
+      if (!oauthToken.trim()) {
+        process.stdout.write('\n❌ OAuth Token을 입력하세요\n\n');
+        return ok(undefined);
+      }
+      if (!oauthToken.trim().startsWith('sk-ant-')) {
+        process.stdout.write('\n❌ sk-ant- 로 시작해야 합니다\n\n');
+        return ok(undefined);
+      }
 
       await saveToEnv('CLAUDE_CODE_OAUTH_TOKEN', oauthToken.trim());
       this.logger.info('OAuth Token 저장 완료');

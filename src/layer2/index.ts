@@ -44,6 +44,7 @@ export type {
   HookEvent,
   HookEventType,
   IntegrationStepResult,
+  TestScope,
   PhaseTransition,
   RecoveryAction,
   SessionFilter,

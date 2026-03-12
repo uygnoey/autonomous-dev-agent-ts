@@ -189,9 +189,24 @@ export interface HookEvent {
  * KR: 4단계 통합 테스트 중 한 단계의 결과.
  * EN: Result of one step in the 4-step integration test.
  */
+/**
+ * 테스트 범위 / Test scope
+ *
+ * @description
+ * KR: 계단식 통합 테스트의 범위 분류.
+ * EN: Scope classification for staircase integration tests.
+ */
+export type TestScope = 'modified' | 'related' | 'unrelated' | 'full';
+
 export interface IntegrationStepResult {
   /** 단계 번호 (1~4) / Step number (1~4) */
   readonly step: number;
+  /** 테스트 범위 / Test scope */
+  readonly scope: TestScope;
+  /** 목표 테스트 수 / Target test count */
+  readonly targetCount: number;
+  /** 실제 실행된 테스트 수 / Actual tests executed */
+  readonly executedCount: number;
   /** 통과 여부 / Whether passed */
   readonly passed: boolean;
   /** 실패 수 / Fail count */

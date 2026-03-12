@@ -121,6 +121,36 @@ export class TokenMonitor {
   }
 
   /**
+   * 토큰 리셋 시점까지 대기한다 / Wait until token usage resets
+   *
+   * @description
+   * KR: shouldPauseAll()이 false가 될 때까지 intervalMs 간격으로 폴링한다.
+   *     retryAfterSeconds가 설정되어 있으면 해당 시간만큼 대기 후 폴링 시작.
+   * EN: Polls at intervalMs until shouldPauseAll() returns false.
+   *     If retryAfterSeconds is set, waits that duration before polling.
+   *
+   * @param intervalMs - 폴링 간격 (밀리초, 기본 5000) / Polling interval in ms (default 5000)
+   * @returns 리셋 완료 시 resolve / Resolves when token usage resets
+   */
+  async waitForReset(intervalMs = 5000): Promise<void> {
+    const status = this.getStatus();
+
+    // WHY: retryAfterSeconds가 있으면 해당 시간만큼 먼저 대기하여 불필요한 폴링 방지
+    if (status.retryAfterSeconds !== null && status.retryAfterSeconds > 0) {
+      const waitMs = status.retryAfterSeconds * 1000;
+      this.logger.info('retryAfter 대기 시작', { waitMs });
+      await this.sleep(waitMs);
+    }
+
+    while (this.shouldPauseAll()) {
+      this.logger.debug('토큰 리셋 대기 중', { intervalMs });
+      await this.sleep(intervalMs);
+    }
+
+    this.logger.info('토큰 리셋 완료 — 재개 가능');
+  }
+
+  /**
    * 잔여량 비율을 계산한다 / Calculates remaining ratio
    *
    * @description
@@ -138,10 +168,27 @@ export class TokenMonitor {
       return null;
     }
 
-    // WHY: 최대 요청 수를 알 수 없으므로, 절대 임계값으로 추정한다.
-    //      보수적으로 requestsRemaining / 100을 비율로 사용.
-    //      실제 환경에서는 x-ratelimit-limit 헤더로 교체해야 한다.
-    const estimatedMaxRequests = 100;
-    return Math.min(status.requestsRemaining / estimatedMaxRequests, 1);
+    // WHY: requestsLimit이 null이면 한도 정보 없음 → 비율 계산 불가
+    if (status.requestsLimit === null) {
+      return null;
+    }
+
+    // WHY: 한도가 0 이하이면 비율 계산 무의미
+    if (status.requestsLimit <= 0) {
+      return null;
+    }
+
+    return Math.min(status.requestsRemaining / status.requestsLimit, 1);
+  }
+
+  /**
+   * 지정된 밀리초만큼 대기한다 / Sleep for given milliseconds
+   *
+   * @param ms - 대기 시간 (밀리초) / Sleep duration in milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 }

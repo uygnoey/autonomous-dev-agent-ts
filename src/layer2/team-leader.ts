@@ -3,13 +3,9 @@
  *
  * @description
  * KR: 4-Phase 루프를 구동하여 기능 구현을 오케스트레이션한다.
- *     1. DESIGN → architect, qa, reviewer 스폰
- *     2. CODE → coder 할당 및 스폰
- *     3. TEST → tester, qc 스폰
- *     4. VERIFY → 4중 검증 수행
- *     VERIFY 실패 시 → 실패 분석 → 적절한 Phase로 롤백 → 재시도
+ *     Phase 처리 로직은 team-leader-phase.ts에 분리.
  * EN: Drives the 4-phase loop to orchestrate feature implementation.
- *     On VERIFY failure → analyze → rollback to appropriate phase → retry.
+ *     Phase handling logic is separated into team-leader-phase.ts.
  */
 
 import type { Phase } from 'core/types.js';
@@ -21,10 +17,9 @@ import {
   createEvent,
   executeCodePhase,
   executePhase,
-  getNextPhase,
-  spawnDocumenter,
-  updateStatusForPhase,
+  executeVerifyPhase,
 } from 'layer2/team-leader-helpers.js';
+import { advancePhase, handleVerifyResult } from 'layer2/team-leader-phase.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { runTokenWaitLoop } from 'layer2/token-wait-loop.js';
 import type { AgentEvent } from 'layer2/types.js';
@@ -34,10 +29,6 @@ export type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 
 /**
  * 최대 Phase 루프 반복 횟수 / Maximum phase loop iterations
- *
- * @description
- * KR: 무한 루프 방지를 위한 최대 반복 횟수.
- * EN: Maximum iterations to prevent infinite loops.
  */
 const MAX_ITERATIONS = 10;
 
@@ -74,6 +65,7 @@ export class TeamLeader {
   private readonly ipcPoller: IpcPoller | undefined;
   private readonly parallelCoderRunner: TeamLeaderDeps['parallelCoderRunner'];
   private readonly gitBranchManager: TeamLeaderDeps['gitBranchManager'];
+  private readonly layer1Verifier: TeamLeaderDeps['layer1Verifier'];
   private currentFeatureId: string | null = null;
 
   /**
@@ -99,18 +91,11 @@ export class TeamLeader {
     this.ipcPoller = deps.ipcPoller;
     this.parallelCoderRunner = deps.parallelCoderRunner;
     this.gitBranchManager = deps.gitBranchManager;
+    this.layer1Verifier = deps.layer1Verifier;
   }
 
   /**
    * 기능 구현을 오케스트레이션한다 / Orchestrates feature implementation
-   *
-   * @description
-   * KR: 4-Phase 루프를 구동한다.
-   *     VERIFY 실패 시 실패 분석 후 적절한 Phase로 롤백하여 재시도한다.
-   *     최대 반복 횟수를 초과하면 중단한다.
-   * EN: Drives the 4-phase loop.
-   *     On VERIFY failure, analyzes and rolls back to appropriate phase.
-   *     Stops after maximum iterations.
    *
    * @param featureId - 기능 ID / Feature ID
    * @param handoffPackage - layer1 인수 패키지 / Handoff package from layer1
@@ -159,14 +144,31 @@ export class TeamLeader {
               handoffPackage.projectId,
             );
           } else {
-            // WHY: sessionSnapshotStore/orchestrator 미주입 시 기존 동작 유지
             this.logger.error('토큰 부족으로 실행 일시 정지', { featureId });
             yield createEvent('error', '토큰 리밋 도달로 실행 일시 정지');
             return;
           }
         }
 
-        if (currentPhase === 'CODE') {
+        if (currentPhase === 'VERIFY') {
+          yield* executeVerifyPhase(
+            {
+              phaseEngine: this.phaseEngine,
+              tokenMonitor: this.tokenMonitor,
+              agentGenerator: this.agentGenerator,
+              sessionManager: this.sessionManager,
+              agentSpawner: this.agentSpawner,
+              streamMonitor: this.streamMonitor,
+              logger: this.logger,
+              ragSearcher: this.ragSearcher,
+              verificationGate: this.verificationGate,
+              integrationTester: this.integrationTester,
+              layer1Verifier: this.layer1Verifier,
+            },
+            featureId,
+            handoffPackage,
+          );
+        } else if (currentPhase === 'CODE') {
           yield* executeCodePhase(
             {
               phaseEngine: this.phaseEngine,
@@ -203,11 +205,27 @@ export class TeamLeader {
         }
 
         if (currentPhase === 'VERIFY') {
-          yield* this.handleVerifyResult(featureId, handoffPackage, iteration);
-          // WHY: handleVerifyResult가 done을 yield하면 종료
+          yield* handleVerifyResult(
+            {
+              phaseEngine: this.phaseEngine,
+              progressTracker: this.progressTracker,
+              failureHandler: this.failureHandler,
+              verificationGate: this.verificationGate,
+              agentGenerator: this.agentGenerator,
+              agentSpawner: this.agentSpawner,
+              logger: this.logger,
+            },
+            featureId,
+            handoffPackage,
+            iteration,
+          );
           if (this.verificationGate.isAllPassed(featureId)) return;
         } else {
-          this.advancePhase(featureId, currentPhase);
+          advancePhase(
+            { phaseEngine: this.phaseEngine, progressTracker: this.progressTracker },
+            featureId,
+            currentPhase,
+          );
         }
       }
 
@@ -222,8 +240,6 @@ export class TeamLeader {
 
   /**
    * 현재 상태를 반환한다 / Returns current status
-   *
-   * @returns 현재 기능 ID, Phase, 진행률 / Current feature ID, phase, progress
    */
   getStatus(): { featureId: string | null; phase: Phase; progress: number } {
     return {
@@ -231,76 +247,5 @@ export class TeamLeader {
       phase: this.phaseEngine.currentPhase,
       progress: this.progressTracker.getOverallCompletion(),
     };
-  }
-
-  /**
-   * VERIFY Phase 결과를 처리한다 / Handles VERIFY phase result
-   *
-   * @param featureId - 기능 ID / Feature ID
-   * @param handoffPackage - 인수 패키지 / Handoff package
-   * @param iteration - 현재 반복 횟수 / Current iteration count
-   */
-  private async *handleVerifyResult(
-    featureId: string,
-    handoffPackage: HandoffPackage,
-    iteration: number,
-  ): AsyncIterable<AgentEvent> {
-    if (this.verificationGate.isAllPassed(featureId)) {
-      this.progressTracker.updateStatus(featureId, 'complete');
-      this.logger.info('기능 구현 완료 — documenter 트리거', { featureId, iterations: iteration });
-      yield* spawnDocumenter(
-        this.agentGenerator,
-        this.agentSpawner,
-        this.logger,
-        featureId,
-        handoffPackage,
-      );
-      yield createEvent('done', `기능 '${featureId}' 구현 완료`);
-      return;
-    }
-
-    // WHY: VERIFY 실패 시 실패 분석 후 롤백
-    const report = this.failureHandler.classify(featureId, 'VERIFY', '4중 검증 실패');
-
-    if (report.ok) {
-      const recoveryPhase = this.failureHandler.getRecoveryPhase(report.value);
-      const transition = this.phaseEngine.transition(
-        recoveryPhase,
-        `검증 실패 롤백: ${report.value.type}`,
-        'adev',
-      );
-
-      if (transition.ok) {
-        this.logger.warn('검증 실패 — Phase 롤백', {
-          featureId,
-          from: 'VERIFY',
-          to: recoveryPhase,
-          failureType: report.value.type,
-        });
-        yield createEvent('message', `검증 실패. ${recoveryPhase} Phase로 롤백합니다.`);
-      }
-    }
-  }
-
-  /**
-   * 순방향 Phase 전환을 수행한다 / Advances to the next phase
-   *
-   * @param featureId - 기능 ID / Feature ID
-   * @param currentPhase - 현재 Phase / Current phase
-   */
-  private advancePhase(featureId: string, currentPhase: Phase): void {
-    const nextPhase = getNextPhase(currentPhase);
-    if (nextPhase) {
-      const transition = this.phaseEngine.transition(
-        nextPhase,
-        `${currentPhase} Phase 완료`,
-        'adev',
-      );
-
-      if (transition.ok) {
-        this.progressTracker.updatePhase(featureId, nextPhase);
-        updateStatusForPhase(this.progressTracker, featureId, nextPhase);
-      }
-    }
   }
 }
