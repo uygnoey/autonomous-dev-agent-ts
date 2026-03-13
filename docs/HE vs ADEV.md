@@ -1,5 +1,7 @@
 # Harness Engineering vs adev — 심층 비교 분석
 
+> 🌐 **언어 선택**: **한국어** | [English](HE%20vs%20ADEV.en.md) | [日本語](HE%20vs%20ADEV.ja.md) | [中文](HE%20vs%20ADEV.zh.md)
+
 > **작성일**: 2026-03-13
 > **adev 기준**: v2.4 스펙 확정 + 구현 현황 (201파일, ~32,681줄)
 > **Harness Engineering 기준**: OpenAI (2026-02 공식화), Anthropic Engineering Blog, Martin Fowler, LangChain DeepAgents
