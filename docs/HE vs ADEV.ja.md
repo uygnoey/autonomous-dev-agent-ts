@@ -1,6 +1,6 @@
 # Harness Engineering vs adev — 詳細比較分析
 
-> 🌐 **言語選択**: [한국어](HE%20vs%20ADEV.md) | [English](HE%20vs%20ADEV.en.md) | **日本語** | [中文](HE%20vs%20ADEV.zh.md)
+> 🌐 **言語選択**: [한국어](HE%20vs%20ADEV.md) | [English](HE%20vs%20ADEV.en.md) | **日本語** | [Español](HE%20vs%20ADEV.es.md)
 
 > **作成日**: 2026-03-13
 > **adev 基準**: v2.4 スペック確定 + 実装状況（201ファイル、約32,681行）
