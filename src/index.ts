@@ -184,10 +184,9 @@ async function main(): Promise<void> {
     execute: async (options) => {
       const parsed = options as Record<string, unknown>;
       const sub = parsed.sub as string | undefined;
-      // WHY: parsed._ contains all positionals ['config', 'get', 'log.level', ...]
-      //      slice(1) drops the command name so args = ['get', 'log.level', ...]
-      const allPositionals = Array.isArray(parsed._) ? (parsed._ as string[]) : [];
-      const args = allPositionals.length > 1 ? allPositionals.slice(1) : sub ? [sub] : [];
+      // WHY: yargs [args..] positional로 dot-notation 키를 문자열 그대로 받음
+      const subArgs = Array.isArray(parsed.args) ? (parsed.args as string[]) : [];
+      const args = sub ? [sub, ...subArgs] : [];
       const result = await configCmd.execute(args, options);
       if (result.ok) {
         return { success: true, message: 'Config operation completed.', exitCode: 0 };

@@ -116,7 +116,9 @@ export class CliApp implements ICliApp {
       }
 
       // WHY: yargs로 명령어 파싱
+      // WHY: dot-notation 비활성화 — `log.level` 같은 키를 nested object로 파싱하지 않고 문자열 그대로 전달
       const parsed = await yargs(args)
+        .parserConfiguration({ 'dot-notation': false })
         .command('init [path]', 'Initialize project', (y) =>
           y.positional('path', { type: 'string', describe: 'Project path' }).option('yes', {
             alias: 'y',
@@ -132,11 +134,23 @@ export class CliApp implements ICliApp {
             .option('status', { type: 'boolean', describe: 'Show current auth status' })
             .option('clear', { type: 'boolean', describe: 'Clear saved credentials' }),
         )
-        .command('config <sub>', 'Manage configuration', (y) =>
-          y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
+        .command('config <sub> [args..]', 'Manage configuration', (y) =>
+          y
+            .positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' })
+            .positional('args', {
+              type: 'string',
+              array: true,
+              describe: 'Subcommand arguments (e.g. key, value)',
+            }),
         )
-        .command('setting <sub>', 'Manage configuration (alias: config)', (y) =>
-          y.positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' }),
+        .command('setting <sub> [args..]', 'Manage configuration (alias: config)', (y) =>
+          y
+            .positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' })
+            .positional('args', {
+              type: 'string',
+              array: true,
+              describe: 'Subcommand arguments (e.g. key, value)',
+            }),
         )
         .command('project <sub> [args..]', 'Manage projects', (y) =>
           y
@@ -231,6 +245,18 @@ export class CliApp implements ICliApp {
           return EXIT_CODES.GENERAL_ERROR;
         }
         return EXIT_CODES.GENERAL_ERROR;
+      }
+
+      // WHY: yargs strict 모드에서 발생하는 파싱 에러는 INVALID_USAGE로 분류
+      if (
+        error instanceof Error &&
+        (error.message.includes('Unknown argument') ||
+          error.message.includes('Not enough non-option') ||
+          error.message.includes('Missing required argument'))
+      ) {
+        this.logger.error('잘못된 사용법', { message: error.message });
+        process.stderr.write(`Error: ${error.message}\n`);
+        return EXIT_CODES.INVALID_USAGE;
       }
 
       // WHY: 예상치 못한 에러
