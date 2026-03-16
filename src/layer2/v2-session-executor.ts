@@ -114,7 +114,9 @@ export class V2SessionExecutor implements AgentExecutor {
         const fullPrompt = config.systemPrompt
           ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
           : config.prompt;
+        this.logger.info('Session send 시작', { agentName: config.name, promptLen: fullPrompt.length });
         await session.send(fullPrompt);
+        this.logger.info('Session send 완료, stream 시작', { agentName: config.name });
         for await (const sdkEvent of session.stream()) {
           const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
             this.logger.debug('Unhandled SDK event type', { eventType });
@@ -204,9 +206,16 @@ export class V2SessionExecutor implements AgentExecutor {
    */
   private buildSessionEnvironment(config: AgentConfig): Record<string, string> {
     const authHeader = this.authProvider.getAuthHeader();
-    const baseEnv: Record<string, string> = {};
 
-    // WHY: API Key는 항상 전달 (Layer1 필수 인증)
+    // WHY: SDK의 env 파라미터는 process.env를 완전 대체함 (merge 아님).
+    //      process.env 없이 {ANTHROPIC_API_KEY: '...'} 만 전달하면 PATH, HOME 등
+    //      필수 시스템 환경변수가 사라져 Claude Code CLI가 실패함.
+    //      process.env를 base로 하고 필요한 것만 오버라이드.
+    const baseEnv: Record<string, string> = {
+      ...(process.env as Record<string, string>),
+    };
+
+    // WHY: API Key는 항상 오버라이드 (adev 인증 우선)
     if ('x-api-key' in authHeader) {
       baseEnv.ANTHROPIC_API_KEY = authHeader['x-api-key'] as string;
     }
@@ -220,7 +229,8 @@ export class V2SessionExecutor implements AgentExecutor {
     // WHY: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS를 서브프로세스에 전달하지 않음.
     //      이 환경변수가 설정된 Claude Code CLI는 팀 에이전트 모드로 실행되어
     //      orchestrator 메시지를 기다리다 hanging이 발생함.
-    //      현재 adev는 IPC 기반 팀 에이전트 통신을 구현하지 않으므로 항상 비활성화.
+    //      baseEnv에서 명시적으로 제거.
+    delete baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;
 
     return { ...baseEnv, ...(config.env ?? {}) };
   }
