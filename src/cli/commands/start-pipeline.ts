@@ -190,15 +190,13 @@ export async function generateContract(
         logger,
       );
 
-      // error 이슈 있으면 개발 진입 불가
+      // WHY: AI 검증 결과는 참고용 — error 이슈도 warn 처리하고 개발 진입 허용.
+      //      AI가 summary 정보만으로 판단하므로 false-negative 발생 가능.
       const hasErrors = verifyResult.value.issues.some((i) => i.severity === 'error');
       if (hasErrors) {
-        return err(
-          new AdevError(
-            'cli_start_contract_generation_failed',
-            'Contract 검증 실패 (error 이슈 존재) — 이슈를 해결한 후 다시 시도하세요.',
-          ),
-        );
+        logger.warn('Contract AI 검증에서 error 이슈 발견 — 경고 후 계속 진행', {
+          errorCount: verifyResult.value.issues.filter((i) => i.severity === 'error').length,
+        });
       }
     } else {
       // 검증 API 실패는 warning 처리 (개발 진입은 허용)

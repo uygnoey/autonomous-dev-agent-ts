@@ -40,6 +40,21 @@ export function createInputHandler(options: InputHandlerOptions = {}) {
   const inputStream = options.input ?? process.stdin;
   const outputStream = options.output ?? process.stdout;
 
+  // WHY: readline.Interface를 한 번만 생성해서 재사용한다.
+  //      매 readLine 호출마다 새 Interface를 생성하면 piped stdin에서
+  //      readline이 stdin을 chunk 단위로 미리 읽어 버퍼에 넣은 뒤
+  //      close() 시 해당 버퍼를 버려 이후 입력이 소실된다.
+  const rl = createInterface({
+    input: inputStream,
+    output: outputStream,
+    terminal: (outputStream as NodeJS.WriteStream).isTTY,
+  });
+
+  let eofReached = false;
+  rl.on('close', () => {
+    eofReached = true;
+  });
+
   /**
    * 한 줄 읽기 / Read one line
    *
@@ -47,36 +62,20 @@ export function createInputHandler(options: InputHandlerOptions = {}) {
    * @returns 입력 이벤트
    */
   async function readLine(prompt = ''): Promise<InputEvent> {
+    if (eofReached) {
+      return { text: '', isInterrupt: false, isEof: true };
+    }
+
     return new Promise((resolve) => {
-      const rl = createInterface({
-        input: inputStream,
-        output: outputStream,
-        terminal: (outputStream as NodeJS.WriteStream).isTTY,
-      });
-
-      let resolved = false;
-
-      const done = (event: InputEvent) => {
-        if (resolved) return;
-        resolved = true;
-        rl.close();
-        resolve(event);
+      // Ctrl+C 처리 (1회성 핸들러)
+      const sigintHandler = () => {
+        resolve({ text: '', isInterrupt: true, isEof: false });
       };
-
-      // Ctrl+C 처리
-      rl.on('SIGINT', () => {
-        done({ text: '', isInterrupt: true, isEof: false });
-      });
-
-      // EOF 처리 (파이프 종료 등)
-      rl.on('close', () => {
-        if (!resolved) {
-          done({ text: '', isInterrupt: false, isEof: true });
-        }
-      });
+      rl.once('SIGINT', sigintHandler);
 
       rl.question(prompt, (answer) => {
-        done({ text: answer, isInterrupt: false, isEof: false });
+        rl.removeListener('SIGINT', sigintHandler);
+        resolve({ text: answer, isInterrupt: false, isEof: false });
       });
     });
   }

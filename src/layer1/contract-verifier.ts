@@ -23,7 +23,7 @@ import type { HandoffPackage } from 'layer1/types.js';
 // ── 상수 / Constants ─────────────────────────────────────────────
 
 /** 기본 검증 모델 / Default verification model */
-const DEFAULT_VERIFY_MODEL = 'claude-haiku-4-20250514';
+const DEFAULT_VERIFY_MODEL = 'claude-haiku-4-5-20251001';
 
 /** 검증 프롬프트 시스템 메시지 / Verification prompt system message */
 const SYSTEM_PROMPT =
