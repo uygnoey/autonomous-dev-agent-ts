@@ -91,11 +91,8 @@ export class V2SessionExecutor implements AgentExecutor {
       featureId: config.featureId,
     });
 
-    // WHY: DESIGN Phase는 Agent Teams 활성화 (팀 토론), 나머지는 비활성화
-    const enableAgentTeams = config.phase === 'DESIGN';
-
     try {
-      const sessionEnv = this.buildSessionEnvironment(config, enableAgentTeams);
+      const sessionEnv = this.buildSessionEnvironment(config);
       const sessionResult = await this.createSession(config, sessionEnv);
       if (!sessionResult.ok) {
         yield createErrorEvent(config.name, sessionResult.error.message);
@@ -203,13 +200,9 @@ export class V2SessionExecutor implements AgentExecutor {
    * 세션 환경변수를 구성한다 / Build session environment variables
    *
    * @param config - 에이전트 설정 / Agent configuration
-   * @param enableAgentTeams - Agent Teams 활성화 여부 / Whether to enable Agent Teams
    * @returns 환경변수 객체 / Environment variable object
    */
-  private buildSessionEnvironment(
-    config: AgentConfig,
-    enableAgentTeams: boolean,
-  ): Record<string, string> {
+  private buildSessionEnvironment(config: AgentConfig): Record<string, string> {
     const authHeader = this.authProvider.getAuthHeader();
     const baseEnv: Record<string, string> = {};
 
@@ -224,11 +217,10 @@ export class V2SessionExecutor implements AgentExecutor {
       baseEnv.CLAUDE_CODE_OAUTH_TOKEN = token;
     }
 
-    if (enableAgentTeams) {
-      // WHY: Agent Teams는 '1'로 설정 시 활성화, 미설정 시 비활성화 (키 자체를 설정하지 않음)
-      baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1';
-      this.logger.debug('Agent Teams enabled', { phase: config.phase });
-    }
+    // WHY: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS를 서브프로세스에 전달하지 않음.
+    //      이 환경변수가 설정된 Claude Code CLI는 팀 에이전트 모드로 실행되어
+    //      orchestrator 메시지를 기다리다 hanging이 발생함.
+    //      현재 adev는 IPC 기반 팀 에이전트 통신을 구현하지 않으므로 항상 비활성화.
 
     return { ...baseEnv, ...(config.env ?? {}) };
   }
