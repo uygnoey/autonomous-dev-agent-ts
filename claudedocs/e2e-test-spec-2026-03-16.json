@@ -8,12 +8,12 @@
     "spec_version": "v2.4",
     "binary": "dist/index.js",
     "runtime": "bun 1.3.10",
-    "tester": "Agent Teams — tester 에이전트 (adev-e2e, adev-realrun, adev-realrun2 팀)",
-    "total_tests": 16,
+    "tester": "Agent Teams — tester 에이전트 (adev-e2e, adev-realrun, adev-realrun2, adev-authfix 팀)",
+    "total_tests": 17,
     "passed": 12,
     "failed": 0,
-    "blocked": 4,
-    "blocker_reason": "OAuth Token 인증 모드 사용 중 — 해당 계정 크레딧 부족. API Key 모드로 전환하거나 OAuth 계정 크레딧 충전 필요.",
+    "blocked": 5,
+    "blocker_reason": "ANTHROPIC_API_KEY 계정 크레딧 부족. 충전 후 C5 재실행 필요. (BUG-E2E-004 코드 수정 완료 — Layer1 API Key 강제화)",
     "test_runs": [
       {
         "run_id": "run-1",
@@ -46,6 +46,22 @@
         "path": "~/test/adev",
         "result": "0 PASS / 0 FAIL / 2 BLOCKED",
         "blocker": "동일 — OAuth Token 계정 크레딧 부족. HTTP 400 invalid_request_error."
+      },
+      {
+        "run_id": "run-5",
+        "team": "adev-authfix",
+        "date": "2026-03-16",
+        "suites": ["C"],
+        "path": "~/test/adev",
+        "result": "0 PASS / 0 FAIL / 1 BLOCKED",
+        "auth_mode_observed": "api-key (ANTHROPIC_API_KEY — BUG-E2E-004 수정 후 정상)",
+        "auth_fix_commit": "4fc6a9b",
+        "blocker": "API Key 계정 크레딧 부족 (HTTP 400). Layer1 강제화 코드 동작 확인됨.",
+        "verified": [
+          "API Key 인증 공급자 생성 성공",
+          "Layer1 세션 초기화 성공 (api-key 모드 검증 통과)",
+          "Claude API 요청 전송 도달 (크레딧 부족 에러 수신)"
+        ]
       }
     ]
   },
@@ -337,14 +353,38 @@
         },
         {
           "id": "C4",
+          "run_id": "run-5",
+          "command": "bun run dist/index.js start 'todo 리스트 앱 만들어줘'",
+          "description": "adev start — 4차 시도 (Layer1 API Key 강제화 코드 수정 후)",
+          "test_project_path": "~/test/adev",
+          "expected_exit": 0,
+          "actual_exit": 1,
+          "status": "BLOCKED",
+          "blocker_type": "external_resource",
+          "blocker_detail": {
+            "error_code": 400,
+            "error_type": "invalid_request_error",
+            "error_message": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+            "root_cause": "ANTHROPIC_API_KEY 계정 크레딧 부족. OAuth Token 우선 문제는 코드 수정으로 해결됨."
+          },
+          "auth_mode_verified": "api-key (Layer1 강제화 코드 동작 확인 — BUG-E2E-004 resolved)",
+          "fix_applied": "BUG-E2E-004 코드 수정 커밋 4fc6a9b",
+          "verified_before_fail": [
+            "API Key 인증 공급자 생성 성공",
+            "Layer1 세션 초기화 성공 (api-key 모드 검증 통과)",
+            "Claude API 요청 전송 도달 (크레딧 부족 에러 수신)"
+          ]
+        },
+        {
+          "id": "C5",
           "run_id": "pending",
-          "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 300 bun run dist/index.js start",
-          "description": "adev start — 4차 시도 (OAuth Token 계정 크레딧 충전 또는 API Key 모드 전환 후)",
+          "command": "cd ~/test/adev && printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n확정\\n' | timeout 300 bun run /Users/yeongyu.yang/autonomous-dev-agent-ts/dist/index.js start",
+          "description": "adev start — 5차 시도 (ANTHROPIC_API_KEY 계정 크레딧 충전 후)",
           "test_project_path": "~/test/adev",
           "expected_exit": 0,
           "actual_exit": null,
           "status": "PENDING",
-          "prerequisite": "다음 중 하나 필요: (1) ~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 제거하여 API Key 모드 강제 전환, 또는 (2) OAuth Token 연동 계정(Claude.ai)에서 크레딧 충전",
+          "prerequisite": "ANTHROPIC_API_KEY 계정(console.anthropic.com)에서 크레딧 충전",
           "pending_verification": [
             "Planner: 사용자 입력 → 구조화 계획서 생성",
             "Designer: 계획 + feature spec → 상세 설계 문서",
@@ -407,13 +447,19 @@
     },
     {
       "id": "BUG-E2E-004",
-      "severity": "info",
+      "severity": "high",
       "found_in_test": "C2, C3",
-      "title": "OAuth Token이 ANTHROPIC_API_KEY보다 우선 적용됨",
-      "root_cause": "~/.adev/.env에 CLAUDE_CODE_OAUTH_TOKEN과 ANTHROPIC_API_KEY 동시 존재 시 OAuth Token이 우선 로드됨. 크레딧은 API Key 계정에 있으나 OAuth 계정으로 요청 전송.",
-      "fix_description": "~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 제거 또는 주석 처리하여 API Key 모드 강제 전환",
-      "status": "pending",
-      "category": "user_config"
+      "title": "OAuth Token이 ANTHROPIC_API_KEY보다 우선 적용됨 — Layer1 인증 오동작",
+      "root_cause": "~/.adev/.env에 CLAUDE_CODE_OAUTH_TOKEN과 ANTHROPIC_API_KEY 동시 존재 시 OAuth Token이 우선 로드됨. Layer1 파이프라인은 직접 Anthropic API 호출 → API Key 필수, OAuth 미지원. loadEnvironment()가 OAuth Token 우선 반환.",
+      "fix_commit": "4fc6a9b",
+      "fix_files": ["src/cli/commands/start-session.ts", "src/layer2/v2-session-executor.ts"],
+      "fix_description": [
+        "start-session.ts: Layer1 진입점에서 authMode !== 'api-key' 시 명시적 에러 반환",
+        "v2-session-executor.ts: if/else if → 독립 if/if로 변경 — API Key + OAuth Token 동시 env 전달 (agent-sdk OAuth 지원)"
+      ],
+      "status": "resolved",
+      "verified_in": "run-5 — API Key 모드로 정상 실행 확인",
+      "category": "auth_architecture"
     }
   ],
 
@@ -421,8 +467,8 @@
     "bun_version": "1.3.10",
     "bun_known_bug": "1.3.4~1.3.10 — 테스트 완료 후 C++ SIGTRAP 크래시 (결과 무관)",
     "os": "darwin 25.2.0",
-    "auth_method_observed": "OAuth Token (CLAUDE_CODE_OAUTH_TOKEN 우선)",
-    "auth_key_masked": "sk-ant-oat01-s...BAAA",
+    "auth_method_observed": "API Key (run-5 기준 — Layer1 강제화 코드 적용 후)",
+    "auth_key_masked": "sk-ant-api03-oR0...QAA",
     "dist_size_mb": 1.77,
     "build_modules": 347,
     "model_observed": "claude-opus-4-6",
@@ -447,26 +493,30 @@
   "next_actions": [
     {
       "priority": 1,
-      "action": "OAuth Token 비활성화 — API Key 모드로 전환",
-      "command": "# ~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 줄 주석 처리\nsed -i '' 's/^CLAUDE_CODE_OAUTH_TOKEN=/#CLAUDE_CODE_OAUTH_TOKEN=/' ~/.adev/.env",
-      "reason": "ANTHROPIC_API_KEY 계정에 크레딧을 충전했으나 OAuth Token이 우선 적용됨"
+      "action": "ANTHROPIC_API_KEY 계정 크레딧 충전",
+      "url": "https://console.anthropic.com/settings/plans",
+      "reason": "BUG-E2E-004 코드 수정 완료 — Layer1 API Key 강제화 동작 확인. 이제 크레딧만 충전하면 C5 진행 가능",
+      "status": "pending"
     },
     {
       "priority": 2,
-      "action": "C4 테스트 실행 — Layer1 파이프라인 전체 검증",
-      "command": "cd ~/test/adev && printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 300 bun run /Users/yeongyu.yang/autonomous-dev-agent-ts/dist/index.js start 2>&1",
-      "prerequisite": "priority 1 완료 후"
+      "action": "C5 테스트 실행 — Layer1 파이프라인 전체 검증",
+      "command": "cd ~/test/adev && printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n확정\\n' | timeout 300 bun run /Users/yeongyu.yang/autonomous-dev-agent-ts/dist/index.js start 2>&1",
+      "prerequisite": "priority 1 (크레딧 충전) 완료 후",
+      "status": "pending"
     },
     {
       "priority": 3,
       "action": "Layer1 성공 확인 후 Layer2 DESIGN→CODE 전환까지 검증",
-      "note": "/quit 대신 충분한 대화 후 자연스러운 파이프라인 진행 관찰"
+      "note": "확정 입력 후 Planner~ContractBuilder 전체 + Layer2 오케스트레이션 진행 관찰",
+      "status": "pending"
     },
     {
       "priority": 4,
       "action": "npm publish 실행",
       "command": "cd /Users/yeongyu.yang/autonomous-dev-agent-ts && npm publish --access public",
-      "prerequisite": "Layer1 파이프라인 검증 완료 권장"
+      "prerequisite": "Layer1 파이프라인 검증 완료 권장",
+      "status": "pending"
     }
   ]
 }
