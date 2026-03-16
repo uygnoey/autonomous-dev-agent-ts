@@ -193,6 +193,12 @@ export class DocIntegrator implements IDocIntegrator {
         return err(error);
       }
 
+      // WHY: 빈 outputDir은 Glob 패턴이 `/**/*.md`가 되어 ENOENT 발생
+      if (!outputDir || outputDir.trim() === '') {
+        this.logger.info('outputDir이 비어 있음 — 빈 문서 배열 반환', { projectId });
+        return ok([]);
+      }
+
       this.logger.info('모든 프로젝트 문서 생성 시작', { projectId, outputDir });
 
       const templatesResult = await this.listTemplates(true);

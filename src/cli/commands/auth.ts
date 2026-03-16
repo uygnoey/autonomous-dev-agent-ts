@@ -17,13 +17,13 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import * as readline from 'node:readline';
 import { OAuthExpiryChecker } from 'auth/oauth-expiry-checker.js';
 import { formatOAuthExpiryWarning } from 'cli/tui/renderer.js';
 import { AuthError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
-import * as readline from 'node:readline';
 
 // ── 헬퍼 / Helpers ────────────────────────────────────────────
 
@@ -214,7 +214,8 @@ export class AuthCommand {
     process.stdout.write('  3) 취소 / Cancel\n');
     process.stdout.write('\n선택 (1-3): ');
     const methodInput = await readLine();
-    const method = methodInput.trim() === '2' ? 'oauth' : methodInput.trim() === '3' ? 'cancel' : 'apikey';
+    const method =
+      methodInput.trim() === '2' ? 'oauth' : methodInput.trim() === '3' ? 'cancel' : 'apikey';
 
     if (method === 'cancel') {
       process.stdout.write('\n취소되었습니다 / Cancelled\n\n');

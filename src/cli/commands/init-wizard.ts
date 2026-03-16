@@ -47,15 +47,15 @@ async function selectFromMenu<T extends string>(
       rl.close();
       const trimmed = line.trim();
       if (trimmed === '') {
-        resolve(options[defaultIndex]!.value);
+        resolve(options[defaultIndex]?.value as T);
         return;
       }
-      const idx = parseInt(trimmed, 10) - 1;
+      const idx = Number.parseInt(trimmed, 10) - 1;
       if (idx >= 0 && idx < options.length) {
-        resolve(options[idx]!.value);
+        resolve(options[idx]?.value as T);
       } else {
         // WHY: 범위 밖 입력 → 기본값으로 fallback
-        resolve(options[defaultIndex]!.value);
+        resolve(options[defaultIndex]?.value as T);
       }
     });
   });
@@ -108,7 +108,7 @@ export async function promptAndSaveToken(
   logger: Logger,
   interactive = true,
 ): Promise<Result<void, ConfigError>> {
-  if (!interactive || !(process.stdin.isTTY && process.stdout.isTTY)) {
+  if (!(interactive && process.stdin.isTTY && process.stdout.isTTY)) {
     return ok(undefined);
   }
 
@@ -141,14 +141,14 @@ export async function promptAndSaveToken(
     });
 
     if (!input) {
-      process.stdout.write(
-        `\n⚠️  건너뜁니다. 나중에 adev auth 명령어로 설정하세요.\n\n`,
-      );
+      process.stdout.write('\n⚠️  건너뜁니다. 나중에 adev auth 명령어로 설정하세요.\n\n');
       return ok(undefined);
     }
 
     if (!input.startsWith('sk-ant-')) {
-      process.stdout.write(`❌ 올바르지 않은 형식입니다. sk-ant- 로 시작해야 합니다. 다시 입력하세요.\n`);
+      process.stdout.write(
+        '❌ 올바르지 않은 형식입니다. sk-ant- 로 시작해야 합니다. 다시 입력하세요.\n',
+      );
       continue;
     }
 
@@ -169,7 +169,7 @@ export async function promptAndSaveToken(
     }
     const lines = existing.split('\n').filter((l) => !l.startsWith(`${envVar}=`));
     lines.push(`${envVar}=${token}`);
-    await writeFile(envFile, lines.filter(Boolean).join('\n') + '\n', 'utf-8');
+    await writeFile(envFile, `${lines.filter(Boolean).join('\n')}\n`, 'utf-8');
 
     process.stdout.write(`\n✅ ${envVar} 저장 완료 → ${envFile}\n\n`);
     logger.debug('토큰 저장 완료', { envVar, envFile });

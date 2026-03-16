@@ -3,6 +3,7 @@
   "version": "0.0.1-alpha",
   "description": "Claude Code Skills + RAG autonomous development agent",
   "type": "module",
+  "main": "./dist/index.js",
   "bin": {
     "adev": "./dist/index.js"
   },
@@ -41,7 +42,7 @@
     "build": "bun build src/index.ts --outdir ./dist --target bun",
     "prepare": "bun build src/index.ts --outdir ./dist --target bun",
     "postinstall": "echo '\\n[adev] 네이티브 바이너리 설치를 위해 bun install을 실행하세요. / Run bun install for native binaries.\\n'",
-    "prepublishOnly": "bun run check",
+    "prepublishOnly": "bun run typecheck && bun run lint",
     "test": "bun run test:unit && bun run test:module && bun run test:e2e",
     "test:unit": "bun test tests/unit/",
     "test:module": "bun test tests/module/cli-integration.test.ts tests/module/core-auth.test.ts tests/module/core-mcp.test.ts tests/module/layer1-rag.test.ts tests/module/layer2-auth.test.ts tests/module/layer2-layer1.test.ts tests/module/layer3-layer2.test.ts && bash scripts/test-lancedb.sh tests/module/core-rag.test.ts",
@@ -74,7 +75,8 @@
     "typescript": "^5.7.0"
   },
   "engines": {
-    "bun": ">=1.1.0"
+    "bun": ">=1.1.0",
+    "node": ">=99.0.0"
   },
   "publishConfig": {
     "access": "public",

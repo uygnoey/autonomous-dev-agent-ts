@@ -39,10 +39,7 @@ const MAX_WORKERS = 16;
  * @param logger - 로거 인스턴스 / Logger instance
  * @returns 사용할 워커 수 / Worker count to use
  */
-export function resolveParallelWorkers(
-  workers: number | 'auto',
-  logger: Logger,
-): number {
+export function resolveParallelWorkers(workers: number | 'auto', logger: Logger): number {
   if (workers !== 'auto') {
     const clamped = Math.max(MIN_WORKERS, Math.min(MAX_WORKERS, workers));
     logger.debug('parallel_workers: 고정값 사용', { configured: workers, resolved: clamped });
@@ -74,13 +71,17 @@ function calculateAutoWorkers(logger: Logger): number {
   const usageRatio = 1 - free / total;
 
   // WHY: 메모리 80% 초과 시 CPU 기반 상한 절반으로 축소 (안전장치)
-  const cpuBased = usageRatio > MEMORY_SAFE_CEILING
-    ? Math.max(MIN_WORKERS, Math.floor((coreCount - 1) / 2))
-    : Math.max(MIN_WORKERS, coreCount - 1);
+  const cpuBased =
+    usageRatio > MEMORY_SAFE_CEILING
+      ? Math.max(MIN_WORKERS, Math.floor((coreCount - 1) / 2))
+      : Math.max(MIN_WORKERS, coreCount - 1);
 
   // WHY: 사용 가능 메모리의 80% 기준으로 워커당 512MB 확보
   const availableBytes = free * MEMORY_SAFE_CEILING;
-  const memoryBased = Math.max(MIN_WORKERS, Math.floor(availableBytes / MIN_MEMORY_PER_WORKER_BYTES));
+  const memoryBased = Math.max(
+    MIN_WORKERS,
+    Math.floor(availableBytes / MIN_MEMORY_PER_WORKER_BYTES),
+  );
 
   const resolved = Math.min(cpuBased, memoryBased, MAX_WORKERS);
 

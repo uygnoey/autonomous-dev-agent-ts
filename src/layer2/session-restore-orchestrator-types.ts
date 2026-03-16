@@ -8,8 +8,8 @@
 
 import type { AuthProvider } from 'auth/types.js';
 import type { Logger } from 'core/logger.js';
-import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
+import type { TokenMonitor } from 'layer2/token-monitor.js';
 
 // ── 기본 상수 / Default constants ────────────────────────────────
 

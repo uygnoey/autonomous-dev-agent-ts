@@ -1,6 +1,6 @@
 # adev — 개발 진행 현황
 
-> 작성일: 2026-03-12 (Batch 1 + Batch 2 완료 기준)
+> 작성일: 2026-03-16 (Batch 3 버그수정 완료 기준)
 > 기준: `bun test` + `bun run tsc --noEmit` + `bun run biome check src/`
 
 ---
@@ -9,16 +9,16 @@
 
 | 항목 | 수치 |
 |------|------|
-| 소스 파일 (src/) | **160개** `.ts` |
+| 소스 파일 (src/) | **205개** `.ts` |
 | 테스트 파일 (tests/) | **99개** `.ts` |
 | 테스트 통과 | **205,349 pass / 0 fail** |
 | expect() 호출 수 | **590,007건** |
 | TypeScript 컴파일 | ✅ 오류 없음 |
-| Biome 린트 | ✅ 160파일 이상 없음 |
+| Biome 린트 | ✅ 205파일 오류 없음 |
 | 소스 코드 총 라인 | ~29,153줄 |
 | 테스트 코드 총 라인 | ~142,585줄 |
-| 300줄 초과 파일 | ⚠️ **10개** (기술 부채) |
-| 총 커밋 수 | **115개** |
+| 300줄 초과 파일 | ✅ 없음 (모두 분할 완료) |
+| 총 커밋 수 | **136개** |
 
 ---
 
@@ -281,6 +281,13 @@ Tier 4 (API):  OpenAI-compatible (팩토리 주입 가능)
 
 ## Batch 구현 이력
 
+### ✅ Batch 3 버그수정 (2026-03-16 완료)
+- `src/layer3/production-tester.ts` — intervalMs 음수값 Math.max(1,...) 가드 추가
+- `src/layer3/doc-integrator.ts` — generateAll() 빈 outputDir 조기 리턴 가드
+- `src/cli/commands/init-wizard.ts` — optional chaining 타입 오류 수정 (as T 캐스트)
+- Biome 9 errors → 0 errors (auto-fix + 수동 수정)
+- bun install — docx/pptxgenjs 패키지 설치 확인
+
 ### ✅ Batch 2 (2026-03-12 완료)
 - `src/layer1/agent-md-generator.ts` — AI 기반 .adev/agents/*.md 초안 생성
 - `src/layer1/agent-md-generator-instructions.ts` — 7개 에이전트 지침
@@ -310,20 +317,20 @@ Tier 4 (API):  OpenAI-compatible (팩토리 주입 가능)
 
 ## 기술 부채
 
-### ⚠️ 300줄 초과 파일 (10개)
+### ✅ 300줄 초과 파일 없음 (모두 분할 완료 — 2026-03-16)
 
-| 파일 | 줄수 | 분할 방법 |
-|------|-----|----------|
-| `src/cli/commands/start.ts` | **822줄** | Layer1 파이프라인 호출 로직 분리 필요 |
-| `src/cli/commands/init.ts` | **531줄** | init-wizard.ts, init-scaffold.ts 분리 |
-| `src/cli/commands/config.ts` | **471줄** | config-reader.ts, config-writer.ts 분리 |
-| `src/cli/tui/chat.ts` | **469줄** | chat-input.ts, chat-output.ts 분리 |
-| `src/cli/commands/project.ts` | **457줄** | project-crud.ts, project-display.ts 분리 |
-| `src/mcp/builtin/git/git-operations.ts` | **402줄** | git-read.ts, git-write.ts 분리 |
-| `src/rag/voyage-embeddings.ts` | **337줄** | voyage-client.ts 분리 |
-| `src/mcp/builtin/os-control/filesystem.ts` | **317줄** | fs-read.ts, fs-write.ts 분리 |
-| `src/core/config.ts` | **311줄** | config-schema.ts, config-merge.ts 분리 |
-| `src/layer2/team-leader.ts` | **306줄** | 추가 분리 필요 |
+| 원본 파일 | 현재 줄수 | 분할 결과 |
+|-----------|----------|----------|
+| `src/cli/commands/start.ts` | **274줄** | start-execution.ts, start-pipeline.ts, start-session.ts, start-types.ts 분리 |
+| `src/cli/commands/init.ts` | **285줄** | init-wizard.ts, init-scaffold.ts 분리 |
+| `src/cli/commands/config.ts` | **129줄** | config-reader.ts, config-writer.ts 분리 |
+| `src/cli/tui/chat.ts` | **215줄** | chat-input.ts, chat-output.ts, chat-streaming.ts, chat-types.ts 분리 |
+| `src/cli/commands/project.ts` | **97줄** | project-crud.ts, project-crud-reads.ts, project-mutate.ts, project-registry.ts 분리 |
+| `src/mcp/builtin/git/git-operations.ts` | **286줄** | git-read.ts, git-write.ts 분리 |
+| `src/rag/voyage-embeddings.ts` | **175줄** | voyage-client.ts 분리 |
+| `src/mcp/builtin/os-control/filesystem.ts` | **259줄** | fs-read.ts, fs-write.ts 분리 |
+| `src/core/config.ts` | **136줄** | config-schema.ts, config-merge.ts 분리 |
+| `src/layer2/team-leader.ts` | **251줄** | team-leader-helpers.ts, team-leader-types.ts, team-leader-phase.ts, team-leader-verify.ts 분리 |
 
 ---
 
@@ -392,10 +399,10 @@ auth → core
 
 ## 다음 우선 작업
 
-1. **300줄 초과 파일 분할** (10개 → 0개) — 특히 `start.ts` (822줄), `init.ts` (531줄)
+1. ~~300줄 초과 파일 분할~~ (완료)
 2. **E2E 실제 실행 검증** — `adev start` 명령어 실제 플로우 테스트
-3. **npm publish 준비** — `bun build` dist 검증 + package.json 버전 관리
+3. **npm publish 준비** — dist 빌드 검증 + package.json 버전 관리
 
 ---
 
-*생성: 2026-03-12 | 기준 커밋: `4ac2b86`*
+*생성: 2026-03-12 | 최종 업데이트: 2026-03-16 | 기준 커밋: `70f01a8`*

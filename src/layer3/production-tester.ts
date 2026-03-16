@@ -89,7 +89,7 @@ export class ProductionTester implements IProductionTester {
       projectId: options.projectId,
       config: {
         testPath: options.testPath,
-        intervalMs: options.intervalMs ?? DEFAULT_INTERVAL_MS,
+        intervalMs: Math.max(1, options.intervalMs ?? DEFAULT_INTERVAL_MS),
         failFast: options.failFast ?? DEFAULT_FAIL_FAST,
       },
       status: 'running',
@@ -178,9 +178,12 @@ export class ProductionTester implements IProductionTester {
       );
     }
 
-    const timer = setInterval(() => {
-      void this._runOnce(sessionId);
-    }, session.config.intervalMs);
+    const timer = setInterval(
+      () => {
+        void this._runOnce(sessionId);
+      },
+      Math.max(1, session.config.intervalMs),
+    );
     this.timers.set(sessionId, timer);
     session.status = 'running';
     this.logger.info('지속 E2E 실행 재개', { sessionId });
