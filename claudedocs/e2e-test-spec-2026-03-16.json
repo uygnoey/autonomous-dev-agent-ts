@@ -1,0 +1,308 @@
+{
+  "meta": {
+    "title": "adev CLI E2E 테스트 명세서",
+    "version": "1.0.0",
+    "generated_at": "2026-03-16",
+    "project": "autonomous-dev-agent-ts",
+    "spec_version": "v2.4",
+    "binary": "dist/index.js",
+    "runtime": "bun 1.3.10",
+    "tester": "Agent Teams — tester 에이전트 (adev-e2e, adev-realrun 팀)",
+    "total_tests": 14,
+    "passed": 12,
+    "failed": 0,
+    "blocked": 2,
+    "notes": "모든 실패/블록은 코드 문제가 아닌 외부 환경 문제 (크레딧 부족, TTY 필요)"
+  },
+
+  "exit_codes": {
+    "SUCCESS": 0,
+    "GENERAL_ERROR": 1,
+    "INVALID_USAGE": 2,
+    "NOT_FOUND": 3,
+    "PERMISSION_DENIED": 4,
+    "AUTH_ERROR": 5
+  },
+
+  "test_suites": [
+    {
+      "suite": "A",
+      "name": "사이드이펙트 없는 명령어",
+      "description": "읽기 전용 또는 도움말 명령어. 파일 변경 없음.",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "tests": [
+        {
+          "id": "A1",
+          "command": "bun run dist/index.js --help",
+          "description": "전역 도움말 출력",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["init", "start", "auth", "config", "project"],
+          "side_effects": "없음"
+        },
+        {
+          "id": "A2",
+          "command": "bun run dist/index.js",
+          "description": "인자 없이 실행 — 도움말 출력",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["도움말"],
+          "side_effects": "없음"
+        },
+        {
+          "id": "A3",
+          "command": "bun run dist/index.js --version",
+          "description": "버전 출력",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["adev v0.0.1-alpha"],
+          "side_effects": "없음"
+        },
+        {
+          "id": "A4",
+          "command": "bun run dist/index.js unknowncmd",
+          "description": "알 수 없는 명령어 — INVALID_USAGE exit code",
+          "expected_exit": 2,
+          "actual_exit": 2,
+          "status": "PASS",
+          "output_contains": ["Unknown argument: unknowncmd"],
+          "side_effects": "없음",
+          "fix_applied": {
+            "file": "src/cli/main.ts",
+            "description": "catch 블록에서 yargs 파싱 에러 감지 시 EXIT_CODES.INVALID_USAGE(2) 반환",
+            "was_exit_code": 1
+          }
+        },
+        {
+          "id": "A5",
+          "command": "bun run dist/index.js auth --status",
+          "description": "인증 상태 표시 — 키 마스킹",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["OAuth Token", "sk-ant-oat01-s..."],
+          "side_effects": "없음"
+        },
+        {
+          "id": "A6",
+          "command": "bun run dist/index.js config list",
+          "description": "전체 설정 JSON 출력",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["log", "level"],
+          "side_effects": "없음"
+        },
+        {
+          "id": "A7",
+          "command": "bun run dist/index.js config get log.level",
+          "description": "dot notation 키로 설정값 조회",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["log.level = \"warn\""],
+          "side_effects": "없음",
+          "fix_applied": {
+            "files": ["src/cli/main.ts", "src/index.ts"],
+            "description": [
+              "main.ts: config/setting 명령어에 [args..] positional 추가",
+              "main.ts: .parserConfiguration({'dot-notation': false}) 추가",
+              "index.ts: config 핸들러 args 조합 로직을 parsed.args 기반으로 수정"
+            ],
+            "was_error": "Unknown argument: log.level (yargs dot-notation 파싱 충돌)"
+          }
+        },
+        {
+          "id": "A8",
+          "command": "bun run dist/index.js project list",
+          "description": "등록된 프로젝트 목록 출력",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["프로젝트"],
+          "side_effects": "없음"
+        }
+      ]
+    },
+    {
+      "suite": "B",
+      "name": "사이드이펙트 있는 명령어 (/tmp 격리)",
+      "description": "파일 생성 / projects.json 수정 포함. /tmp 임시 경로 사용, 테스트 후 복원.",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "setup": "cp ~/.adev/projects.json /tmp/projects.json.bak",
+      "teardown": "rm -rf /tmp/adev-e2e-test && cp /tmp/projects.json.bak ~/.adev/projects.json",
+      "tests": [
+        {
+          "id": "B1",
+          "command": "bun run dist/index.js init --yes /tmp/adev-e2e-test",
+          "description": "프로젝트 초기화 — .adev/ 디렉토리 생성, projects.json 업데이트",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["초기화", "ID"],
+          "side_effects": "/tmp/adev-e2e-test/.adev/ 생성, ~/.adev/projects.json 수정"
+        },
+        {
+          "id": "B2",
+          "command": "bun run dist/index.js init --yes /tmp/adev-e2e-test (재실행)",
+          "description": "이미 초기화된 경로 재실행 — 에러 반환",
+          "expected_exit": 1,
+          "actual_exit": 1,
+          "status": "PASS",
+          "output_contains": ["이미 초기화"],
+          "side_effects": "없음"
+        },
+        {
+          "id": "B3",
+          "command": "bun run dist/index.js project list (B1 후)",
+          "description": "B1 이후 프로젝트 수 증가 확인",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "output_contains": ["adev-e2e-test"],
+          "side_effects": "없음 (읽기)"
+        },
+        {
+          "id": "B4",
+          "command": "bun run dist/index.js config list",
+          "description": "초기화된 프로젝트의 설정 확인",
+          "expected_exit": 0,
+          "actual_exit": 0,
+          "status": "PASS",
+          "side_effects": "없음 (읽기)"
+        }
+      ]
+    },
+    {
+      "suite": "C",
+      "name": "실제 API 호출 — adev start 플로우",
+      "description": "Claude API 실제 호출. Layer1 파이프라인(Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder) 동작 검증.",
+      "total": 2,
+      "passed": 0,
+      "blocked": 2,
+      "tests": [
+        {
+          "id": "C1",
+          "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 180 bun run dist/index.js start",
+          "description": "adev start — Layer1 파이프라인 전체 실행 (크레딧 필요)",
+          "expected_exit": 0,
+          "actual_exit": null,
+          "status": "BLOCKED",
+          "blocker": "Anthropic API 크레딧 부족 — HTTP 400 'Your credit balance is too low'",
+          "blocker_type": "external_resource",
+          "verified_items": [
+            "CLI init/switch/remove 정상",
+            "REPL 진입 + TUI 렌더링 정상",
+            "API Key 인증 공급자 생성 정상",
+            "Claude API 요청 전송 시도 정상"
+          ],
+          "pending_verification": [
+            "Planner 응답 수신 및 파싱",
+            "Designer 동작",
+            "SpecBuilder 동작",
+            "TestTypeDesigner 동작",
+            "ContractBuilder 동작",
+            "Layer2 HandoffPackage 전달",
+            "DESIGN→CODE Phase 전환",
+            "coder 에이전트 스폰"
+          ]
+        },
+        {
+          "id": "C2",
+          "command": "printf '/quit\\n' | timeout 180 bun run dist/index.js start '간단한 계산기'",
+          "description": "adev start — feature 인자 직접 전달",
+          "expected_exit": 0,
+          "actual_exit": null,
+          "status": "BLOCKED",
+          "blocker": "C1과 동일 — API 크레딧 부족",
+          "blocker_type": "external_resource"
+        }
+      ]
+    }
+  ],
+
+  "bugs_found_and_fixed": [
+    {
+      "id": "BUG-E2E-001",
+      "severity": "medium",
+      "test_id": "A4",
+      "title": "unknown command 시 exit code 1 반환 (기대: 2)",
+      "root_cause": "yargs .strict() 에러가 catch 블록에서 GENERAL_ERROR(1)로 처리",
+      "fix_file": "src/cli/main.ts",
+      "fix_description": "catch 블록에서 yargs 파싱 에러 패턴 감지 시 EXIT_CODES.INVALID_USAGE(2) 반환",
+      "status": "resolved"
+    },
+    {
+      "id": "BUG-E2E-002",
+      "severity": "medium",
+      "test_id": "A7",
+      "title": "config get log.level dot notation 미지원",
+      "root_cause_steps": [
+        "1. main.ts: config 명령어가 'config <sub>'로 정의 — [args..] positional 없음",
+        "2. main.ts: yargs 기본 dot-notation 파싱이 log.level을 nested 옵션으로 해석",
+        "3. index.ts: config 핸들러가 parsed._ 기반 slice로 args 조합 — parsed.args 무시"
+      ],
+      "fix_files": ["src/cli/main.ts", "src/index.ts"],
+      "fix_description": [
+        "main.ts: 'config <sub>' → 'config <sub> [args..]', 'setting <sub>' → 'setting <sub> [args..]'",
+        "main.ts: .parserConfiguration({'dot-notation': false}) 추가",
+        "index.ts: config 핸들러 args 조합을 parsed.args 기반으로 수정 (project 핸들러 패턴 적용)"
+      ],
+      "status": "resolved"
+    },
+    {
+      "id": "BUG-E2E-003",
+      "severity": "low",
+      "test_id": "C1",
+      "title": "~/.adev/.env의 ANTHROPIC_API_KEY 오타",
+      "root_cause": "ANTHRPIC_API_KEY (O 누락) → OAuth 모드로 fallback → API 401",
+      "fix_description": "~/.adev/.env에서 ANTHRPIC_API_KEY → ANTHROPIC_API_KEY 수정",
+      "status": "resolved",
+      "note": "코드 버그 아님 — 사용자 설정 오타"
+    }
+  ],
+
+  "environment": {
+    "bun_version": "1.3.10",
+    "os": "darwin 25.2.0",
+    "auth_method": "ANTHROPIC_API_KEY (API Key)",
+    "auth_status": "설정됨 (크레딧 부족)",
+    "dist_size_mb": 1.77,
+    "build_modules": 347
+  },
+
+  "coverage_summary": {
+    "cli_routing": "PASS — 모든 명령어 라우팅 정상",
+    "auth_flow": "PASS — API Key 모드 정상 인증",
+    "tui_rendering": "PASS — TUI 정상 렌더링",
+    "layer1_pipeline": "BLOCKED — API 크레딧 필요",
+    "layer2_orchestration": "BLOCKED — Layer1 이후 단계",
+    "layer3_output": "BLOCKED — Layer2 이후 단계"
+  },
+
+  "next_actions": [
+    {
+      "priority": 1,
+      "action": "Anthropic API 크레딧 충전",
+      "reason": "C1/C2 테스트 (Layer1 파이프라인 전체) 검증 필요"
+    },
+    {
+      "priority": 2,
+      "action": "adev start 재실행 — Layer1 전체 플로우 검증",
+      "command": "printf '간단한 덧셈/뺄셈 계산기 기능\\n/quit\\n' | timeout 300 bun run dist/index.js start 2>&1"
+    },
+    {
+      "priority": 3,
+      "action": "npm publish 실행",
+      "command": "npm publish --access public",
+      "prerequisite": "credientials 충전 및 C 카테고리 검증 완료 권장"
+    }
+  ]
+}
