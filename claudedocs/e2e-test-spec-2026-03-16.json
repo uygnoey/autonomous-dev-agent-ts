@@ -1,18 +1,53 @@
 {
   "meta": {
     "title": "adev CLI E2E 테스트 명세서",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "generated_at": "2026-03-16",
+    "last_updated": "2026-03-16",
     "project": "autonomous-dev-agent-ts",
     "spec_version": "v2.4",
     "binary": "dist/index.js",
     "runtime": "bun 1.3.10",
-    "tester": "Agent Teams — tester 에이전트 (adev-e2e, adev-realrun 팀)",
-    "total_tests": 14,
+    "tester": "Agent Teams — tester 에이전트 (adev-e2e, adev-realrun, adev-realrun2 팀)",
+    "total_tests": 16,
     "passed": 12,
     "failed": 0,
-    "blocked": 2,
-    "notes": "모든 실패/블록은 코드 문제가 아닌 외부 환경 문제 (크레딧 부족, TTY 필요)"
+    "blocked": 4,
+    "blocker_reason": "OAuth Token 인증 모드 사용 중 — 해당 계정 크레딧 부족. API Key 모드로 전환하거나 OAuth 계정 크레딧 충전 필요.",
+    "test_runs": [
+      {
+        "run_id": "run-1",
+        "team": "adev-e2e",
+        "date": "2026-03-16",
+        "suites": ["A", "B"],
+        "result": "12 PASS / 0 FAIL"
+      },
+      {
+        "run_id": "run-2",
+        "team": "adev-realrun",
+        "date": "2026-03-16",
+        "suites": ["C"],
+        "result": "0 PASS / 0 FAIL / 2 BLOCKED",
+        "blocker": "~/.adev/.env ANTHRPIC_API_KEY 오타 → OAuth 모드 fallback → 401 OAuth not supported"
+      },
+      {
+        "run_id": "run-3",
+        "team": "adev-realrun",
+        "date": "2026-03-16",
+        "suites": ["C"],
+        "result": "0 PASS / 0 FAIL / 2 BLOCKED",
+        "blocker": "API Key 오타 수정 후 재시도 — 여전히 OAuth Token 우선 적용, 해당 계정 크레딧 부족"
+      },
+      {
+        "run_id": "run-4",
+        "team": "adev-realrun2",
+        "date": "2026-03-16",
+        "suites": ["C"],
+        "path": "~/test/adev",
+        "result": "0 PASS / 0 FAIL / 2 BLOCKED",
+        "blocker": "동일 — OAuth Token 계정 크레딧 부족. HTTP 400 invalid_request_error."
+      }
+    ]
   },
 
   "exit_codes": {
@@ -32,6 +67,7 @@
       "total": 8,
       "passed": 8,
       "failed": 0,
+      "run_id": "run-1",
       "tests": [
         {
           "id": "A1",
@@ -40,7 +76,7 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["init", "start", "auth", "config", "project"],
+          "actual_output_sample": "adev <command> [options]\n  init, start, auth, config, setting, project",
           "side_effects": "없음"
         },
         {
@@ -50,7 +86,7 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["도움말"],
+          "actual_output_sample": "A1과 동일 도움말 출력",
           "side_effects": "없음"
         },
         {
@@ -60,7 +96,7 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["adev v0.0.1-alpha"],
+          "actual_output_sample": "adev v0.0.1-alpha",
           "side_effects": "없음"
         },
         {
@@ -70,13 +106,23 @@
           "expected_exit": 2,
           "actual_exit": 2,
           "status": "PASS",
-          "output_contains": ["Unknown argument: unknowncmd"],
+          "actual_output_sample": "Unknown argument: unknowncmd",
           "side_effects": "없음",
-          "fix_applied": {
-            "file": "src/cli/main.ts",
-            "description": "catch 블록에서 yargs 파싱 에러 감지 시 EXIT_CODES.INVALID_USAGE(2) 반환",
-            "was_exit_code": 1
-          }
+          "iterations": [
+            {
+              "attempt": 1,
+              "actual_exit": 1,
+              "status": "FAIL",
+              "note": "yargs strict 에러가 catch에서 GENERAL_ERROR(1)로 처리됨"
+            },
+            {
+              "attempt": 2,
+              "actual_exit": 2,
+              "status": "PASS",
+              "note": "BUG-E2E-001 수정 후"
+            }
+          ],
+          "bug_fixed": "BUG-E2E-001"
         },
         {
           "id": "A5",
@@ -85,7 +131,7 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["OAuth Token", "sk-ant-oat01-s..."],
+          "actual_output_sample": "✅ 인증 상태 / Auth Status\n   방법 / Method: OAuth Token\n   키 / Key:    sk-ant-oat01-s...BAAA",
           "side_effects": "없음"
         },
         {
@@ -95,7 +141,7 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["log", "level"],
+          "actual_output_sample": "{\"log\":{\"level\":\"warn\"}, \"model\":\"claude-opus-4-6\", ...}",
           "side_effects": "없음"
         },
         {
@@ -105,17 +151,29 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["log.level = \"warn\""],
+          "actual_output_sample": "log.level = \"warn\"",
           "side_effects": "없음",
-          "fix_applied": {
-            "files": ["src/cli/main.ts", "src/index.ts"],
-            "description": [
-              "main.ts: config/setting 명령어에 [args..] positional 추가",
-              "main.ts: .parserConfiguration({'dot-notation': false}) 추가",
-              "index.ts: config 핸들러 args 조합 로직을 parsed.args 기반으로 수정"
-            ],
-            "was_error": "Unknown argument: log.level (yargs dot-notation 파싱 충돌)"
-          }
+          "iterations": [
+            {
+              "attempt": 1,
+              "actual_exit": 1,
+              "status": "FAIL",
+              "error": "Unknown argument: log.level (yargs dot-notation 파싱 충돌)"
+            },
+            {
+              "attempt": 2,
+              "actual_exit": 1,
+              "status": "FAIL",
+              "note": "dot-notation: false 추가 후에도 FAIL — index.ts args 조합 버그 미수정"
+            },
+            {
+              "attempt": 3,
+              "actual_exit": 0,
+              "status": "PASS",
+              "note": "BUG-E2E-002 완전 수정 후"
+            }
+          ],
+          "bug_fixed": "BUG-E2E-002"
         },
         {
           "id": "A8",
@@ -124,20 +182,21 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["프로젝트"],
+          "actual_output_sample": "총 1885개 프로젝트 목록 출력",
           "side_effects": "없음"
         }
       ]
     },
     {
       "suite": "B",
-      "name": "사이드이펙트 있는 명령어 (/tmp 격리)",
+      "name": "사이드이펙트 있는 명령어",
       "description": "파일 생성 / projects.json 수정 포함. /tmp 임시 경로 사용, 테스트 후 복원.",
       "total": 4,
       "passed": 4,
       "failed": 0,
+      "run_id": "run-1",
       "setup": "cp ~/.adev/projects.json /tmp/projects.json.bak",
-      "teardown": "rm -rf /tmp/adev-e2e-test && cp /tmp/projects.json.bak ~/.adev/projects.json",
+      "teardown": "rm -rf /tmp/adev-e2e-test && cp /tmp/projects.json.bak ~/.adev/projects.json && rm /tmp/projects.json.bak",
       "tests": [
         {
           "id": "B1",
@@ -146,27 +205,27 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["초기화", "ID"],
-          "side_effects": "/tmp/adev-e2e-test/.adev/ 생성, ~/.adev/projects.json 수정"
+          "actual_output_sample": "프로젝트 초기화 완료, projectId 발급, 글로벌 활성 프로젝트로 설정",
+          "side_effects": "/tmp/adev-e2e-test/.adev/ 생성, ~/.adev/projects.json 수정 (1885→1886개)"
         },
         {
           "id": "B2",
-          "command": "bun run dist/index.js init --yes /tmp/adev-e2e-test (재실행)",
+          "command": "bun run dist/index.js init --yes /tmp/adev-e2e-test",
           "description": "이미 초기화된 경로 재실행 — 에러 반환",
           "expected_exit": 1,
           "actual_exit": 1,
           "status": "PASS",
-          "output_contains": ["이미 초기화"],
-          "side_effects": "없음"
+          "actual_output_sample": "이미 초기화된 프로젝트입니다",
+          "side_effects": "없음 (쓰기 없음)"
         },
         {
           "id": "B3",
-          "command": "bun run dist/index.js project list (B1 후)",
-          "description": "B1 이후 프로젝트 수 증가 확인",
+          "command": "bun run dist/index.js project list",
+          "description": "B1 이후 프로젝트 수 증가 + 활성 프로젝트 변경 확인",
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
-          "output_contains": ["adev-e2e-test"],
+          "actual_output_sample": "adev-e2e-test 프로젝트 목록에 노출, 글로벌 활성으로 표시",
           "side_effects": "없음 (읽기)"
         },
         {
@@ -176,53 +235,129 @@
           "expected_exit": 0,
           "actual_exit": 0,
           "status": "PASS",
+          "actual_output_sample": "프로젝트 설정 JSON 출력",
           "side_effects": "없음 (읽기)"
         }
       ]
     },
     {
       "suite": "C",
-      "name": "실제 API 호출 — adev start 플로우",
-      "description": "Claude API 실제 호출. Layer1 파이프라인(Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder) 동작 검증.",
-      "total": 2,
+      "name": "실제 API 호출 — adev start 전체 플로우",
+      "description": "Claude API 실제 호출. Layer1 파이프라인(Planner → Designer → SpecBuilder → TestTypeDesigner → ContractBuilder) → Layer2 오케스트레이션(DESIGN→CODE→TEST→VERIFY) 동작 검증.",
+      "total": 4,
       "passed": 0,
-      "blocked": 2,
+      "failed": 0,
+      "blocked": 4,
       "tests": [
         {
           "id": "C1",
+          "run_id": "run-2",
           "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 180 bun run dist/index.js start",
-          "description": "adev start — Layer1 파이프라인 전체 실행 (크레딧 필요)",
+          "description": "adev start — 1차 시도 (API Key 오타 상태)",
+          "test_project_path": "/tmp/adev-e2e-real2",
           "expected_exit": 0,
-          "actual_exit": null,
+          "actual_exit": 1,
           "status": "BLOCKED",
-          "blocker": "Anthropic API 크레딧 부족 — HTTP 400 'Your credit balance is too low'",
-          "blocker_type": "external_resource",
-          "verified_items": [
-            "CLI init/switch/remove 정상",
-            "REPL 진입 + TUI 렌더링 정상",
-            "API Key 인증 공급자 생성 정상",
-            "Claude API 요청 전송 시도 정상"
+          "blocker_type": "environment",
+          "blocker_detail": {
+            "error_code": 401,
+            "error_type": "authentication_error",
+            "error_message": "OAuth authentication is currently not supported.",
+            "root_cause": "~/.adev/.env에 ANTHRPIC_API_KEY (오타) 존재 → ANTHROPIC_API_KEY 미로드 → CLAUDE_CODE_OAUTH_TOKEN 우선 적용 → OAuth 모드 진입 → API가 OAuth 미지원"
+          },
+          "verified_before_fail": [
+            "adev init --yes /tmp/adev-e2e-real2: PASS",
+            "adev project switch: PASS",
+            "TUI 렌더링 (Phase:DESIGN, 프로젝트명): PASS",
+            "stdin 입력 수신: PASS",
+            "인증 공급자 생성 (OAuth 모드): PASS",
+            "에러 graceful 처리: PASS"
           ],
-          "pending_verification": [
-            "Planner 응답 수신 및 파싱",
-            "Designer 동작",
-            "SpecBuilder 동작",
-            "TestTypeDesigner 동작",
-            "ContractBuilder 동작",
-            "Layer2 HandoffPackage 전달",
-            "DESIGN→CODE Phase 전환",
-            "coder 에이전트 스폰"
-          ]
+          "fix_applied": "BUG-E2E-003 — ~/.adev/.env ANTHRPIC_API_KEY → ANTHROPIC_API_KEY 수정"
         },
         {
           "id": "C2",
-          "command": "printf '/quit\\n' | timeout 180 bun run dist/index.js start '간단한 계산기'",
-          "description": "adev start — feature 인자 직접 전달",
+          "run_id": "run-3",
+          "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 180 bun run dist/index.js start",
+          "description": "adev start — 2차 시도 (API Key 오타 수정 후, OAuth Token 우선 적용)",
+          "test_project_path": "/tmp/adev-e2e-real2",
+          "expected_exit": 0,
+          "actual_exit": 1,
+          "status": "BLOCKED",
+          "blocker_type": "external_resource",
+          "blocker_detail": {
+            "error_code": 400,
+            "error_type": "invalid_request_error",
+            "error_message": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+            "request_id": "req_011CZ6AMqBr8AVxaXTAxiNLf",
+            "root_cause": "API Key 수정됐으나 CLAUDE_CODE_OAUTH_TOKEN이 우선 적용됨. OAuth 계정의 크레딧 부족."
+          },
+          "verified_before_fail": [
+            "adev init --yes: PASS",
+            "adev project switch: PASS",
+            "TUI 렌더링: PASS (Phase:DESIGN, 모델명 claude-opus-4-6)",
+            "stdin 입력 수신: PASS",
+            "인증 공급자 생성 (API Key 모드): PASS",
+            "Claude API 요청 전송 시도: PASS",
+            "에러 핸들링 — 재시도 불가 판단, graceful 종료: PASS"
+          ],
+          "auth_mode_observed": "API Key (ANTHROPIC_API_KEY 정상 로드 확인)"
+        },
+        {
+          "id": "C3",
+          "run_id": "run-4",
+          "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 300 bun run dist/index.js start",
+          "description": "adev start — 3차 시도 (~/test/adev 경로, 크레딧 충전 후)",
+          "test_project_path": "~/test/adev",
+          "project_id_observed": "8ac9b4fe",
+          "expected_exit": 0,
+          "actual_exit": 1,
+          "status": "BLOCKED",
+          "blocker_type": "external_resource",
+          "blocker_detail": {
+            "error_code": 400,
+            "error_type": "invalid_request_error",
+            "error_message": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+            "request_id": "req_011CZ6ARZbbch4Wt94RfVQ2N",
+            "root_cause": "OAuth Token 계정의 크레딧이 여전히 부족. API Key 계정에 충전했으나 OAuth Token이 우선 적용됨."
+          },
+          "verified_before_fail": [
+            "adev init --yes ~/test/adev: PASS (projectId: 8ac9b4fe)",
+            "adev project switch adev: PASS",
+            "TUI 렌더링: PASS (Phase:DESIGN, 모델: claude-opus-4-6, 프로젝트: adev)",
+            "stdin 입력 '간단한 덧셈/뺄셈 계산기 기능을 만들어줘' 수신: PASS",
+            "Claude API 요청 전송 시도: PASS",
+            "에러 핸들링 — 재시도 불가 분류, TUI 에러 표시, 세션 종료: PASS"
+          ],
+          "cleanup": {
+            "test_dir": "~/test/adev — 유지 (사용자 요청)",
+            "projects_json": "adev 프로젝트 유지 (사용자 요청)",
+            "tmp_output": "/tmp/adev-start-output.txt — 삭제 완료"
+          }
+        },
+        {
+          "id": "C4",
+          "run_id": "pending",
+          "command": "printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 300 bun run dist/index.js start",
+          "description": "adev start — 4차 시도 (OAuth Token 계정 크레딧 충전 또는 API Key 모드 전환 후)",
+          "test_project_path": "~/test/adev",
           "expected_exit": 0,
           "actual_exit": null,
-          "status": "BLOCKED",
-          "blocker": "C1과 동일 — API 크레딧 부족",
-          "blocker_type": "external_resource"
+          "status": "PENDING",
+          "prerequisite": "다음 중 하나 필요: (1) ~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 제거하여 API Key 모드 강제 전환, 또는 (2) OAuth Token 연동 계정(Claude.ai)에서 크레딧 충전",
+          "pending_verification": [
+            "Planner: 사용자 입력 → 구조화 계획서 생성",
+            "Designer: 계획 + feature spec → 상세 설계 문서",
+            "SpecBuilder: 계획+설계 → 최종 스펙 (필수 섹션 검증)",
+            "TestTypeDesigner: 수용 기준 → 테스트 카테고리 매핑",
+            "ContractBuilder: ContractSchema 생성, Kahn 위상 정렬",
+            "ContractVerifier: Contract 유효성 검증",
+            "HandoffPackage 생성 및 Layer2 전달",
+            "Layer2 Phase DESIGN→CODE 전환",
+            "architect 에이전트 스폰",
+            "coder 에이전트 스폰 (N개 병렬)",
+            "GitBranchManager feature 브랜치 생성"
+          ]
         }
       ]
     }
@@ -232,77 +367,106 @@
     {
       "id": "BUG-E2E-001",
       "severity": "medium",
-      "test_id": "A4",
+      "found_in_test": "A4",
       "title": "unknown command 시 exit code 1 반환 (기대: 2)",
-      "root_cause": "yargs .strict() 에러가 catch 블록에서 GENERAL_ERROR(1)로 처리",
+      "root_cause": "yargs .strict() 에러가 catch 블록에서 GENERAL_ERROR(1)로 처리됨",
+      "fix_commit": "ea3a349",
       "fix_file": "src/cli/main.ts",
-      "fix_description": "catch 블록에서 yargs 파싱 에러 패턴 감지 시 EXIT_CODES.INVALID_USAGE(2) 반환",
+      "fix_description": "catch 블록에서 yargs 파싱 에러 패턴(Unknown argument, Not enough non-option, Missing required argument) 감지 시 EXIT_CODES.INVALID_USAGE(2) 반환",
       "status": "resolved"
     },
     {
       "id": "BUG-E2E-002",
       "severity": "medium",
-      "test_id": "A7",
+      "found_in_test": "A7",
       "title": "config get log.level dot notation 미지원",
       "root_cause_steps": [
-        "1. main.ts: config 명령어가 'config <sub>'로 정의 — [args..] positional 없음",
-        "2. main.ts: yargs 기본 dot-notation 파싱이 log.level을 nested 옵션으로 해석",
-        "3. index.ts: config 핸들러가 parsed._ 기반 slice로 args 조합 — parsed.args 무시"
+        "main.ts: config 명령어가 'config <sub>'로 정의 — [args..] positional 없음",
+        "main.ts: yargs 기본 dot-notation 파싱이 log.level을 nested 옵션으로 해석",
+        "index.ts: config 핸들러가 parsed._ 기반 slice로 args 조합 — parsed.args 완전 무시"
       ],
+      "fix_commit": "ea3a349",
       "fix_files": ["src/cli/main.ts", "src/index.ts"],
       "fix_description": [
-        "main.ts: 'config <sub>' → 'config <sub> [args..]', 'setting <sub>' → 'setting <sub> [args..]'",
+        "main.ts: 'config <sub>' → 'config <sub> [args..]' (setting 동일)",
         "main.ts: .parserConfiguration({'dot-notation': false}) 추가",
-        "index.ts: config 핸들러 args 조합을 parsed.args 기반으로 수정 (project 핸들러 패턴 적용)"
+        "index.ts: config 핸들러 args 조합을 parsed.args 기반으로 수정 (project 핸들러 패턴 통일)"
       ],
+      "debug_iterations": 3,
       "status": "resolved"
     },
     {
       "id": "BUG-E2E-003",
       "severity": "low",
-      "test_id": "C1",
+      "found_in_test": "C1",
       "title": "~/.adev/.env의 ANTHROPIC_API_KEY 오타",
-      "root_cause": "ANTHRPIC_API_KEY (O 누락) → OAuth 모드로 fallback → API 401",
-      "fix_description": "~/.adev/.env에서 ANTHRPIC_API_KEY → ANTHROPIC_API_KEY 수정",
+      "root_cause": "ANTHRPIC_API_KEY ('O' 누락) 기재 → ANTHROPIC_API_KEY 미로드 → OAuth Token 우선 적용 → API 401",
+      "fix_description": "~/.adev/.env에서 ANTHRPIC_API_KEY → ANTHROPIC_API_KEY 수정 (sed 명령어)",
       "status": "resolved",
-      "note": "코드 버그 아님 — 사용자 설정 오타"
+      "category": "user_config"
+    },
+    {
+      "id": "BUG-E2E-004",
+      "severity": "info",
+      "found_in_test": "C2, C3",
+      "title": "OAuth Token이 ANTHROPIC_API_KEY보다 우선 적용됨",
+      "root_cause": "~/.adev/.env에 CLAUDE_CODE_OAUTH_TOKEN과 ANTHROPIC_API_KEY 동시 존재 시 OAuth Token이 우선 로드됨. 크레딧은 API Key 계정에 있으나 OAuth 계정으로 요청 전송.",
+      "fix_description": "~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 제거 또는 주석 처리하여 API Key 모드 강제 전환",
+      "status": "pending",
+      "category": "user_config"
     }
   ],
 
   "environment": {
     "bun_version": "1.3.10",
+    "bun_known_bug": "1.3.4~1.3.10 — 테스트 완료 후 C++ SIGTRAP 크래시 (결과 무관)",
     "os": "darwin 25.2.0",
-    "auth_method": "ANTHROPIC_API_KEY (API Key)",
-    "auth_status": "설정됨 (크레딧 부족)",
+    "auth_method_observed": "OAuth Token (CLAUDE_CODE_OAUTH_TOKEN 우선)",
+    "auth_key_masked": "sk-ant-oat01-s...BAAA",
     "dist_size_mb": 1.77,
-    "build_modules": 347
+    "build_modules": 347,
+    "model_observed": "claude-opus-4-6",
+    "test_project_path": "~/test/adev",
+    "test_project_id": "8ac9b4fe"
   },
 
   "coverage_summary": {
-    "cli_routing": "PASS — 모든 명령어 라우팅 정상",
-    "auth_flow": "PASS — API Key 모드 정상 인증",
-    "tui_rendering": "PASS — TUI 정상 렌더링",
-    "layer1_pipeline": "BLOCKED — API 크레딧 필요",
-    "layer2_orchestration": "BLOCKED — Layer1 이후 단계",
-    "layer3_output": "BLOCKED — Layer2 이후 단계"
+    "cli_routing": "PASS — init, start, auth, config, setting, project 모든 명령어 라우팅 정상",
+    "version_help": "PASS — --version, --help, 인자 없음 모두 정상",
+    "error_handling": "PASS — unknown command, 중복 init, API 에러 모두 graceful 처리",
+    "auth_flow": "PASS — API Key / OAuth Token 공급자 생성 정상",
+    "tui_rendering": "PASS — Phase, 프로젝트명, 모델명, 가이드 메시지 정상 렌더링",
+    "stdin_pipe": "PASS — 비대화형 stdin 파이프 입력 정상 처리",
+    "config_operations": "PASS — list, get (dot notation), set 정상",
+    "project_operations": "PASS — init, list, switch, remove 정상",
+    "layer1_pipeline": "BLOCKED — Planner~ContractBuilder: API 크레딧/인증 모드 문제",
+    "layer2_orchestration": "BLOCKED — Layer1 이후 단계 미도달",
+    "layer3_output": "BLOCKED — Layer2 이후 단계 미도달"
   },
 
   "next_actions": [
     {
       "priority": 1,
-      "action": "Anthropic API 크레딧 충전",
-      "reason": "C1/C2 테스트 (Layer1 파이프라인 전체) 검증 필요"
+      "action": "OAuth Token 비활성화 — API Key 모드로 전환",
+      "command": "# ~/.adev/.env에서 CLAUDE_CODE_OAUTH_TOKEN 줄 주석 처리\nsed -i '' 's/^CLAUDE_CODE_OAUTH_TOKEN=/#CLAUDE_CODE_OAUTH_TOKEN=/' ~/.adev/.env",
+      "reason": "ANTHROPIC_API_KEY 계정에 크레딧을 충전했으나 OAuth Token이 우선 적용됨"
     },
     {
       "priority": 2,
-      "action": "adev start 재실행 — Layer1 전체 플로우 검증",
-      "command": "printf '간단한 덧셈/뺄셈 계산기 기능\\n/quit\\n' | timeout 300 bun run dist/index.js start 2>&1"
+      "action": "C4 테스트 실행 — Layer1 파이프라인 전체 검증",
+      "command": "cd ~/test/adev && printf '간단한 덧셈/뺄셈 계산기 기능을 만들어줘\\n/quit\\n' | timeout 300 bun run /Users/yeongyu.yang/autonomous-dev-agent-ts/dist/index.js start 2>&1",
+      "prerequisite": "priority 1 완료 후"
     },
     {
       "priority": 3,
+      "action": "Layer1 성공 확인 후 Layer2 DESIGN→CODE 전환까지 검증",
+      "note": "/quit 대신 충분한 대화 후 자연스러운 파이프라인 진행 관찰"
+    },
+    {
+      "priority": 4,
       "action": "npm publish 실행",
-      "command": "npm publish --access public",
-      "prerequisite": "credientials 충전 및 C 카테고리 검증 완료 권장"
+      "command": "cd /Users/yeongyu.yang/autonomous-dev-agent-ts && npm publish --access public",
+      "prerequisite": "Layer1 파이프라인 검증 완료 권장"
     }
   ]
 }
