@@ -1,0 +1,707 @@
+{
+  "_meta": {
+    "description": "adev fullrun11 E2E 세션 상태 — 집에서 이어서 작업하기 위한 완전한 컨텍스트",
+    "savedAt": "2026-03-16T08:26:30+09:00 (오후 5:26 KST)",
+    "nextSession": "집에서 이어서 진행"
+  },
+  "environment": {
+    "os": "macOS Darwin 25.2.0 (arm64)",
+    "shell": "zsh",
+    "runtime": "Bun",
+    "projectRepo": "/Users/yeongyu.yang/autonomous-dev-agent-ts",
+    "testWorkdir": "/Users/yeongyu.yang/test/adev",
+    "envFile": "~/.adev/.env",
+    "settingsJson": "/Users/yeongyu.yang/autonomous-dev-agent-ts/.claude/settings.json"
+  },
+  "currentRun": {
+    "script": "/tmp/adev-fullrun11.sh",
+    "log": "/tmp/adev-fullrun11.log",
+    "pid": 37668,
+    "startTime": "2026-03-16T07:48:09 KST (오후 4:48)",
+    "processRunning": true,
+    "task": "간단한 덧셈/뺄셈 계산기. 소수점 지원, 버튼식 UI, 에러처리 필요",
+    "stdinSequence": [
+      {
+        "time": "T+0s",
+        "input": "간단한 덧셈/뺄셈 계산기. 소수점 지원, 버튼식 UI, 에러처리 필요"
+      },
+      {
+        "time": "T+120s",
+        "input": "확정"
+      },
+      {
+        "time": "T+180s",
+        "input": "yes (AgentMd 생성 승인)"
+      },
+      {
+        "time": "T+480s",
+        "input": "yes (Layer2 실행 승인)"
+      },
+      {
+        "time": "T+7680s",
+        "input": "sleep 7200 — Layer2/3 완료 대기 (자동)"
+      }
+    ]
+  },
+  "phaseStatus": {
+    "layer1": {
+      "status": "COMPLETED",
+      "completedAt": "2026-03-16T07:50:09",
+      "output": {
+        "contract": "/Users/yeongyu.yang/test/adev/.adev/contract.json",
+        "handoff": "/Users/yeongyu.yang/test/adev/.adev/handoff.json",
+        "featureCount": 15,
+        "aiVerification": "WARN (error 1건 — completenessScore 0.5, 계속 진행)"
+      }
+    },
+    "agentMdGeneration": {
+      "status": "COMPLETED",
+      "completedAt": "2026-03-16T07:52:27",
+      "output": "/Users/yeongyu.yang/test/adev/.adev/agents/",
+      "files": [
+        "architect.md",
+        "coder.md",
+        "documenter.md",
+        "qa.md",
+        "qc.md",
+        "reviewer.md",
+        "tester.md"
+      ]
+    },
+    "layer2": {
+      "status": "IN_PROGRESS",
+      "startedAt": "2026-03-16T07:56:09",
+      "totalFeatures": 15,
+      "completedFeatures": 7,
+      "currentFeature": "feat-7",
+      "currentPhase": "VERIFY",
+      "currentAgent": "qc",
+      "lastLogTimestamp": "2026-03-16T08:26:02",
+      "totalAgentCalls": 35,
+      "totalAgentCompletions": 34,
+      "agentFlowPerPhase": {
+        "DESIGN": [
+          "architect",
+          "qa",
+          "coder",
+          "reviewer"
+        ],
+        "CODE": [
+          "coder(병렬)",
+          "architect(감독)",
+          "reviewer(감독)"
+        ],
+        "TEST": [
+          "tester",
+          "qc"
+        ],
+        "VERIFY": [
+          "qa",
+          "qc",
+          "reviewer",
+          "documenter"
+        ]
+      }
+    },
+    "layer3": {
+      "status": "NOT_STARTED",
+      "note": "Layer2 완료 후 자동 진입 예정"
+    }
+  },
+  "featureList": {
+    "feat-0": {
+      "name": "기본 요구사항",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-0-기본-요구사항.md"
+    },
+    "feat-1": {
+      "name": "추가 확인사항",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-1-추가-확인사항.md"
+    },
+    "feat-2": {
+      "name": "핵심 기능",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-2-핵심-기능.md"
+    },
+    "feat-3": {
+      "name": "기술 스택",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-3-기술-스택.md"
+    },
+    "feat-4": {
+      "name": "컴포넌트 구조",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-4-컴포넌트-구조.md"
+    },
+    "feat-5": {
+      "name": "주요 클래스/모듈",
+      "status": "COMPLETED",
+      "docFile": "docs/features/feat-5-주요-클래스-모듈.md"
+    },
+    "feat-6": {
+      "name": "확정된 요구사항",
+      "status": "COMPLETED",
+      "currentPhase": null,
+      "currentAgent": "qc"
+    },
+    "feat-7": {
+      "name": "UI 구성요소",
+      "status": "IN_PROGRESS",
+      "currentPhase": "VERIFY",
+      "currentAgent": "qa"
+    },
+    "feat-8": {
+      "name": "동작 시나리오",
+      "status": "PENDING"
+    },
+    "feat-9": {
+      "name": "에러 처리",
+      "status": "PENDING"
+    },
+    "feat-10": {
+      "name": "기술 스택(상세)",
+      "status": "PENDING"
+    },
+    "feat-11": {
+      "name": "파일 구조",
+      "status": "PENDING"
+    },
+    "feat-12": {
+      "name": "주요 구성요소",
+      "status": "PENDING"
+    },
+    "feat-13": {
+      "name": "핵심 요구사항",
+      "status": "PENDING"
+    },
+    "feat-14": {
+      "name": "추가 확인사항",
+      "status": "PENDING"
+    }
+  },
+  "generatedCode": {
+    "location": "/Users/yeongyu.yang/test/adev/",
+    "files": {
+      "index.html": "버튼식 계산기 UI (AC, +, -, 0~9, ., =)",
+      "script.js": "계산기 로직 (state 패턴, MAX_LENGTH=15, 소수점, 연산자)",
+      "style.css": "계산기 스타일",
+      "calculator.test.js": "Jest 테스트 파일",
+      "package.json": "jest + jest-environment-jsdom + jsdom 의존성",
+      "docs/features/": "6개 feature 문서 (feat-0~5)",
+      "docs/reports/": "handoff 검증 리포트 8개"
+    },
+    "gitStatus": "단일 커밋 (f54191f init: 계산기 앱 프로젝트 초기화) — Layer2 변경사항 미커밋 상태"
+  },
+  "executionTimeline": {
+    "layer2Start": "07:56:09",
+    "feat0_DESIGN": "07:56:09 ~ 08:00:44 (architect→qa→coder→reviewer)",
+    "feat0_CODE": "08:00:44 ~ 08:02:09 (coder→architect→reviewer)",
+    "feat0_TEST": "08:02:09 ~ 08:05:10 (tester→qc)",
+    "feat0_VERIFY": "08:05:10 ~ 08:07:43 (qa→qc→reviewer→documenter)",
+    "feat0_DONE": "08:06:53",
+    "feat1_VERIFY": "08:07:43 ~ 08:10:32",
+    "feat1_DONE": "08:09:52",
+    "feat2_VERIFY": "08:10:32 ~ 08:13:50",
+    "feat2_DONE": "08:12:58",
+    "feat3_VERIFY": "08:13:50 ~ 08:16:16",
+    "feat3_DONE": "08:15:26",
+    "feat4_VERIFY": "08:16:16 ~ 08:20:02",
+    "feat4_DONE": "08:18:16",
+    "feat5_VERIFY": "08:20:02 ~ 08:22:56",
+    "feat5_DONE": "08:21:49",
+    "feat6_VERIFY": "08:22:56 ~ 진행중 (qa완료, qc실행중)",
+    "avgFeatureTime": "~3분 (VERIFY only), feat-0은 약 12분 (전체 DESIGN+CODE+TEST+VERIFY)"
+  },
+  "knownIssues": [
+    {
+      "id": "WARN-001",
+      "severity": "warn",
+      "message": "merge --abort 실패",
+      "detail": "git merge 실패: fatal: There is no merge to abort (MERGE_HEAD missing)",
+      "timestamp": "2026-03-16T08:02:09",
+      "location": "feat-0 CODE Phase — git-branch-manager",
+      "impact": "feat-0 CODE 결과는 정상 완료됨. 단순 abort 실패로 실행 중단 없음",
+      "action": "무시 가능. 단 feat-0 CODE Phase 결과가 feature 브랜치 병합이 아닌 직접 작업일 수 있음"
+    },
+    {
+      "id": "WARN-002",
+      "severity": "warn",
+      "message": "Contract AI 검증 error 이슈",
+      "detail": "completenessScore 0.5, featureId 누락, allIODefined false",
+      "impact": "경고 후 계속 진행됨. Layer2 실행에는 영향 없음",
+      "action": "무시 가능"
+    }
+  ],
+  "bugsFixed": [
+    {
+      "id": "BUG-001",
+      "desc": "stdin readline 버퍼 소실 — 두 번째 입력부터 씹힘",
+      "rootCause": "readline.createInterface 매번 새로 생성",
+      "fix": "createInterface 단일 인스턴스 재사용",
+      "commit": "0fe0cda",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-002",
+      "desc": "AgentMd 7개 생성 타임아웃",
+      "rootCause": "각 에이전트 .md 생성에 최대 120초 소요인데 타임아웃이 짧았음",
+      "fix": "타임아웃 120초로 연장",
+      "commit": "fead8e7",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-003",
+      "desc": "V2 Session API에 systemPrompt 옵션 없음",
+      "rootCause": "SDKSessionOptions에 systemPrompt/maxTurns 파라미터 없음",
+      "fix": "config.systemPrompt + '\\n\\n---\\n\\n' + config.prompt 로 send()에 합쳐서 전달",
+      "commit": "a7b3ad8",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-004",
+      "desc": "Layer2 에이전트 전부 silent hang — stream 이벤트 없음",
+      "rootCause": "sdk.mjs 내부: let Y={...Q.env??process.env} — env 파라미터 제공 시 process.env 완전 대체. ANTHROPIC_API_KEY만 전달하면 PATH/HOME 등 시스템 환경변수 소실로 Claude Code CLI 실행 불가",
+      "fix": "buildSessionEnvironment에서 process.env 전체 spread 후 필요한 것만 오버라이드",
+      "commit": "eb6e647",
+      "affectedFile": "src/layer2/v2-session-executor.ts",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-005",
+      "desc": "Session stream error {} — 에러 내용 파악 불가",
+      "rootCause": "Error 객체를 logger에 직접 전달 시 JSON.stringify({}) 반환",
+      "fix": "errorMsg = streamError instanceof Error ? message + '\\n' + stack : String(streamError)",
+      "commit": "a6af181",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-006",
+      "desc": "Layer2 에이전트 전부 'Claude Code process exited with code 1'",
+      "rootCause": "process.env에 CLAUDECODE 환경변수가 설정되어 있어 서브프로세스로 전달됨. Claude Code CLI가 'nested Claude Code session' 에러로 즉시 exit code 1",
+      "errorMessage": "Claude Code cannot be launched inside another Claude Code session. Nested sessions share runtime resources and will crash all active sessions. To bypass this check, unset the CLAUDECODE environment variable.",
+      "fix": "buildSessionEnvironment에서 delete baseEnv.CLAUDECODE 추가",
+      "commit": "23bacc7",
+      "affectedFile": "src/layer2/v2-session-executor.ts",
+      "status": "FIXED"
+    },
+    {
+      "id": "BUG-007",
+      "desc": "Agent Teams 비의도적 비활성화",
+      "rootCause": "이전 AGENT_TEAMS hanging 버그 수정 시 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 제거 코드가 남아있었음",
+      "fix": "사용자 요청으로 delete baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 코드 제거",
+      "commit": "23bacc7",
+      "note": "현재는 process.env에 포함되어 자동으로 서브프로세스에 전달됨",
+      "status": "FIXED"
+    }
+  ],
+  "keyFileState": {
+    "file": "src/layer2/v2-session-executor.ts",
+    "method": "buildSessionEnvironment",
+    "currentLogic": [
+      "1. const baseEnv = { ...(process.env as Record<string, string>) }  // 시스템 환경변수 전체 복사",
+      "2. if 'x-api-key' in authHeader → baseEnv.ANTHROPIC_API_KEY = authHeader['x-api-key']  // API Key 오버라이드",
+      "3. if 'authorization' in authHeader → baseEnv.CLAUDE_CODE_OAUTH_TOKEN = token  // OAuth Token 추가",
+      "4. delete baseEnv.CLAUDECODE  // nested session 방지 (핵심!)",
+      "5. return { ...baseEnv, ...(config.env ?? {}) }  // config.env가 최종 오버라이드"
+    ],
+    "whyEachStep": {
+      "step1": "SDK env 파라미터는 process.env를 완전 대체하므로, PATH/HOME 등 필수 시스템 환경변수를 보존하기 위해 base로 복사",
+      "step4": "adev가 Claude Code 세션 안에서 실행되므로 CLAUDECODE가 설정되어 있음. 이를 서브프로세스에 전달하면 nested session 에러로 exit code 1 종료"
+    }
+  },
+  "recentCommits": [
+    {
+      "hash": "23bacc7",
+      "msg": "fix: CLAUDECODE 환경변수 제거로 nested session 에러 수정, Agent Teams 활성화 복원"
+    },
+    {
+      "hash": "a6af181",
+      "msg": "fix: Session stream error 로깅 개선 — 에러 메시지/스택 포함"
+    },
+    {
+      "hash": "eb6e647",
+      "msg": "fix: V2Session env 파라미터에 process.env 병합 — PATH 누락 버그 수정"
+    },
+    {
+      "hash": "e5d1856",
+      "msg": "fix: V2Session 서브프로세스에 AGENT_TEAMS 환경변수 전달 제거"
+    },
+    {
+      "hash": "a7b3ad8",
+      "msg": "fix(v2-session-executor): systemPrompt를 send() 프롬프트에 합쳐서 전달"
+    },
+    {
+      "hash": "fead8e7",
+      "msg": "fix(agent-md-generator): AgentMd 생성 타임아웃 120초로 연장"
+    },
+    {
+      "hash": "0fe0cda",
+      "msg": "fix: stdin readline 버그, contract-verifier 모델명, 검증 실패 처리"
+    }
+  ],
+  "pendingTasks": [
+    {
+      "priority": 1,
+      "task": "Layer2 완료 확인 (feat-6 ~ feat-14)",
+      "detail": "현재 feat-6 VERIFY qc 실행 중. 나머지 9개 feature 자동 완료 예정. 약 30~45분 더 걸릴 것으로 예상",
+      "checkCmd": "grep -c '기능 구현 완료' /tmp/adev-fullrun11.log  # 15가 되면 완료"
+    },
+    {
+      "priority": 2,
+      "task": "Layer3 실행 확인",
+      "detail": "Layer2 완료 후 자동 진입 예정. Layer3가 실제로 무엇을 하는지 (통합 테스트? 배포? 최종 검증?) 로그로 확인",
+      "checkCmd": "grep -a 'Layer3' /tmp/adev-fullrun11.log"
+    },
+    {
+      "priority": 3,
+      "task": "프로세스 종료 후 생성 코드 검토",
+      "detail": "fullrun11 완료 후 /Users/yeongyu.yang/test/adev/ 에서 실제 계산기 코드 품질 확인. 현재 index.html, script.js, style.css, calculator.test.js 생성됨",
+      "checkCmd": "cd /Users/yeongyu.yang/test/adev && git log --oneline && ls -la"
+    },
+    {
+      "priority": 4,
+      "task": "WARN-001 git merge 충돌 원인 파악",
+      "detail": "feat-0 CODE Phase에서 'merge --abort 실패: No MERGE_HEAD' 경고 발생. feature 브랜치 병합 로직 확인 필요",
+      "file": "src/layer2/ (git-branch-manager 관련 모듈)"
+    },
+    {
+      "priority": 5,
+      "task": "E2E 테스트 명세서 업데이트",
+      "detail": "fullrun11 결과 반영. BUG-006/007 RESOLVED, Layer2 PASS, Layer3 결과 추가"
+    }
+  ],
+  "howToResume": {
+    "step1_checkProcess": {
+      "cmd": "ps aux | grep 'index.ts start' | grep -v grep",
+      "expect": "PID 37668 bun run ... 이 보이면 아직 실행 중"
+    },
+    "step2_checkProgress": {
+      "cmd": "grep -c '기능 구현 완료' /tmp/adev-fullrun11.log",
+      "expect": "15가 되면 Layer2 완료"
+    },
+    "step3_checkLayer3": {
+      "cmd": "grep -a 'Layer3' /tmp/adev-fullrun11.log | head -5",
+      "expect": "Layer3 실행 시작 메시지 확인"
+    },
+    "step4_checkErrors": {
+      "cmd": "grep -a '\"level\":\"error\"' /tmp/adev-fullrun11.log | grep -v 'merge --abort'",
+      "expect": "아무것도 없으면 정상"
+    },
+    "step5_checkGeneratedCode": {
+      "cmd": "ls -la /Users/yeongyu.yang/test/adev/ && cd /Users/yeongyu.yang/test/adev && git log --oneline",
+      "expect": "Layer2/3이 생성한 파일들 확인"
+    },
+    "step6_ifProcessDead": {
+      "note": "프로세스가 죽어있으면 /tmp/adev-fullrun11.log 에서 마지막 상태 확인 후 재실행",
+      "cmd": "chmod +x /tmp/adev-fullrun11.sh && /tmp/adev-fullrun11.sh &"
+    },
+    "step7_liveMonitor": {
+      "cmd": "grep -a '\"message\"' /tmp/adev-fullrun11.log | grep -v '초안 생성 중' | tail -20",
+      "note": "또는 tail -f /tmp/adev-fullrun11.log | grep -a message"
+    }
+  },
+  "agentTeamsConfig": {
+    "enabled": true,
+    "envVar": "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1",
+    "setIn": "/Users/yeongyu.yang/autonomous-dev-agent-ts/.claude/settings.json",
+    "how": "process.env에 포함되어 있어 buildSessionEnvironment에서 baseEnv에 자동 복사됨",
+    "note": "CLAUDECODE는 제거되지만 AGENT_TEAMS는 유지됨"
+  },
+  "agentTeams": {
+    "_title": "Agent Teams 상세 정리",
+    "overview": {
+      "what": "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 활성화 시 Claude Code 세션에서 TeamCreate/SendMessage 툴이 활성화됨. 에이전트들이 서로 메시지를 주고받아 협업 가능.",
+      "how_adev_uses": "adev Layer2는 Agent Teams를 직접 활용하지 않고, AGENT_TEAMS 환경변수를 서브프로세스에 전달하여 서브프로세스(Claude Code CLI)가 Agent Teams 모드로 실행되게 함",
+      "real_communication": "IpcPoller가 디스크 기반 IPC로 팀 메시지/태스크 업데이트를 감지 (500ms 폴링)"
+    },
+    "activation": {
+      "envVar": "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1",
+      "setIn": "/Users/yeongyu.yang/autonomous-dev-agent-ts/.claude/settings.json (env 섹션)",
+      "propagation": "adev 프로세스 → process.env 포함됨 → buildSessionEnvironment에서 baseEnv에 자동 복사 → 서브프로세스 Claude Code CLI에 전달",
+      "criticalNote": "CLAUDECODE는 delete로 제거하지만 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS는 그대로 유지 (의도적)"
+    },
+    "customAgents": {
+      "location": ".claude/agents/",
+      "agents": {
+        "architect": {
+          "model": "sonnet",
+          "tools": "Read, Glob, Grep, Bash(bunx tsc --noEmit)",
+          "isolation": null,
+          "role": "기술 아키텍처 설계, 구조 결정, 모듈 분해. 코딩 금지",
+          "phases": [
+            "DESIGN(주도)",
+            "CODE(감독)",
+            "VERIFY(검증)"
+          ]
+        },
+        "coder": {
+          "model": "sonnet",
+          "tools": "Read, Write, Edit, Bash, Glob, Grep",
+          "isolation": "worktree",
+          "role": "유일한 코드 수정 권한. ×N 병렬 가능",
+          "phases": [
+            "DESIGN(피드백)",
+            "CODE(구현)"
+          ]
+        },
+        "documenter": {
+          "model": "sonnet",
+          "tools": "Read, Write, Edit, Glob, Grep",
+          "background": true,
+          "role": "문서 생성 전담. 이벤트 트리거 방식 (상시 대기 아님)",
+          "phases": [
+            "VERIFY(기능 완료 시 자동 트리거)"
+          ]
+        },
+        "qa": {
+          "model": "sonnet",
+          "tools": "Read, Glob, Grep, Bash(bunx tsc --noEmit), Bash(bunx biome check *)",
+          "role": "예방 중심 품질 보증. 코딩 금지. Gate 역할",
+          "phases": [
+            "DESIGN(Gate)",
+            "VERIFY(스펙 준수 검증)"
+          ]
+        },
+        "qc": {
+          "model": "sonnet",
+          "tools": "Read, Glob, Grep, Bash(bun test *)",
+          "role": "사후 검출 중심 품질 관리. 근본 원인 1개 집중",
+          "phases": [
+            "TEST(실패 분석)",
+            "VERIFY(합격/불합격 판정)"
+          ]
+        },
+        "reviewer": {
+          "model": "sonnet",
+          "tools": "Read, Glob, Grep, Bash(bunx tsc --noEmit), Bash(bunx biome check *)",
+          "role": "코드 리뷰 + 품질 최종 검증",
+          "phases": [
+            "DESIGN(설계 검토)",
+            "CODE(코드 감독)",
+            "VERIFY(최종 판정)"
+          ]
+        },
+        "tester": {
+          "model": "sonnet",
+          "tools": "Read, Write, Edit, Bash(bun test *), Glob, Grep",
+          "role": "테스트 케이스 생성 + 실행. Fail-Fast",
+          "phases": [
+            "TEST(생성+실행)"
+          ]
+        }
+      }
+    },
+    "ipcMechanism": {
+      "class": "IpcPoller (src/layer2/ipc-poller.ts)",
+      "pollingInterval": "500ms",
+      "teamsDir": "~/.claude/teams/{teamId}/inboxes/",
+      "tasksDir": "~/.claude/tasks/*.json",
+      "events": {
+        "team_message": "새 inbox 파일 감지 시 발생 (신규 파일만)",
+        "task_update": "tasks/*.json mtime 변경 시 발생"
+      },
+      "seenFilesLimit": "최대 10,000개 추적, 초과 시 1,000개 FIFO 삭제",
+      "security": "path traversal 방지 — safeJoin으로 base 디렉토리 외부 탈출 차단"
+    },
+    "phaseAgentMapping": {
+      "DESIGN": {
+        "sequence": [
+          "architect",
+          "qa(Gate)",
+          "coder",
+          "reviewer"
+        ],
+        "note": "qa 통과해야 CODE 진입 가능"
+      },
+      "CODE": {
+        "sequence": [
+          "coder(병렬 실행)",
+          "architect(감독)",
+          "reviewer(감독)"
+        ],
+        "note": "coder는 worktree isolation으로 병렬 N개 가능"
+      },
+      "TEST": {
+        "sequence": [
+          "tester",
+          "qc"
+        ],
+        "note": "tester가 Unit→Module→E2E 순서로 Fail-Fast 실행. qc가 실패 분석"
+      },
+      "VERIFY": {
+        "sequence": [
+          "qa",
+          "qc",
+          "reviewer",
+          "documenter(자동 트리거)"
+        ],
+        "note": "4중 검증: qa_qc + reviewer + layer1Verifier(미주입 시 auto-pass). 전부 passed=true 이어야 기능 완료"
+      }
+    },
+    "verificationGates": {
+      "description": "4중 검증 — 전부 passed=true 이어야 기능 완료로 처리",
+      "gates": [
+        "qa_qc: qa + qc 결과 합산",
+        "reviewer: 코드 리뷰 합격/불합격",
+        "layer1Verifier: 미주입 시 auto-pass (현재 미구현)"
+      ],
+      "onAllPass": "기능 구현 완료 → documenter 트리거 → 다음 feature 진행",
+      "observedResult": "fullrun11에서 feat-0~6 전부 passed=true"
+    },
+    "knownBehaviors": {
+      "feat1_to_14_VERIFY_only": {
+        "observation": "feat-0은 DESIGN+CODE+TEST+VERIFY 전체를 수행했지만, feat-1~14는 VERIFY만 수행",
+        "likelyCause": "이전 fullrun 실행(1~10)에서 feat-1~14의 DESIGN/CODE/TEST가 이미 완료되어 VERIFY 단계만 남은 상태로 세션 스냅샷에 저장됨. team-leader가 저장된 Phase 상태를 복원하여 VERIFY부터 진행",
+        "implication": "세션 스냅샷 저장소(/Users/yeongyu.yang/test/adev/.adev/sessions/)가 중단 지점을 보존함"
+      }
+    },
+    "currentTeamsInDisk": {
+      "teamsDir": "~/.claude/teams/",
+      "observedTeams": [
+        "adev-authfix",
+        "default",
+        "p1qc",
+        "zombie-test-expansion"
+      ],
+      "tasksDir": "~/.claude/tasks/",
+      "observedTasks": [
+        "2d770381-d226-4285-b392-25ac9610d7f9",
+        "adev-authfix",
+        "zombie-test-expansion"
+      ]
+    }
+  },
+  "thisSessionAgentTeams": {
+    "_title": "이 Claude Code 세션(e8af33a4)의 Agent Teams 현황",
+    "_sessionId": "e8af33a4-d652-4e56-bd3d-c28041044a03",
+    "thisSession": {
+      "role": "team-lead",
+      "teamName": "adev-authfix",
+      "note": "이 대화 세션 자체가 adev-authfix 팀의 team-lead. V2SessionExecutor로 coder/qa를 in-process 에이전트로 스폰했던 팀."
+    },
+    "activeTeams": {
+      "adev-authfix": {
+        "status": "STALE (이전 세션에서 생성, 현재는 비활성)",
+        "createdAt": "2026-03-16T07:39:22 KST",
+        "purpose": "인증 수정 — Layer1 API Key 강제 + agent-sdk OAuth 지원",
+        "leadSessionId": "e8af33a4-d652-4e56-bd3d-c28041044a03 (이 세션)",
+        "members": [
+          {
+            "agentId": "team-lead@adev-authfix",
+            "role": "team-lead",
+            "model": "claude-sonnet-4-6",
+            "backend": "this session"
+          },
+          {
+            "agentId": "coder@adev-authfix",
+            "role": "coder",
+            "model": "claude-opus-4-6",
+            "backend": "in-process",
+            "task": "config.ts API Key 강제화 + v2-session-executor.ts OAuth 동시 전달"
+          },
+          {
+            "agentId": "qa@adev-authfix",
+            "role": "qa",
+            "model": "claude-opus-4-6",
+            "backend": "in-process",
+            "task": "tsc + biome + 인증 단위테스트 검증 후 team-lead에게 SendMessage"
+          }
+        ],
+        "taskListState": {
+          "task1_coder": "completed",
+          "task2_qa": "in_progress (세션 종료로 중단된 상태)"
+        }
+      }
+    },
+    "allTeamsInDisk": {
+      "default": {
+        "path": "~/.claude/teams/default/",
+        "status": "empty (config.json 없음)",
+        "note": "기본 팀 디렉토리 — 실제 팀 정보 없음"
+      },
+      "adev-authfix": {
+        "path": "~/.claude/teams/adev-authfix/",
+        "status": "stale — 이전 세션 잔재",
+        "members": [
+          "team-lead",
+          "coder",
+          "qa"
+        ]
+      },
+      "p1qc": {
+        "path": "~/.claude/teams/p1qc/",
+        "status": "stale — 이전 작업 잔재",
+        "note": "이전 qc 관련 팀으로 추정"
+      },
+      "zombie-test-expansion": {
+        "path": "~/.claude/teams/zombie-test-expansion/",
+        "status": "stale — 이전 작업 잔재",
+        "note": "Go zombie process 테스트 확장 작업 팀"
+      }
+    },
+    "allTasksInDisk": {
+      "adev-authfix": {
+        "path": "~/.claude/tasks/adev-authfix",
+        "content": "empty (0 bytes)",
+        "note": "삭제 가능"
+      },
+      "2d770381-d226-4285-b392-25ac9610d7f9": {
+        "path": "~/.claude/tasks/2d770381-...",
+        "content": "empty (0 bytes)",
+        "note": "삭제 가능"
+      },
+      "zombie-test-expansion/": {
+        "path": "~/.claude/tasks/zombie-test-expansion/",
+        "tasks": {
+          "1": {
+            "subject": "좀비 테스트 케이스 시나리오 설계",
+            "status": "completed"
+          },
+          "2": {
+            "subject": "좀비 테스트 코드 작성 - 고아/시그널/데몬 패턴",
+            "status": "completed",
+            "owner": "zombie-writer-1"
+          },
+          "3": {
+            "subject": "좀비 테스트 코드 작성 - 파이프/서브쉘/중첩 패턴",
+            "status": "completed"
+          },
+          "4": {
+            "subject": "전체 테스트 실행 및 검증",
+            "status": "pending (차단됨)"
+          },
+          "5": {
+            "subject": "zombie-writer-1 (에이전트 상태)",
+            "status": "in_progress — 세션 종료로 중단됨"
+          },
+          "6": {
+            "subject": "zombie-writer-2",
+            "status": "completed"
+          }
+        },
+        "note": "Go dofp-worker 프로젝트의 좀비 프로세스 테스트 확장 — 이전 세션에서 중단됨"
+      }
+    },
+    "cleanupNeeded": [
+      "~/.claude/teams/p1qc/ — 사용 안 함, 삭제 가능",
+      "~/.claude/teams/zombie-test-expansion/ — 이전 세션 잔재, 정리 필요",
+      "~/.claude/tasks/adev-authfix — 빈 파일",
+      "~/.claude/tasks/2d770381-d226-4285-b392-25ac9610d7f9 — 빈 파일",
+      "~/.claude/tasks/zombie-test-expansion/ — task 4 pending 상태로 중단됨. 집에서 이어서 할지 결정"
+    ],
+    "currentTaskListInSession": {
+      "note": "TaskList 도구로 확인한 이 대화의 태스크 목록",
+      "task1": {
+        "id": 1,
+        "subject": "coder",
+        "status": "completed"
+      },
+      "task2": {
+        "id": 2,
+        "subject": "qa",
+        "status": "in_progress (미완료 — 세션 종료 전 처리 필요 여부 확인)"
+      }
+    }
+  }
+}
