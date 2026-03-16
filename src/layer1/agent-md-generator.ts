@@ -140,8 +140,11 @@ export class AgentMdGenerator {
 
     this.logger.debug(`에이전트 초안 생성 중 / Generating agent draft: ${agentName}`);
 
+    // WHY: 4096 tokens 생성에 60초 이상 걸릴 수 있어 기본 타임아웃(60s)이 부족.
+    //      AgentMd 생성은 품질 우선이므로 타임아웃을 120초로 연장.
     const result = await this.claudeApi.createMessage([{ role: 'user', content: prompt }], {
       maxTokens: 4096,
+      timeoutMs: 120_000,
     });
 
     if (!result.ok) {
