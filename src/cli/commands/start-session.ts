@@ -147,6 +147,16 @@ export async function initializeLayer1Session(
       );
     }
 
+    // WHY: Layer1 파이프라인은 ANTHROPIC_API_KEY 필수 — OAuth만으로는 실행 불가
+    if (authResult.value.authMode !== 'api-key') {
+      return err(
+        new AdevError(
+          'cli_start_auth_failed',
+          'Layer1 파이프라인은 ANTHROPIC_API_KEY가 필요합니다. CLAUDE_CODE_OAUTH_TOKEN만으로는 실행할 수 없습니다.',
+        ),
+      );
+    }
+
     // Claude API 클라이언트 생성
     const claudeApi = new ClaudeApi(authResult.value, logger);
 

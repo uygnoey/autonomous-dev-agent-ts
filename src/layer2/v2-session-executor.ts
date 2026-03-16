@@ -209,9 +209,13 @@ export class V2SessionExecutor implements AgentExecutor {
     const authHeader = this.authProvider.getAuthHeader();
     const baseEnv: Record<string, string> = {};
 
+    // WHY: API Key는 항상 전달 (Layer1 필수 인증)
     if ('x-api-key' in authHeader) {
       baseEnv.ANTHROPIC_API_KEY = authHeader['x-api-key'] as string;
-    } else if ('authorization' in authHeader) {
+    }
+
+    // WHY: OAuth Token도 있으면 함께 전달 (agent-sdk가 OAuth 인증에 활용)
+    if ('authorization' in authHeader) {
       const token = (authHeader.authorization as string).replace('Bearer ', '');
       baseEnv.CLAUDE_CODE_OAUTH_TOKEN = token;
     }
