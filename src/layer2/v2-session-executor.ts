@@ -133,11 +133,11 @@ export class V2SessionExecutor implements AgentExecutor {
           }
         }
       } catch (streamError) {
-        this.logger.error('Session stream error', { agentName: config.name, error: streamError });
-        yield createErrorEvent(
-          config.name,
-          streamError instanceof Error ? streamError.message : 'Unknown stream error',
-        );
+        const errMsg = streamError instanceof Error
+          ? `${streamError.message}\n${streamError.stack ?? ''}`
+          : String(streamError);
+        this.logger.error('Session stream error', { agentName: config.name, errorMsg: errMsg });
+        yield createErrorEvent(config.name, errMsg || 'Unknown stream error');
         this.activeSessions.delete(sessionId);
       }
     } catch (error) {
