@@ -112,8 +112,12 @@ export class V2SessionExecutor implements AgentExecutor {
       this.activeSessions.set(sessionId, { session, options: sessionOptions });
 
       try {
-        // WHY: send()로 프롬프트 전달 후 stream()으로 응답 수신 (V2 Session API 패턴)
-        await session.send(config.prompt);
+        // WHY: V2 Session API는 systemPrompt 옵션이 없으므로 send()에 역할을 앞에 붙여서 전달.
+        //      SDKSessionOptions에 systemPrompt/maxTurns가 없어 프롬프트 엔지니어링으로 대체.
+        const fullPrompt = config.systemPrompt
+          ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
+          : config.prompt;
+        await session.send(fullPrompt);
         for await (const sdkEvent of session.stream()) {
           const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
             this.logger.debug('Unhandled SDK event type', { eventType });
