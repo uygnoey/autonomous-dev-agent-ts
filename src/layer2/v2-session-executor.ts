@@ -226,11 +226,10 @@ export class V2SessionExecutor implements AgentExecutor {
       baseEnv.CLAUDE_CODE_OAUTH_TOKEN = token;
     }
 
-    // WHY: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS를 서브프로세스에 전달하지 않음.
-    //      이 환경변수가 설정된 Claude Code CLI는 팀 에이전트 모드로 실행되어
-    //      orchestrator 메시지를 기다리다 hanging이 발생함.
-    //      baseEnv에서 명시적으로 제거.
-    delete baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;
+    // WHY: CLAUDECODE 환경변수가 설정된 상태에서 Claude Code CLI를 서브프로세스로 실행하면
+    //      "nested Claude Code session" 에러로 exit code 1 종료됨.
+    //      서브프로세스가 독립 세션으로 시작하도록 반드시 제거.
+    delete baseEnv.CLAUDECODE;
 
     return { ...baseEnv, ...(config.env ?? {}) };
   }
