@@ -195,11 +195,12 @@ async function runLayer1Verification(
     return { passed: true, feedback: 'layer1 auto-pass (verifier not configured)' };
   }
 
-  // WHY: 에이전트 피드백을 테스트 결과 문자열로 합산
+  // WHY: 상태(PASS/FAIL)만 포함 — lastMessage에 'error'/'fail' 단어가 포함될 경우
+  //      hasTestFailures 오탐 방지. feedback은 별도 컨텍스트로 전달.
   const testResults = Array.from(agentResults.entries())
     .map(([agent, result]) => {
       const status = result.hasError ? 'FAIL' : 'PASS';
-      return `[${agent}] ${status}: ${result.lastMessage || '(no feedback)'}`;
+      return `[${agent}] ${status}`;
     })
     .join('\n');
 
