@@ -25,7 +25,6 @@ export type CliVersion = string;
 export async function buildYargsParser(
   args: string[],
   cliVersion: CliVersion,
-  // biome-ignore lint/suspicious/noExplicitAny: yargs parse() 반환 타입은 제네릭으로 추론 불가 — any 불가피
 ): Promise<Record<string, unknown> & { _: (string | number)[]; $0: string }> {
   // WHY: dot-notation 비활성화 — `log.level` 같은 키를 nested object로 파싱하지 않고 문자열 그대로 전달
   return yargs(args)

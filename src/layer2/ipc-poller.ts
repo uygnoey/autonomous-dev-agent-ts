@@ -11,13 +11,8 @@
 import { readdir, stat } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
 import type { Logger } from 'core/logger.js';
+import { invokeCallback, isEnoent, readJsonFile, safeJoin } from 'layer2/ipc-poller-helpers.js';
 import type { IpcEvent, IpcPollerCallback, IpcPollerOptions } from 'layer2/ipc-poller-types.js';
-import {
-  invokeCallback,
-  isEnoent,
-  readJsonFile,
-  safeJoin,
-} from 'layer2/ipc-poller-helpers.js';
 
 // ── 상수 ────────────────────────────────────────────────────
 
@@ -255,4 +250,3 @@ export class IpcPoller {
     this.seenFiles.set(filePath, mtime);
   }
 }
-

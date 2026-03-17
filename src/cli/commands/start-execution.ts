@@ -180,7 +180,10 @@ export async function runLayer3(
 ): Promise<Result<void, AdevError>> {
   try {
     chat.system('Layer3 E2E 검증 시작 중...');
-    logger.info('Layer3 실행 시작', { projectId: handoff.projectId, projectPath: session.projectInfo.path });
+    logger.info('Layer3 실행 시작', {
+      projectId: handoff.projectId,
+      projectPath: session.projectInfo.path,
+    });
 
     // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성
     const processExecutor = new ProcessExecutor(logger);

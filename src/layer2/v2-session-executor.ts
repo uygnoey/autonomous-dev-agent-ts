@@ -18,6 +18,7 @@ export type {
   V2SessionFactory,
   V2SessionExecutorOptions,
 } from 'layer2/v2-session-executor-types.js';
+import { buildSessionEnvironment } from 'layer2/v2-session-env-builder.js';
 import type {
   SDKSessionOptions,
   V2SessionExecutorOptions,
@@ -31,7 +32,6 @@ import {
   sdkResumeSession,
   sdkSessionFactory,
 } from 'layer2/v2-session-factory.js';
-import { buildSessionEnvironment } from 'layer2/v2-session-env-builder.js';
 
 /**
  * V2 Session 기반 에이전트 실행기 / V2 Session-based agent executor
