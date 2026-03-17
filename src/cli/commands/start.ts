@@ -153,7 +153,27 @@ export class StartCommand {
               await generateAgentMds(session, contractResult.value, chat, this.logger);
             }
 
-            chat.system('Layer2 자율 개발을 시작하려면 "yes"를 입력하세요.');
+            // WHY: CV-002 — completenessScore < 1.0 시 부족한 항목을 명시하고
+            //      유저가 대화를 이어가 개선할 수 있도록 안내한다 (스펙 §6.7).
+            const matrix = contractResult.value.contract.verificationMatrix;
+            const hasQualityIssues =
+              matrix.completenessScore < 1.0 ||
+              !matrix.allIODefined ||
+              !matrix.allFeaturesHaveCriteria;
+
+            if (hasQualityIssues) {
+              const missing: string[] = [];
+              if (!matrix.allIODefined) missing.push('기능 입출력 정의');
+              if (!matrix.allFeaturesHaveCriteria) missing.push('수락 기준');
+              if (matrix.completenessScore < 1.0)
+                missing.push(`완전성 점수 (현재: ${matrix.completenessScore})`);
+              chat.system(
+                `⚠️ Contract 품질 미달: [${missing.join(', ')}] 항목이 부족합니다.\n계속 진행하려면 "yes"를 입력하세요. 대화로 개선하려면 다른 메시지를 입력하세요.`,
+              );
+            } else {
+              chat.system('Layer2 자율 개발을 시작하려면 "yes"를 입력하세요.');
+            }
+
             const confirmEvent = await chat.waitForInput();
             if (
               confirmEvent.type === 'message' &&
@@ -171,6 +191,16 @@ export class StartCommand {
                 // WHY: Layer2 성공 시 Layer3 E2E 검증 자동 실행 (스펙 §계층 연동)
                 await runLayer3(session, contractResult.value, chat, this.logger);
               }
+              return ok(undefined);
+            }
+
+            // WHY: 품질 이슈가 있고 유저가 "yes"를 입력하지 않으면 대화 루프를 유지해
+            //      누락된 항목을 보완할 수 있도록 한다.
+            if (hasQualityIssues) {
+              chat.system(
+                '대화를 계속하여 누락된 항목을 추가해 주세요. Contract를 다시 생성하려면 "/contract"를 입력하세요.',
+              );
+              break;
             }
 
             return ok(undefined);
