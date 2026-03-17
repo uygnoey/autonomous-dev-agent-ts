@@ -11,7 +11,20 @@ import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import { readTemplateSourceFile } from 'layer3/doc-integrator-fragment.js';
-import type { DocumentTemplate, ProjectDocumentType } from 'layer3/types.js';
+import type { IntegrateOptions } from 'layer3/doc-integrator-types.js';
+import type { DocumentTemplate, IntegratedDocument, ProjectDocumentType } from 'layer3/types.js';
+
+/** generateAll에서 유효한 프로젝트 문서 유형 / Valid project document types for generateAll */
+const VALID_PROJECT_TYPES = new Set<string>([
+  'readme',
+  'api-reference',
+  'architecture',
+  'user-manual',
+  'installation-guide',
+  'test-report',
+  'changelog',
+  'contributing-guide',
+]);
 
 /**
  * 기본 템플릿을 레지스트리에 로드한다 / Load default templates into registry
@@ -119,6 +132,66 @@ export async function registerTemplate(
       new Layer3Error('layer3_register_template_failed', '커스텀 템플릿 등록 실패', cause),
     );
   }
+}
+
+/**
+ * 모든 프로젝트 문서를 생성하는 내부 루프 / Inner loop for generating all project documents
+ *
+ * @description
+ * KR: generateAll()의 템플릿별 통합 루프를 별도 함수로 추출하여 파일 크기를 준수한다.
+ * EN: Extracted template-per-template integration loop from generateAll() to keep file size compliant.
+ *
+ * @param projectId - 프로젝트 ID / Project ID
+ * @param outputDir - 출력 디렉토리 / Output directory
+ * @param templates - 템플릿 목록 / Template list
+ * @param integrate - 통합 함수 / Integrate function
+ * @param logger - 로거 / Logger
+ * @returns 생성된 문서 배열 / Generated document array
+ */
+export async function generateAllDocuments(
+  projectId: string,
+  outputDir: string,
+  templates: readonly DocumentTemplate[],
+  integrate: (options: IntegrateOptions) => Promise<Result<IntegratedDocument, Layer3Error>>,
+  logger: Logger,
+): Promise<readonly IntegratedDocument[]> {
+  const documents: IntegratedDocument[] = [];
+
+  for (const template of templates) {
+    try {
+      if (!VALID_PROJECT_TYPES.has(template.type)) {
+        logger.debug('프로젝트 문서 유형이 아님 — 건너뜀', { type: template.type });
+        continue;
+      }
+
+      const options: IntegrateOptions = {
+        projectId,
+        type: template.type as ProjectDocumentType,
+        fragmentPattern: `${outputDir}/**/*.md`,
+        outputPath: `${outputDir}/${template.type}.md`,
+        templateId: template.id,
+      };
+
+      const result = await integrate(options);
+      if (result.ok) {
+        documents.push(result.value);
+      } else {
+        logger.warn('개별 문서 생성 실패 — 건너뜀', {
+          templateType: template.type,
+          templateId: template.id,
+          error: result.error.message,
+        });
+      }
+    } catch (templateError) {
+      logger.warn('개별 문서 생성 중 예외 — 건너뜀', {
+        templateType: template.type,
+        templateId: template.id,
+        error: templateError instanceof Error ? templateError.message : String(templateError),
+      });
+    }
+  }
+
+  return documents;
 }
 
 /**

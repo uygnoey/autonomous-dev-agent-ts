@@ -36,11 +36,8 @@ import {
 } from 'layer3/deliverable-types.js';
 import {
   renderDeliverableMarkdown,
+  writeDeliverableByFormat,
   writeDeliverableToDir,
-  writeDocx,
-  writeHtml,
-  writePdf,
-  writePptx,
 } from 'layer3/deliverable-writer.js';
 import type { DocCollaborator } from 'layer3/doc-collaborator.js';
 import type {
@@ -182,34 +179,10 @@ export class DeliverableBuilder implements IDeliverableBuilder {
       content = generateBusinessContent(type, metadata);
     }
 
-    // WHY: format에 따라 실제 파일을 디스크에 저장
+    // WHY: format에 따라 실제 파일을 디스크에 저장 — 분기 로직은 writeDeliverableByFormat에 위임
     const outputDir = dirname(outputPath);
     const title = `${metadata.projectName} — ${type}`;
-
-    if (format === 'pdf') {
-      const pdfResult = await writePdf(outputDir, type, content, title, this.logger);
-      if (!pdfResult.ok) {
-        this.logger.warn('PDF 저장 실패, 마크다운으로 대체', {
-          type,
-          error: pdfResult.error.message,
-        });
-      }
-    } else if (format === 'pptx') {
-      const pptxResult = await writePptx(outputDir, type, content, title, this.logger);
-      if (!pptxResult.ok) {
-        this.logger.warn('PPTX 저장 실패', { type, error: pptxResult.error.message });
-      }
-    } else if (format === 'docx') {
-      const docxResult = await writeDocx(outputDir, type, content, title, this.logger);
-      if (!docxResult.ok) {
-        this.logger.warn('DOCX 저장 실패', { type, error: docxResult.error.message });
-      }
-    } else {
-      const htmlResult = await writeHtml(outputDir, type, content, title, this.logger);
-      if (!htmlResult.ok) {
-        this.logger.warn('HTML 저장 실패', { type, error: htmlResult.error.message });
-      }
-    }
+    await writeDeliverableByFormat(format, outputDir, type, content, title, this.logger);
 
     this.deliverableCounter += 1;
     const deliverable: BusinessDeliverable = {

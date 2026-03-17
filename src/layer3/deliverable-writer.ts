@@ -34,10 +34,56 @@ export {
   writePptx,
 } from 'layer3/deliverable-format-writers.js';
 
+import { writeDocx, writeHtml, writePdf, writePptx } from 'layer3/deliverable-format-writers.js';
 import { renderDeliverableMarkdown } from 'layer3/deliverable-writer-render.js';
 
 /** 산출물 저장 디렉토리 이름 / Deliverable output directory name */
 const DELIVERABLES_DIR = '.adev/deliverables';
+
+/**
+ * 포맷에 따라 산출물 파일을 저장한다 / Write deliverable file by format
+ *
+ * @description
+ * KR: pdf/pptx/docx/html 포맷 분기를 중앙화하여 DeliverableBuilder의 300줄 제한을 준수한다.
+ * EN: Centralises format dispatch so DeliverableBuilder stays within the 300-line limit.
+ *
+ * @param format - 파일 포맷 / File format
+ * @param outputDir - 출력 디렉토리 / Output directory
+ * @param type - 산출물 유형 / Deliverable type
+ * @param content - 콘텐츠 / Content
+ * @param title - 제목 / Title
+ * @param logger - 로거 / Logger
+ */
+export async function writeDeliverableByFormat(
+  format: string,
+  outputDir: string,
+  type: BusinessDeliverableType,
+  content: string,
+  title: string,
+  logger: Logger,
+): Promise<void> {
+  if (format === 'pdf') {
+    const result = await writePdf(outputDir, type, content, title, logger);
+    if (!result.ok) {
+      logger.warn('PDF 저장 실패, 마크다운으로 대체', { type, error: result.error.message });
+    }
+  } else if (format === 'pptx') {
+    const result = await writePptx(outputDir, type, content, title, logger);
+    if (!result.ok) {
+      logger.warn('PPTX 저장 실패', { type, error: result.error.message });
+    }
+  } else if (format === 'docx') {
+    const result = await writeDocx(outputDir, type, content, title, logger);
+    if (!result.ok) {
+      logger.warn('DOCX 저장 실패', { type, error: result.error.message });
+    }
+  } else {
+    const result = await writeHtml(outputDir, type, content, title, logger);
+    if (!result.ok) {
+      logger.warn('HTML 저장 실패', { type, error: result.error.message });
+    }
+  }
+}
 
 /**
  * 산출물 파일명 생성 / Generate deliverable filename
