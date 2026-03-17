@@ -411,7 +411,7 @@ describe('AgentMdGenerator saveDrafts() 정상 경로', () => {
     }
   });
 
-  it('Bun.write가 7회 호출됨', async () => {
+  it('Bun.write가 14회 호출됨 (.adev/agents + .claude/agents)', async () => {
     const bunWriteMock = mock(async () => new Response());
     const originalWrite = Bun.write;
     (Bun as { write: typeof Bun.write }).write = bunWriteMock as typeof Bun.write;
@@ -420,13 +420,14 @@ describe('AgentMdGenerator saveDrafts() 정상 경로', () => {
       const api = makeSuccessApi();
       const gen = new AgentMdGenerator(api as never, logger);
       await gen.saveDrafts('/tmp/project', makeFullDrafts());
-      expect(bunWriteMock).toHaveBeenCalledTimes(7);
+      // WHY: 7 에이전트 × 2 경로(.adev/agents + .claude/agents) = 14회
+      expect(bunWriteMock).toHaveBeenCalledTimes(14);
     } finally {
       (Bun as { write: typeof Bun.write }).write = originalWrite;
     }
   });
 
-  it('저장 경로에 .adev/agents 포함됨', async () => {
+  it('저장 경로에 .adev/agents 또는 .claude/agents 포함됨', async () => {
     const writtenPaths: string[] = [];
     const bunWriteMock = mock(async (path: unknown) => {
       writtenPaths.push(path as string);
@@ -439,8 +440,11 @@ describe('AgentMdGenerator saveDrafts() 정상 경로', () => {
       const api = makeSuccessApi();
       const gen = new AgentMdGenerator(api as never, logger);
       await gen.saveDrafts('/my/project', makeFullDrafts());
+      // WHY: 각 에이전트는 .adev/agents/와 .claude/agents/ 두 경로에 저장됨
       for (const p of writtenPaths) {
-        expect(p).toContain('.adev/agents');
+        const hasAdevPath = p.includes('.adev/agents');
+        const hasClaudePath = p.includes('.claude/agents');
+        expect(hasAdevPath || hasClaudePath).toBe(true);
       }
     } finally {
       (Bun as { write: typeof Bun.write }).write = originalWrite;
