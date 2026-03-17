@@ -230,7 +230,8 @@ export class IntegrationTester {
 
     // WHY: bun test 실행 (지정된 경로)
     const args = ['test', ...testPaths];
-    const testResult = await this.processExecutor.execute('bun', args, {
+    // WHY: process.execPath = 현재 실행 중인 bun의 절대 경로 사용 — PATH 의존성 제거
+    const testResult = await this.processExecutor.execute(process.execPath, args, {
       cwd: projectPath,
       timeoutMs: TEST_TIMEOUT_MS,
     });
