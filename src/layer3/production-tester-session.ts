@@ -44,9 +44,11 @@ export async function executeOnce(
   session.lastExecutedAt = new Date();
 
   try {
+    // WHY: projectPath = 프로젝트 루트 디렉토리 (cwd for bun test)
+    //      session.config.testPath는 테스트 파일 경로 — 혼동 금지
     const result = await integrationTester.runIntegrationTests(
       session.projectId,
-      session.config.testPath,
+      session.projectPath,
     );
 
     if (!result.ok) {

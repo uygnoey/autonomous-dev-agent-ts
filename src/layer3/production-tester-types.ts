@@ -45,6 +45,8 @@ export interface ContinuousE2ESession {
   readonly id: string;
   /** 프로젝트 ID / Project ID */
   readonly projectId: string;
+  /** 프로젝트 절대 경로 / Project absolute path (cwd for bun test) */
+  readonly projectPath: string;
   /** 설정 / Configuration */
   readonly config: ContinuousE2EConfig;
   /** 상태 / Status */
@@ -71,6 +73,8 @@ export interface ContinuousE2ESession {
 export interface StartContinuousE2EOptions {
   /** 프로젝트 ID / Project ID */
   readonly projectId: string;
+  /** 프로젝트 절대 경로 / Project absolute path (cwd for bun test) */
+  readonly projectPath: string;
   /** E2E 테스트 경로 / E2E test path */
   readonly testPath: string;
   /** 실행 간격 (ms, 기본: 5분) / Execution interval in milliseconds (default: 5min) */

@@ -87,6 +87,7 @@ export class ProductionTester implements IProductionTester {
     const session: ContinuousE2ESession = {
       id: sessionId,
       projectId: options.projectId,
+      projectPath: options.projectPath,
       config: {
         testPath: options.testPath,
         intervalMs: Math.max(1, options.intervalMs ?? DEFAULT_INTERVAL_MS),
@@ -103,6 +104,7 @@ export class ProductionTester implements IProductionTester {
     this.logger.info('지속 E2E 실행 시작', {
       sessionId,
       projectId: options.projectId,
+      projectPath: options.projectPath,
       testPath: options.testPath,
       intervalMs: session.config.intervalMs,
       failFast: session.config.failFast,
