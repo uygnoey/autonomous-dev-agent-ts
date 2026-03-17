@@ -157,13 +157,60 @@ export class GitBranchManager {
 
     this.logger.warn('병합 충돌 발생 — abort 수행', { branchName, conflictedFiles });
 
-    // WHY: merge --abort로 상태 복원. 실패해도 계속 진행
-    const abortResult = await this.git(['merge', '--abort']);
-    if (!abortResult.ok) {
-      this.logger.error('merge --abort 실패', { error: abortResult.error.message });
+    // WHY: MERGE_HEAD가 존재할 때만 abort 실행. 없으면 fatal 에러 발생
+    const mergeHeadCheck = await this.git(['rev-parse', '--verify', 'MERGE_HEAD']);
+    if (mergeHeadCheck.ok) {
+      const abortResult = await this.git(['merge', '--abort']);
+      if (!abortResult.ok) {
+        this.logger.error('merge --abort 실패', { error: abortResult.error.message });
+      }
+    } else {
+      this.logger.debug('MERGE_HEAD 없음 — abort 생략');
     }
 
     yield createEvent('error', `병합 충돌: ${branchName} — 충돌 파일: [${fileList}]`);
+  }
+
+  /**
+   * 변경사항을 스테이징하고 커밋한다 / Stage and commit changes
+   *
+   * @description
+   * KR: `git add -A`로 모든 변경사항을 스테이징하고 지정된 메시지로 커밋한다.
+   *     CODE Phase 완료 후 coder 작업을 브랜치에 저장하기 위해 호출된다.
+   * EN: Stages all changes with `git add -A` then commits with the given message.
+   *     Called after CODE phase completes to persist coder's work to the branch.
+   *
+   * @param message - 커밋 메시지 / Commit message
+   * @returns AgentEvent 스트림 / AgentEvent stream
+   */
+  async *commitChanges(message: string): AsyncIterable<AgentEvent> {
+    this.logger.info('변경사항 커밋 시작', { message, cwd: this.cwd });
+
+    const addResult = await this.git(['add', '-A']);
+    if (!addResult.ok) {
+      this.logger.error('git add 실패', { error: addResult.error.message });
+      yield createEvent('error', `git add 실패: ${addResult.error.message}`);
+      return;
+    }
+
+    const commitResult = await this.git(['commit', '-m', message]);
+    if (!commitResult.ok) {
+      // WHY: "nothing to commit" 은 에러가 아님 — 변경사항 없을 때 정상 종료
+      if (
+        commitResult.error.message.includes('nothing to commit') ||
+        commitResult.error.message.includes('nothing added to commit')
+      ) {
+        this.logger.info('커밋할 변경사항 없음 — 스킵', { message });
+        yield createEvent('message', '커밋할 변경사항 없음 — 스킵');
+        return;
+      }
+      this.logger.error('git commit 실패', { error: commitResult.error.message });
+      yield createEvent('error', `git commit 실패: ${commitResult.error.message}`);
+      return;
+    }
+
+    this.logger.info('커밋 완료', { message });
+    yield createEvent('message', `커밋 완료: ${message}`);
   }
 
   /**

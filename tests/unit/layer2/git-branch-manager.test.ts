@@ -437,21 +437,23 @@ describe('GitBranchManager.mergeBranch', () => {
       expect(mock.calls[1]?.args).toEqual(['merge', '--no-ff', 'feat/x', '-m', 'merge: feat/x']);
     });
 
-    it('충돌 시 checkout → merge → diff → abort 순서', async () => {
+    it('충돌 시 checkout → merge → diff → rev-parse → abort 순서', async () => {
       const mock = makeMockExecutor([
         { exitCode: 0 },
         { exitCode: 1, stderr: 'CONFLICT' },
         { exitCode: 0, stdout: '' },
         { exitCode: 0 },
+        { exitCode: 0 },
       ]);
       const manager = new GitBranchManager({ processExecutor: mock as never, logger });
       await collectEvents(manager.mergeBranch('feat/x'));
 
-      expect(mock.calls).toHaveLength(4);
+      expect(mock.calls).toHaveLength(5);
       expect(mock.calls[0]?.args[0]).toBe('checkout');
       expect(mock.calls[1]?.args[0]).toBe('merge');
       expect(mock.calls[2]?.args).toEqual(['diff', '--name-only', '--diff-filter=U']);
-      expect(mock.calls[3]?.args).toEqual(['merge', '--abort']);
+      expect(mock.calls[3]?.args).toEqual(['rev-parse', '--verify', 'MERGE_HEAD']);
+      expect(mock.calls[4]?.args).toEqual(['merge', '--abort']);
     });
   });
 
@@ -521,5 +523,95 @@ describe('GitBranchManager 생성자', () => {
     const m1 = new GitBranchManager({ processExecutor: mock as never, logger });
     const m2 = new GitBranchManager({ processExecutor: mock as never, logger });
     expect(m1).not.toBe(m2);
+  });
+});
+
+// ── commitChanges() ──────────────────────────────────────────────
+
+describe('GitBranchManager commitChanges()', () => {
+  it('git add -A + git commit 순서로 실행', async () => {
+    const calls: string[][] = [];
+    const mockExec = {
+      execute: async (_cmd: string, args: readonly string[]) => {
+        calls.push([...args]);
+        return { ok: true as const, value: { exitCode: 0, stdout: '', stderr: '', durationMs: 1 } };
+      },
+    };
+    const manager = new GitBranchManager({ processExecutor: mockExec as never, logger });
+    const events = await collectEvents(manager.commitChanges('feat(x): done'));
+
+    expect(calls[0]).toEqual(['add', '-A']);
+    expect(calls[1]).toEqual(['commit', '-m', 'feat(x): done']);
+    expect(events.some((e) => e.type === 'message')).toBe(true);
+  });
+
+  it('git add 실패 시 error event yield', async () => {
+    const mock = makeMockExecutor([{ exitCode: 1, stderr: 'add error', stdout: '' }]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.commitChanges('msg'));
+    expect(events.some((e) => e.type === 'error')).toBe(true);
+  });
+
+  it('nothing to commit 시 skip message yield (error 없음)', async () => {
+    const mockExec = {
+      execute: async (_cmd: string, args: readonly string[]) => {
+        if (args[0] === 'commit') {
+          return {
+            ok: true as const,
+            value: { exitCode: 1, stdout: 'nothing to commit', stderr: '', durationMs: 1 },
+          };
+        }
+        return { ok: true as const, value: { exitCode: 0, stdout: '', stderr: '', durationMs: 1 } };
+      },
+    };
+    const manager = new GitBranchManager({ processExecutor: mockExec as never, logger });
+    const events = await collectEvents(manager.commitChanges('msg'));
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+    expect(events.some((e) => e.type === 'message')).toBe(true);
+  });
+
+  it('git commit 실패(fatal 에러) 시 error event yield', async () => {
+    const mockExec = {
+      execute: async (_cmd: string, args: readonly string[]) => {
+        if (args[0] === 'commit') {
+          return {
+            ok: true as const,
+            value: { exitCode: 1, stdout: '', stderr: 'fatal: commit fail', durationMs: 1 },
+          };
+        }
+        return { ok: true as const, value: { exitCode: 0, stdout: '', stderr: '', durationMs: 1 } };
+      },
+    };
+    const manager = new GitBranchManager({ processExecutor: mockExec as never, logger });
+    const events = await collectEvents(manager.commitChanges('msg'));
+    expect(events.some((e) => e.type === 'error')).toBe(true);
+  });
+
+  it('커밋 성공 시 message event에 커밋 메시지 포함', async () => {
+    const mockExec = {
+      execute: async () => ({
+        ok: true as const,
+        value: { exitCode: 0, stdout: '[main 1a2b3c4] feat: done', stderr: '', durationMs: 1 },
+      }),
+    };
+    const manager = new GitBranchManager({ processExecutor: mockExec as never, logger });
+    const events = await collectEvents(manager.commitChanges('feat: done'));
+    const msgEvent = events.find((e) => e.type === 'message');
+    expect(msgEvent).toBeDefined();
+    expect(msgEvent?.content).toContain('feat: done');
+  });
+
+  it('executor 오류 발생 시 error event yield', async () => {
+    const mockExec = {
+      execute: async (_cmd: string, args: readonly string[]) => {
+        if (args[0] === 'add') {
+          return { ok: false as const, error: new AdevError('git_command_error', 'exec error') };
+        }
+        return { ok: true as const, value: { exitCode: 0, stdout: '', stderr: '', durationMs: 1 } };
+      },
+    };
+    const manager = new GitBranchManager({ processExecutor: mockExec as never, logger });
+    const events = await collectEvents(manager.commitChanges('msg'));
+    expect(events.some((e) => e.type === 'error')).toBe(true);
   });
 });

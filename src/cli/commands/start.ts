@@ -17,7 +17,7 @@ import type { ConversationMessage } from '../../layer1/types.js';
 import { createChatUi } from '../tui/chat.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { GlobalCliOptions } from '../types.js';
-import { generateAgentMds, runLayer2 } from './start-execution.js';
+import { generateAgentMds, runLayer2, runLayer3 } from './start-execution.js';
 import { generateContract } from './start-pipeline.js';
 import { initializeLayer1Session, loadActiveProject } from './start-session.js';
 import { ADEV_VERSION, LAYER1_SYSTEM_PROMPT } from './start-types.js';
@@ -167,6 +167,9 @@ export class StartCommand {
               );
               if (!layer2Result.ok) {
                 chat.error(`Layer2 실행 실패: ${layer2Result.error.message}`);
+              } else {
+                // WHY: Layer2 성공 시 Layer3 E2E 검증 자동 실행 (스펙 §계층 연동)
+                await runLayer3(session, contractResult.value, chat, this.logger);
               }
             }
 

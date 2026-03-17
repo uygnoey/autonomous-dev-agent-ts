@@ -1,6 +1,21 @@
 # autonomous-dev-agent (adev)
 이 문서를 읽을떄마다 읽은 년월일을  YYYY-MM-DD HH24:mm:ss 포멧으로 표기하고 아랫줄에다 main-claude.md 읽기시작 이라고 tui에 표시해
 
+## 핵심 역할 정의
+
+**adev = 오케스트레이터** | **Claude = 실제 작업자**
+
+- Claude가 기획·설계·개발·테스트·검증을 **모두** 수행한다
+- adev는 Claude가 일관된 고품질로 작업할 수 있게 **메모리 관리 + 흐름 관리**를 담당한다
+  - 메모리: RAG(LanceDB) — 과거 결정, 실패 이력, 코드 인덱스를 Claude에 주입
+  - 흐름: Phase FSM + HandoffPackage — 개발 순서와 역할 분리를 강제
+  - 컨텍스트: `.claude/agents/` + CLAUDE.md — 각 Claude 인스턴스에 역할 문서 주입
+
+> adev가 없으면 Claude는 역할이 섞이고 컨텍스트를 잃는다.
+> adev가 있어야 Claude가 서비스 가능 수준의 결과물을 자율적으로 완성한다.
+
+---
+
 Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발을 수행하는 상위 에이전트 시스템.
 
 상세 컨벤션: `.claude/CLAUDE.md`

@@ -15,6 +15,8 @@ import type { AuthProvider } from 'auth/types.js';
 import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
 import { ProcessExecutor } from 'core/process-executor.js';
+import { ClaudeApi } from 'layer1/claude-api.js';
+import { Layer1Verifier } from 'layer1/verifier.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
 import { AgentSpawner } from 'layer2/agent-spawner.js';
 import { BiasDetector } from 'layer2/bias-detector.js';
@@ -192,7 +194,12 @@ export class Layer2Bootstrap {
       cwd: this.projectCwd,
     });
 
-    // 9. 의존성 묶음 구성
+    // 9. Layer1 검증기 — VERIFY Phase에서 스펙 의도 검증에 사용
+    // WHY: layer1Verifier 미주입 시 auto-pass로 검증이 skip되므로 반드시 주입한다
+    const claudeApi = new ClaudeApi(this.authProvider, logger);
+    const layer1Verifier = new Layer1Verifier(logger, claudeApi);
+
+    // 10. 의존성 묶음 구성
     const deps: TeamLeaderDeps = {
       phaseEngine,
       agentSpawner,
@@ -212,6 +219,7 @@ export class Layer2Bootstrap {
       ipcPoller,
       parallelCoderRunner,
       gitBranchManager,
+      layer1Verifier,
     };
 
     return new TeamLeader(deps);

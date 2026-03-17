@@ -1771,3 +1771,71 @@ describe('PhaseEngine 롤백 체인 복합 시나리오', () => {
     expect(engine.currentPhase).toBe('DESIGN');
   });
 });
+
+// ── reset() ────────────────────────────────────────────────────
+
+describe('PhaseEngine reset()', () => {
+  it('DESIGN 상태에서 reset() 후 여전히 DESIGN', () => {
+    const engine = makeEngine();
+    engine.reset();
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('CODE 상태에서 reset() 후 DESIGN으로 초기화', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    engine.reset();
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('VERIFY 상태에서 reset() 후 DESIGN으로 초기화', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.reset();
+    expect(engine.currentPhase).toBe('DESIGN');
+  });
+
+  it('reset() 후 이력이 초기화됨', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    engine.transition('TEST', 'r', 'architect');
+    engine.reset();
+    expect(engine.getHistory()).toHaveLength(0);
+  });
+
+  it('reset() 후 정상적인 DESIGN→CODE 전환 가능', () => {
+    const engine = makeEngine();
+    advanceToVerify(engine);
+    engine.reset();
+    const result = engine.transition('CODE', 'after reset', 'qa');
+    expect(result.ok).toBe(true);
+    expect(engine.currentPhase).toBe('CODE');
+  });
+
+  it('reset() 후 전체 Phase 사이클 반복 가능 (feat 교체 시나리오)', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 3; i++) {
+      engine.reset();
+      expect(engine.currentPhase).toBe('DESIGN');
+      advanceToVerify(engine);
+      expect(engine.currentPhase).toBe('VERIFY');
+    }
+  });
+
+  it('reset() 여러 번 호출해도 항상 DESIGN으로 수렴', () => {
+    const engine = makeEngine();
+    for (let i = 0; i < 5; i++) {
+      engine.reset();
+      expect(engine.currentPhase).toBe('DESIGN');
+    }
+  });
+
+  it('TEST 상태에서 reset() 후 canTransition CODE 가능', () => {
+    const engine = makeEngine();
+    engine.transition('CODE', 'r', 'qa');
+    engine.transition('TEST', 'r', 'coder');
+    engine.reset();
+    expect(engine.canTransition('CODE')).toBe(true);
+    expect(engine.canTransition('TEST')).toBe(false);
+  });
+});

@@ -8,10 +8,16 @@
  *     every 500 ms to detect new files and mtime changes.
  */
 
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
 import type { Logger } from 'core/logger.js';
 import type { IpcEvent, IpcPollerCallback, IpcPollerOptions } from 'layer2/ipc-poller-types.js';
+import {
+  invokeCallback,
+  isEnoent,
+  readJsonFile,
+  safeJoin,
+} from 'layer2/ipc-poller-helpers.js';
 
 // ── 상수 ────────────────────────────────────────────────────
 
@@ -250,52 +256,3 @@ export class IpcPoller {
   }
 }
 
-// ── 모듈 내부 순수 헬퍼 ──────────────────────────────────────
-
-/** 에러가 ENOENT인지 판별 / Check if error is ENOENT */
-function isEnoent(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === 'ENOENT'
-  );
-}
-
-/** path traversal 방지 join — base 외부로 탈출하면 null 반환 */
-function safeJoin(base: string, segment: string): string | null {
-  const joined = resolve(base, segment);
-  if (!joined.startsWith(base)) return null;
-  return joined;
-}
-
-/**
- * JSON 파일을 읽어 Record<string, unknown>으로 반환
- * 파싱 실패 시 빈 객체 반환 (에러는 warn 로그)
- */
-async function readJsonFile(filePath: string, logger: Logger): Promise<Record<string, unknown>> {
-  try {
-    const raw = await readFile(filePath, 'utf-8');
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return { value: parsed };
-  } catch (err: unknown) {
-    logger.warn('IpcPoller: JSON read/parse failed', { filePath, error: String(err) });
-    return {};
-  }
-}
-
-/** 콜백을 안전하게 호출 — throw는 logger.error로 흡수 */
-async function invokeCallback(
-  callback: IpcPollerCallback,
-  event: IpcEvent,
-  logger: Logger,
-): Promise<void> {
-  try {
-    await callback(event);
-  } catch (err: unknown) {
-    logger.error('IpcPoller: callback threw an error', { type: event.type, error: String(err) });
-  }
-}

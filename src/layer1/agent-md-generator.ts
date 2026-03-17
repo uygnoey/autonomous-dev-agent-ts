@@ -189,10 +189,15 @@ export class AgentMdGenerator {
    * @returns ok(void) on success, err on first write failure
    */
   async saveDrafts(projectPath: string, drafts: Record<AgentName, string>): Promise<Result<void>> {
-    const agentsDir = `${projectPath}/.adev/agents`;
+    const adevAgentsDir = `${projectPath}/.adev/agents`;
+    // WHY: Claude Code Agent Teams는 .claude/agents/ 에서 에이전트 정의를 로드한다.
+    //      .adev/agents/ 에만 저장하면 Claude Code가 에이전트를 인식하지 못하므로
+    //      두 경로에 모두 저장하여 Claude Code와 adev가 동일한 에이전트 문서를 공유한다.
+    const claudeAgentsDir = `${projectPath}/.claude/agents`;
 
     this.logger.info('에이전트 초안 저장 시작 / Saving agent drafts', {
-      agentsDir,
+      adevAgentsDir,
+      claudeAgentsDir,
       count: Object.keys(drafts).length,
     });
 
@@ -209,25 +214,32 @@ export class AgentMdGenerator {
         );
       }
 
-      const filePath = `${agentsDir}/${agentName}.md`;
+      const adevFilePath = `${adevAgentsDir}/${agentName}.md`;
+      const claudeFilePath = `${claudeAgentsDir}/${agentName}.md`;
 
       try {
-        await Bun.write(filePath, draft);
+        // WHY: .adev/agents/와 .claude/agents/ 모두에 저장
+        await Bun.write(adevFilePath, draft);
+        await Bun.write(claudeFilePath, draft);
         this.logger.debug(`에이전트 초안 저장 완료 / Agent draft saved: ${agentName}`, {
-          filePath,
+          adevFilePath,
+          claudeFilePath,
         });
       } catch (error: unknown) {
         return err(
           new AdevError(
             'agent_md_save_write_error',
-            `에이전트 초안 파일 저장 실패 / Failed to write agent draft file: ${filePath}`,
+            `에이전트 초안 파일 저장 실패 / Failed to write agent draft file: ${adevFilePath}`,
             error,
           ),
         );
       }
     }
 
-    this.logger.info('에이전트 초안 저장 완료 / All agent drafts saved', { agentsDir });
+    this.logger.info('에이전트 초안 저장 완료 / All agent drafts saved', {
+      adevAgentsDir,
+      claudeAgentsDir,
+    });
 
     return ok(undefined);
   }

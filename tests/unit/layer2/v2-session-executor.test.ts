@@ -1791,9 +1791,13 @@ describe('V2SessionExecutor - Extended Edge Cases', () => {
     // Act: 전체 스트림 소비
     await collectEvents(executor, config);
 
-    // Assert: send가 config.prompt 인수로 정확히 1회 호출됐는지 확인
+    // Assert: send가 systemPrompt + prompt 합성 문자열로 정확히 1회 호출됐는지 확인
+    // WHY: V2 Session API는 systemPrompt 옵션이 없으므로 prompt 앞에 systemPrompt를 합쳐서 전달
+    const expectedPrompt = config.systemPrompt
+      ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
+      : config.prompt;
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(sendSpy).toHaveBeenCalledWith(config.prompt);
+    expect(sendSpy).toHaveBeenCalledWith(expectedPrompt);
   });
 
   it('done 이벤트 수신 후 session.close()를 호출해야 한다', async () => {

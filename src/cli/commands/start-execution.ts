@@ -10,12 +10,16 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
+import { ProcessExecutor } from '../../core/process-executor.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
 import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
 import type { AgentMdGeneratorConfig } from '../../layer1/agent-md-generator.js';
 import type { HandoffPackage } from '../../layer1/types.js';
+import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
+import { IntegrationTester } from '../../layer2/integration-tester.js';
 import { Layer2Bootstrap } from '../../layer2/layer2-bootstrap.js';
+import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
 
@@ -150,5 +154,71 @@ export async function runLayer2(
         error,
       ),
     );
+  }
+}
+
+/**
+ * Layer3 E2E 검증 실행 / Run Layer3 E2E verification
+ *
+ * @description
+ * KR: Layer2 완료 후 ProductionTester로 E2E 테스트를 실행한다.
+ *     실패 시 warn 로그만 남기고 진행을 계속한다 (선택적 단계).
+ * EN: Runs E2E tests via ProductionTester after Layer2 completes.
+ *     On failure, only logs a warning (optional step).
+ *
+ * @param session - Layer1 세션 상태 / Layer1 session state
+ * @param handoff - HandoffPackage
+ * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @returns 항상 ok(void) — 실패 시 warn 로그만 / Always ok(void) — warns on failure
+ */
+export async function runLayer3(
+  session: Layer1SessionState,
+  handoff: HandoffPackage,
+  chat: ChatUi,
+  logger: Logger,
+): Promise<Result<void, AdevError>> {
+  try {
+    chat.system('Layer3 E2E 검증 시작 중...');
+    logger.info('Layer3 실행 시작', { projectId: handoff.projectId });
+
+    // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성
+    const processExecutor = new ProcessExecutor(logger);
+    const cleanEnvManager = new CleanEnvManager(logger);
+    const integrationTester = new IntegrationTester(logger, processExecutor, cleanEnvManager);
+
+    // WHY: 4단계 계단식 통합 검증으로 Layer2 결과물을 종합 검증한다
+    const verifyResult = await runStepwiseVerification(
+      handoff.projectId,
+      'all',
+      integrationTester,
+      logger,
+    );
+
+    if (!verifyResult.ok) {
+      chat.system(`Layer3 검증 실패 (건너뜀): ${verifyResult.error.message}`);
+      logger.warn('Layer3 검증 실패, 건너뜀', { error: verifyResult.error.message });
+      return ok(undefined);
+    }
+
+    const steps = verifyResult.value;
+    const passCount = steps.filter((s) => s.passed).length;
+    const failCount = steps.filter((s) => !s.passed).length;
+    const allPassed = failCount === 0;
+
+    chat.system(
+      `Layer3 검증 완료: ${passCount}/${steps.length} 단계 통과${allPassed ? ' ✓' : ' — 일부 실패'}`,
+    );
+    logger.info('Layer3 실행 완료', {
+      projectId: handoff.projectId,
+      totalSteps: steps.length,
+      passCount,
+      failCount,
+    });
+
+    return ok(undefined);
+  } catch (error: unknown) {
+    logger.warn('Layer3 실행 예외 발생, 건너뜀', { error: String(error) });
+    return ok(undefined);
   }
 }

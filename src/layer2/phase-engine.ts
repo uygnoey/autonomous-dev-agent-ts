@@ -178,6 +178,21 @@ export class PhaseEngine {
   }
 
   /**
+   * Phase 상태를 DESIGN으로 초기화한다 / Resets phase state to DESIGN
+   *
+   * @description
+   * KR: 새로운 feature 실행 전 호출하여 이전 feature의 Phase 상태가 잔류하지 않도록 한다.
+   *     history도 초기화하여 새로운 feature의 전환 이력을 깨끗하게 시작한다.
+   * EN: Call before each new feature execution so previous feature's phase state does not linger.
+   *     Also clears history so the new feature starts with a clean transition record.
+   */
+  reset(): void {
+    this.logger.debug('Phase 상태 초기화', { from: this.current, to: 'DESIGN' });
+    this.current = 'DESIGN';
+    this.history.length = 0;
+  }
+
+  /**
    * Phase 전환 이력을 반환한다 / Returns phase transition history
    *
    * @returns 전환 이력 배열 (읽기 전용) / Transition history array (readonly)

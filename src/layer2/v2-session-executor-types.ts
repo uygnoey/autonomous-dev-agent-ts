@@ -8,7 +8,12 @@
  *     Structurally identical to SDKSession for full SDK compatibility.
  */
 
-import type { SDKMessage, SDKSessionOptions } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  HookCallbackMatcher,
+  HookEvent as SDKHookEvent,
+  SDKMessage,
+  SDKSessionOptions,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
 import type { Logger } from 'core/logger.js';
 
@@ -93,4 +98,12 @@ export interface V2SessionExecutorOptions {
    * EN: Defaults to sdkSessionFactory (based on unstable_v2_createSession) when not specified.
    */
   readonly sessionFactory?: V2SessionFactory;
+  /**
+   * SDK 훅 콜백 (선택) / SDK hook callbacks (optional)
+   *
+   * @description
+   * KR: PreToolUse, PostToolUse 등 SDK 훅 이벤트 콜백. StreamMonitor 연동에 사용.
+   * EN: Hook event callbacks for PreToolUse, PostToolUse, etc. Used to connect StreamMonitor.
+   */
+  readonly hooks?: Partial<Record<SDKHookEvent, HookCallbackMatcher[]>>;
 }

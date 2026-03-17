@@ -150,6 +150,10 @@ export async function* executeCodePhase(
   if (deps.gitBranchManager) {
     const activeAllocations = deps.coderAllocator.getActiveAllocations();
     for (const allocation of activeAllocations) {
+      // WHY: 병합 전 브랜치에 작업 내용을 커밋해야 merge가 가능하다
+      yield* deps.gitBranchManager.commitChanges(
+        `feat(${featureId}): ${allocation.coderId} CODE phase 완료`,
+      );
       yield* deps.gitBranchManager.mergeBranch(allocation.branchName);
       deps.coderAllocator.mergeAllocation(allocation.coderId);
     }

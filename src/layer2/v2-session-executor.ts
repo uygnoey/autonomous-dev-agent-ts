@@ -13,12 +13,13 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type AgentName, type Result, err, ok } from 'core/types.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
-import type { SDKSessionOptions, V2Session } from 'layer2/v2-session-executor-types.js';
+import type { V2Session } from 'layer2/v2-session-executor-types.js';
 export type {
   V2SessionFactory,
   V2SessionExecutorOptions,
 } from 'layer2/v2-session-executor-types.js';
 import type {
+  SDKSessionOptions,
   V2SessionExecutorOptions,
   V2SessionFactory,
 } from 'layer2/v2-session-executor-types.js';
@@ -30,6 +31,7 @@ import {
   sdkResumeSession,
   sdkSessionFactory,
 } from 'layer2/v2-session-factory.js';
+import { buildSessionEnvironment } from 'layer2/v2-session-env-builder.js';
 
 /**
  * V2 Session 기반 에이전트 실행기 / V2 Session-based agent executor
@@ -60,6 +62,7 @@ export class V2SessionExecutor implements AgentExecutor {
   private readonly defaultOptions: V2SessionExecutorOptions['defaultOptions'];
   private readonly activeSessions: Map<string, { session: V2Session; options: SDKSessionOptions }>;
   private readonly sessionFactory: V2SessionFactory;
+  private readonly hooks: V2SessionExecutorOptions['hooks'];
 
   constructor(options: V2SessionExecutorOptions) {
     this.authProvider = options.authProvider;
@@ -68,6 +71,8 @@ export class V2SessionExecutor implements AgentExecutor {
     this.activeSessions = new Map();
     // WHY: 테스트 시 mock 팩토리 주입, 프로덕션은 claude-agent-sdk 기반 팩토리 사용
     this.sessionFactory = options.sessionFactory ?? sdkSessionFactory;
+    // WHY: SDK 훅 콜백을 세션에 전달하여 StreamMonitor 연동 가능
+    this.hooks = options.hooks;
   }
 
   /**
@@ -92,7 +97,7 @@ export class V2SessionExecutor implements AgentExecutor {
     });
 
     try {
-      const sessionEnv = this.buildSessionEnvironment(config);
+      const sessionEnv = buildSessionEnvironment(config, this.authProvider);
       const sessionResult = await this.createSession(config, sessionEnv);
       if (!sessionResult.ok) {
         yield createErrorEvent(config.name, sessionResult.error.message);
@@ -114,7 +119,10 @@ export class V2SessionExecutor implements AgentExecutor {
         const fullPrompt = config.systemPrompt
           ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
           : config.prompt;
-        this.logger.info('Session send 시작', { agentName: config.name, promptLen: fullPrompt.length });
+        this.logger.info('Session send 시작', {
+          agentName: config.name,
+          promptLen: fullPrompt.length,
+        });
         await session.send(fullPrompt);
         this.logger.info('Session send 완료, stream 시작', { agentName: config.name });
         for await (const sdkEvent of session.stream()) {
@@ -133,9 +141,10 @@ export class V2SessionExecutor implements AgentExecutor {
           }
         }
       } catch (streamError) {
-        const errMsg = streamError instanceof Error
-          ? `${streamError.message}\n${streamError.stack ?? ''}`
-          : String(streamError);
+        const errMsg =
+          streamError instanceof Error
+            ? `${streamError.message}\n${streamError.stack ?? ''}`
+            : String(streamError);
         this.logger.error('Session stream error', { agentName: config.name, errorMsg: errMsg });
         yield createErrorEvent(config.name, errMsg || 'Unknown stream error');
         this.activeSessions.delete(sessionId);
@@ -199,42 +208,6 @@ export class V2SessionExecutor implements AgentExecutor {
   }
 
   /**
-   * 세션 환경변수를 구성한다 / Build session environment variables
-   *
-   * @param config - 에이전트 설정 / Agent configuration
-   * @returns 환경변수 객체 / Environment variable object
-   */
-  private buildSessionEnvironment(config: AgentConfig): Record<string, string> {
-    const authHeader = this.authProvider.getAuthHeader();
-
-    // WHY: SDK의 env 파라미터는 process.env를 완전 대체함 (merge 아님).
-    //      process.env 없이 {ANTHROPIC_API_KEY: '...'} 만 전달하면 PATH, HOME 등
-    //      필수 시스템 환경변수가 사라져 Claude Code CLI가 실패함.
-    //      process.env를 base로 하고 필요한 것만 오버라이드.
-    const baseEnv: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-    };
-
-    // WHY: API Key는 항상 오버라이드 (adev 인증 우선)
-    if ('x-api-key' in authHeader) {
-      baseEnv.ANTHROPIC_API_KEY = authHeader['x-api-key'] as string;
-    }
-
-    // WHY: OAuth Token도 있으면 함께 전달 (agent-sdk가 OAuth 인증에 활용)
-    if ('authorization' in authHeader) {
-      const token = (authHeader.authorization as string).replace('Bearer ', '');
-      baseEnv.CLAUDE_CODE_OAUTH_TOKEN = token;
-    }
-
-    // WHY: CLAUDECODE 환경변수가 설정된 상태에서 Claude Code CLI를 서브프로세스로 실행하면
-    //      "nested Claude Code session" 에러로 exit code 1 종료됨.
-    //      서브프로세스가 독립 세션으로 시작하도록 반드시 제거.
-    delete baseEnv.CLAUDECODE;
-
-    return { ...baseEnv, ...(config.env ?? {}) };
-  }
-
-  /**
    * V2 Session을 생성한다 / Create a V2 Session
    *
    * @param config - 에이전트 설정 / Agent configuration
@@ -252,6 +225,8 @@ export class V2SessionExecutor implements AgentExecutor {
         executable: 'bun',
         env,
         allowedTools: config.tools.length > 0 ? [...config.tools] : undefined,
+        // WHY: hooks가 있으면 SDK에 전달하여 PreToolUse/PostToolUse 등 이벤트를 StreamMonitor로 연결
+        ...(this.hooks ? { hooks: this.hooks } : {}),
       };
 
       const session = this.sessionFactory(sessionOptions);

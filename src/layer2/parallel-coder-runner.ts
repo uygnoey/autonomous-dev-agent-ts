@@ -5,15 +5,18 @@
  * KR: 여러 Coder를 병렬로 실행하고 결과를 집계한다.
  *     CoderAllocator로 모듈별 Coder를 배정하고 Promise.all로 병렬 실행한다.
  *     각 Coder 결과는 절대 throw하지 않고 CoderRunResult에 담아 반환한다.
+ *     감독 세션(architect/reviewer)은 parallel-coder-supervision.ts에 분리.
  * EN: Runs multiple coders in parallel and aggregates results.
  *     Uses CoderAllocator for per-module assignment and Promise.all for parallel execution.
  *     Never throws — wraps all errors in CoderRunResult.
+ *     Supervision sessions (architect/reviewer) are in parallel-coder-supervision.ts.
  */
 
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import { extractModulesFromSpec } from 'layer2/parallel-coder-runner-helpers.js';
+import { runSupervisionPhase } from 'layer2/parallel-coder-supervision.js';
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent, CoderAllocation } from 'layer2/types.js';
 
@@ -104,7 +107,7 @@ export class ParallelCoderRunner {
     }
 
     // WHY: coder 완료 후 architect(스펙 준수) → reviewer(코드 품질) 순서로 감독 세션 실행
-    yield* this.runSupervisionPhase(featureId, handoffPackage);
+    yield* runSupervisionPhase(featureId, handoffPackage, this.deps, this.logger);
   }
 
   /**
@@ -236,72 +239,6 @@ export class ParallelCoderRunner {
         events,
         error: agentError,
       };
-    }
-  }
-
-  /**
-   * architect/reviewer 감독 세션을 실행한다 / Runs architect/reviewer supervision session
-   *
-   * @description
-   * KR: coder 병렬 실행 완료 후 architect(스펙 준수 검토)와 reviewer(코드 품질 검토)를
-   *     순차 실행한다. 설정 생성 실패 시 경고만 남기고 해당 에이전트를 건너뛴다.
-   * EN: After parallel coder execution, runs architect (spec compliance) and reviewer
-   *     (code quality) sequentially. Skips agent on config failure with warning.
-   *
-   * @param featureId - 기능 ID / Feature ID
-   * @param handoffPackage - 인수 패키지 / Handoff package
-   * @returns 에이전트 이벤트 스트림 / Agent event stream
-   */
-  private async *runSupervisionPhase(
-    featureId: string,
-    handoffPackage: HandoffPackage,
-  ): AsyncIterable<AgentEvent> {
-    // WHY: architect → 스펙 준수 확인, reviewer → 코드 품질 확인 순서로 감독
-    const supervisors: readonly ('architect' | 'reviewer')[] = ['architect', 'reviewer'];
-
-    for (const agentName of supervisors) {
-      const configResult = this.deps.agentGenerator.generateAgentConfig(
-        agentName,
-        handoffPackage.specDocument,
-        featureId,
-      );
-
-      if (!configResult.ok) {
-        this.logger.warn('감독 에이전트 설정 생성 실패 — 감독 생략', {
-          agent: agentName,
-          featureId,
-          error: configResult.error.message,
-        });
-        yield createEvent('message', `${agentName} 감독 설정 생성 실패 — 생략`);
-        continue;
-      }
-
-      const config = {
-        ...configResult.value,
-        projectId: handoffPackage.projectId,
-        phase: 'CODE' as const,
-      };
-
-      this.deps.sessionManager.createSession(agentName, config.projectId, featureId, 'CODE');
-
-      this.logger.info('CODE Phase 감독 세션 시작', { agent: agentName, featureId });
-      yield createEvent('message', `CODE Phase ${agentName} 감독 세션 시작`);
-
-      for await (const event of this.deps.agentSpawner.spawn(config)) {
-        // WHY: 스트림 모니터에 이벤트를 전달해 이상 패턴 감지 활성화
-        this.deps.streamMonitor.onEvent({
-          type: event.type === 'tool_use' ? 'PreToolUse' : 'PostToolUse',
-          agentName: event.agentName,
-          toolName: event.type === 'tool_use' ? event.content : undefined,
-          data: event.metadata ?? {},
-          timestamp: event.timestamp,
-        });
-
-        yield event;
-      }
-
-      this.logger.info('CODE Phase 감독 세션 완료', { agent: agentName, featureId });
-      yield createEvent('message', `CODE Phase ${agentName} 감독 세션 완료`);
     }
   }
 }

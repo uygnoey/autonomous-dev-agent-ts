@@ -105,6 +105,9 @@ export class TeamLeader {
     featureId: string,
     handoffPackage: HandoffPackage,
   ): AsyncIterable<AgentEvent> {
+    // WHY: 이전 feature의 Phase 상태가 잔류하지 않도록 초기화
+    //      동일 PhaseEngine 인스턴스를 재사용하므로 feature 간 reset 필수
+    this.phaseEngine.reset();
     this.currentFeatureId = featureId;
     this.progressTracker.initFeature(featureId);
     this.progressTracker.updateStatus(featureId, 'designing');
