@@ -98,6 +98,42 @@ Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발�
 
 ---
 
+## 기능 단위 완료 시 필수 다이어그램 생성 (절대 준수)
+
+기능 개발이 끝날 때마다 **반드시** 아키텍처 다이어그램을 생성해야 한다.
+코드 커밋 없이 다이어그램 없이 완료로 처리하는 것은 금지.
+
+### 사용 도구
+
+| 도구 | GitHub | 역할 |
+|------|--------|------|
+| **visual-explainer** | https://lnkd.in/g7Zw9XVT | 코드/아키텍처 시각적 설명 생성 |
+| **Excalidraw MCP** | https://lnkd.in/gWPnWMdt | Excalidraw 다이어그램 자동 생성 |
+
+### 다이어그램 생성 절차 (기능 완료 체크리스트)
+
+```markdown
+- [ ] [DIAGRAM] Excalidraw MCP로 변경된 모듈 아키텍처 다이어그램 생성
+- [ ] [DIAGRAM] visual-explainer로 데이터 흐름 / 시퀀스 다이어그램 생성
+- [ ] [SAVE] docs/diagrams/YYYY-MM-DD-기능명.excalidraw 저장
+- [ ] [COMMIT] docs: 기능명 아키텍처 다이어그램 추가
+```
+
+### 다이어그램 포함 내용 (최소 기준)
+
+- **모듈 관계도**: 새로 추가/변경된 모듈과 기존 모듈 간 의존성
+- **데이터 흐름**: 입력 → 처리 → 출력 흐름
+- **Phase 전환**: 해당 기능이 관여하는 Phase FSM 상태 전환
+
+### documenter 에이전트 의무
+
+`documenter` 에이전트는 Phase 완료 시 다음을 **순서대로** 실행:
+1. Excalidraw MCP (`mcp__claude_ai_Excalidraw__export_to_excalidraw`) 호출 → 다이어그램 생성
+2. `docs/diagrams/` 에 저장
+3. Git 커밋
+
+---
+
 ## 세션 관리 규칙
 
 ### Context Window 50% 룰
