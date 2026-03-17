@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-17T12:30:00+09:00",
+    "analyst": "architect"
+  },
+  "bugA": {
+    "rootCause": "PhaseEngine is created once per TeamLeader (layer2-bootstrap.ts:124) with initial state 'DESIGN'. After feat-0 completes DESIGN→CODE→TEST→VERIFY, PhaseEngine.current remains 'VERIFY'. executeFeature() (team-leader.ts:104) never resets PhaseEngine to 'DESIGN' for subsequent features, so feat-1~4 all start at VERIFY phase.",
+    "affectedFile": "src/layer2/team-leader.ts",
+    "affectedLine": 108,
+    "fixDirection": "At the start of executeFeature(), reset PhaseEngine to DESIGN phase. Options: (1) Add a reset() method to PhaseEngine that sets current='DESIGN', or (2) Create a new PhaseEngine per feature in executeFeature(). Option 1 is simpler — add phaseEngine.reset() call between lines 108-109 of team-leader.ts."
+  },
+  "bugB": {
+    "rootCause": "start.ts line 162-173: after runLayer2() completes (success or failure), the code immediately executes 'return ok(undefined)' at line 173. There is NO Layer3 invocation code anywhere in the CLI layer. Layer3 modules exist (src/layer3/) but are never called from the execution pipeline.",
+    "affectedFile": "src/cli/commands/start.ts",
+    "affectedLine": 173,
+    "fixDirection": "After runLayer2() succeeds (line 167-170), add Layer3 invocation before the return. Create a runLayer3() function in start-execution.ts (similar to runLayer2) that instantiates Layer3 components (e2e-runner, deliverable-builder, production-tester, doc-integrator) and orchestrates them. Wire the call between lines 170-173 of start.ts."
+  },
+  "bugC": {
+    "rootCause": "GitBranchManager (git-branch-manager.ts) only implements setupBranch() (checkout -b / checkout) and mergeBranch() (merge --no-ff). There is NO git add or git commit command anywhere in the entire src/ directory. The agents generate code files via Claude sessions, but no component commits those changes to git.",
+    "affectedFile": "src/layer2/git-branch-manager.ts",
+    "affectedLine": 52,
+    "fixDirection": "Add commitChanges(message: string) method to GitBranchManager that runs 'git add -A' then 'git commit -m <message>'. Call it from executeCodePhase() in team-leader-helpers.ts after parallel coder execution completes (around line 148-156) and before branch merge. Also consider calling it after each phase completion for incremental commits."
+  }
+}

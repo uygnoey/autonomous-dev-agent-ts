@@ -1,0 +1,137 @@
+{
+  "_meta": {
+    "description": "adev fullrun12 실체 E2E 테스트 결과",
+    "task": "웹 기반 TODO 앱. 항목 추가/삭제/완료체크, 로컬스토리지 저장, 반응형 UI 필요",
+    "startedAt": "2026-03-17T09:40:55",
+    "endedAt": "2026-03-17T10:09:29",
+    "workdir": "/Users/yeongyu.yang/test/adev",
+    "pid": 42666,
+    "exitCode": 0
+  },
+  "timeline": {
+    "layer1Start": "2026-03-17T09:40:55",
+    "layer1Complete": "2026-03-17T09:43:31",
+    "layer2Start": "2026-03-17T09:46:28",
+    "layer2Complete": "2026-03-17T10:09:29",
+    "layer3Start": null,
+    "layer3Complete": null,
+    "totalDuration": "28분 34초 (09:40:55 → 10:09:29)"
+  },
+  "layer1": {
+    "status": "COMPLETED",
+    "duration": "2분 36초",
+    "contractGenerated": true,
+    "featureCount": 5,
+    "contractPath": "/Users/yeongyu.yang/test/adev/.adev/contract.json",
+    "handoffPath": "/Users/yeongyu.yang/test/adev/.adev/handoff.json",
+    "verificationPassed": false,
+    "verificationNote": "AI 검증 실패 (completenessScore: 0.5) - 경고 후 계속 진행",
+    "completenessScore": 0.5,
+    "agentDocsGenerated": true,
+    "agentDocsTime": "2026-03-17T09:46:05"
+  },
+  "layer2": {
+    "status": "COMPLETED",
+    "duration": "23분 1초 (09:46:28 → 10:09:29)",
+    "totalFeatures": 5,
+    "completedFeatures": 5,
+    "featureProgress": {
+      "feat-0": {
+        "phases": "DESIGN→CODE→TEST→VERIFY (full cycle)",
+        "iterations": 4,
+        "startedAt": "2026-03-17T09:46:28",
+        "completedAt": "2026-03-17T09:55:43",
+        "duration": "9분 15초",
+        "agents": "architect→qa→coder→reviewer (DESIGN) → coder→architect→reviewer (CODE) → tester→qc (TEST) → qa→qc→reviewer (VERIFY) → documenter",
+        "testResult": "ALL PASS (항목 추가/삭제/완료체크/로컬스토리지/빈상태)",
+        "note": "핵심 기능 - 유일하게 전체 4 phase 풀 사이클 실행"
+      },
+      "feat-1": {
+        "phases": "VERIFY only (skipped DESIGN/CODE/TEST)",
+        "iterations": 1,
+        "startedAt": "2026-03-17T09:56:31",
+        "completedAt": "2026-03-17T09:58:06",
+        "duration": "1분 35초",
+        "note": "추가 기능 (편집/필터/일괄삭제/개수표시) - 미구현 상태로 VERIFY 통과"
+      },
+      "feat-2": {
+        "phases": "VERIFY only",
+        "iterations": 1,
+        "startedAt": "2026-03-17T09:59:10",
+        "completedAt": "2026-03-17T10:01:17",
+        "duration": "2분 7초",
+        "note": "할 일 관리 기능"
+      },
+      "feat-3": {
+        "phases": "VERIFY only",
+        "iterations": 1,
+        "startedAt": "2026-03-17T10:02:24",
+        "completedAt": "2026-03-17T10:04:22",
+        "duration": "1분 58초",
+        "note": "데이터 저장 기능"
+      },
+      "feat-4": {
+        "phases": "VERIFY only",
+        "iterations": 1,
+        "startedAt": "2026-03-17T10:05:27",
+        "completedAt": "2026-03-17T10:07:27",
+        "duration": "2분 0초",
+        "note": "UI/UX 기능"
+      }
+    }
+  },
+  "layer3": {
+    "status": "NOT_STARTED",
+    "note": "Layer3 실행되지 않음 — Layer2 완료 후 바로 세션 종료"
+  },
+  "generatedFiles": [
+    "/Users/yeongyu.yang/test/adev/index.html (744 bytes)",
+    "/Users/yeongyu.yang/test/adev/js/app.js (2296 bytes)",
+    "/Users/yeongyu.yang/test/adev/css/style.css (2270 bytes)",
+    "/Users/yeongyu.yang/test/adev/tests/feat0-core.test.js (11246 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/feat-0-core.md (3804 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/feat-1-additional.md (4449 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/feat-2-todo-management.md (5142 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/feat-3-data-storage.md (6285 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/feat-4-ui-ux.md (16090 bytes)",
+    "/Users/yeongyu.yang/test/adev/docs/reports/handoff-verification-*.md (2743 bytes)",
+    "/Users/yeongyu.yang/test/adev/.adev/contract.json",
+    "/Users/yeongyu.yang/test/adev/.adev/handoff.json",
+    "/Users/yeongyu.yang/test/adev/.adev/agents/ (7 agent .md files)",
+    "/Users/yeongyu.yang/test/adev/package.json",
+    "/Users/yeongyu.yang/test/adev/node_modules/"
+  ],
+  "gitHistory": [
+    "aef3590 init"
+  ],
+  "errors": [
+    {
+      "time": "2026-03-17T09:43:31",
+      "level": "warn",
+      "message": "Contract AI 검증에서 error 이슈 발견 — 경고 후 계속 진행 (errorCount: 1)"
+    },
+    {
+      "time": "2026-03-17T09:51:17",
+      "level": "error",
+      "message": "merge --abort 실패: git merge 실패: fatal: There is no merge to abort (MERGE_HEAD missing)"
+    }
+  ],
+  "summary": {
+    "result": "PARTIAL_SUCCESS",
+    "exitCode": 0,
+    "totalDuration": "28분 34초",
+    "layer1": "COMPLETED (contract 생성, AI 검증 실패하였으나 계속 진행)",
+    "layer2": "COMPLETED (5/5 features, feat-0만 풀 사이클, feat-1~4는 VERIFY only)",
+    "layer3": "NOT_EXECUTED",
+    "observations": [
+      "feat-0만 DESIGN→CODE→TEST→VERIFY 풀 사이클 실행",
+      "feat-1~4는 VERIFY phase에서 바로 시작하여 검증만 수행 (실제 구현 안됨)",
+      "Contract 완전성 점수 0.5 (50%) — 개선 필요",
+      "git commit이 init 1개뿐 — 에이전트가 생성한 코드가 커밋되지 않음",
+      "Layer3 미실행 — 세션이 Layer2 완료 후 바로 종료됨",
+      "merge --abort 에러 발생 (비치명적)"
+    ]
+  },
+  "processAlive": false,
+  "lastChecked": "2026-03-17T10:09:30"
+}

@@ -1,0 +1,84 @@
+{
+  "_meta": {
+    "description": "adev 이슈 수정 기록 — 2026-03-17",
+    "coder": "coder-agent"
+  },
+  "fixes": [
+    {
+      "issueId": "AUTO-001",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 234,
+      "problem": "DESIGN 이외 Phase(CODE/TEST/VERIFY)에서 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS가 undefined가 아닌 '1'로 설정됨",
+      "rootCause": "buildSessionEnvironment()가 process.env를 base로 복사할 때 이미 설정된 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 값을 그대로 통과시킴. Phase별 분기 제어 로직 없음",
+      "fix": "DESIGN Phase일 때만 AGENT_TEAMS='1' 설정, 나머지 Phase에서는 delete로 키 제거",
+      "before": "return { ...baseEnv, ...(config.env ?? {}) };",
+      "after": "if (config.phase === 'DESIGN') { baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = '1'; } else { delete baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS; } return { ...baseEnv, ...(config.env ?? {}) };",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:20:00.000Z"
+    },
+    {
+      "issueId": "AUTO-002",
+      "file": "tests/unit/layer2/v2-session-executor.test.ts",
+      "line": 1796,
+      "problem": "send() 테스트가 config.prompt만 기대하지만 실제로는 systemPrompt + prompt가 합쳐서 전달됨",
+      "rootCause": "V2 Session API는 systemPrompt 옵션이 없어 send()에 systemPrompt를 prompt 앞에 합쳐서 전달하는 것이 의도된 동작. 테스트의 기대값이 이 동작을 반영하지 않았음",
+      "fix": "테스트 기대값을 systemPrompt가 있으면 합성 문자열로, 없으면 config.prompt만으로 검증하도록 수정",
+      "before": "expect(sendSpy).toHaveBeenCalledWith(config.prompt);",
+      "after": "const expectedPrompt = config.systemPrompt ? `${config.systemPrompt}\\n\\n---\\n\\n${config.prompt}` : config.prompt; expect(sendSpy).toHaveBeenCalledWith(expectedPrompt);",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:20:00.000Z"
+    }
+    ,
+    {
+      "issueId": "AUTO-003",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 232,
+      "problem": "biome lint/performance/noDelete: delete 연산자 사용 (CLAUDECODE, AGENT_TEAMS 2건) + 포매팅 미적용",
+      "rootCause": "biome는 delete 연산자를 성능 이유로 금지. 단, 환경변수 키는 완전 제거 필요 (undefined 할당 시 서브프로세스에 'undefined' 문자열 전달 위험)",
+      "fix": "biome-ignore 주석 추가로 delete 유지 (qc 근본원인 분석 반영). bunx biome format --write로 포매팅 적용",
+      "before": "delete baseEnv.CLAUDECODE; / delete baseEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;",
+      "after": "// biome-ignore lint/performance/noDelete: 환경변수 키 자체 제거 필요\\ndelete baseEnv.CLAUDECODE; (2건 동일 패턴)",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:27:00.000Z"
+    }
+    ,
+    {
+      "issueId": "FIX-001",
+      "file": "src/layer2/git-branch-manager.ts",
+      "line": 161,
+      "problem": "merge 실패 시 MERGE_HEAD 없어도 무조건 git merge --abort 실행하여 fatal 에러 발생",
+      "rootCause": "merge --abort 전에 MERGE_HEAD 존재 여부를 확인하지 않아, merge가 이미 정리된 상태에서도 abort 시도",
+      "fix": "git rev-parse --verify MERGE_HEAD로 MERGE_HEAD 존재 확인 후 abort 실행. 없으면 abort 생략",
+      "before": "await this.git(['merge', '--abort'])",
+      "after": "const mergeHeadCheck = await this.git(['rev-parse', '--verify', 'MERGE_HEAD']); if (mergeHeadCheck.ok) { await this.git(['merge', '--abort']); }",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:55:00.000Z"
+    },
+    {
+      "issueId": "FIX-002",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 269,
+      "problem": "session.stream() 실행 시 hooks 옵션이 전달되지 않아 StreamMonitor가 SDK Hook과 연결 안 됨",
+      "rootCause": "V2SessionExecutorOptions에 hooks 필드 없음. createSession에서 SDKSessionOptions에 hooks 미전달",
+      "fix": "V2SessionExecutorOptions에 hooks 필드 추가. V2SessionExecutor 생성자에서 저장. createSession에서 SDKSessionOptions에 전달",
+      "before": "SDKSessionOptions에 hooks 미전달",
+      "after": "...(this.hooks ? { hooks: this.hooks } : {})",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:57:00.000Z"
+    },
+    {
+      "issueId": "FIX-003",
+      "file": "src/layer2/team-leader-phase.ts",
+      "line": 66,
+      "problem": "VERIFY Phase 완료 시 documenter 에이전트 자동 spawn 트리거 확인",
+      "rootCause": "handleVerifyResult 내부에 이미 spawnDocumenter 호출이 구현되어 있음. 추가 수정 불필요",
+      "fix": "기존 코드가 정상 동작 확인 — verificationGate.isAllPassed(featureId) true 시 spawnDocumenter 호출됨",
+      "before": "이미 구현됨",
+      "after": "변경 없음 (코드 검증 완료)",
+      "testResult": "PASS",
+      "fixedAt": "2026-03-17T00:58:00.000Z"
+    }
+  ],
+  "totalFixed": 5,
+  "allTestsPass": true
+}

@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-17T00:22:00.000Z",
+    "analyst": "qc-agent",
+    "lastVerifiedAt": "2026-03-17T00:27:00.000Z"
+  },
+  "testRun": {
+    "command": "bun test",
+    "exitCode": 0,
+    "totalTests": 205349,
+    "passed": 205349,
+    "failed": 0,
+    "note": "coder 수정 후 전체 통과. Bun 1.3.10 crash는 간헐적으로 발생하나 테스트 결과에는 영향 없음."
+  },
+  "typeCheckRun": {
+    "command": "bunx tsc --noEmit",
+    "exitCode": 0,
+    "errorCount": 0
+  },
+  "lintRun": {
+    "command": "bunx biome check src/layer2/v2-session-executor.ts",
+    "exitCode": 0,
+    "errorCount": 0,
+    "note": "coder가 format + noDelete 전부 수정 완료"
+  },
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "type": "lint_error",
+      "severity": "warn",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 232,
+      "errorMessage": "lint/performance/noDelete: Avoid the delete operator which can impact performance.",
+      "rootCause": "delete 연산자 사용",
+      "fixInstruction": "= undefined 할당 + Object.fromEntries(filter)로 undefined 값 제거",
+      "status": "fixed"
+    },
+    {
+      "id": "ISSUE-002",
+      "type": "lint_error",
+      "severity": "warn",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 240,
+      "errorMessage": "lint/performance/noDelete: Avoid the delete operator which can impact performance.",
+      "rootCause": "delete 연산자 사용",
+      "fixInstruction": "= undefined 할당 + Object.fromEntries(filter)로 undefined 값 제거",
+      "status": "fixed"
+    },
+    {
+      "id": "ISSUE-003",
+      "type": "lint_error",
+      "severity": "warn",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 117,
+      "errorMessage": "format: Formatter would have printed different content",
+      "rootCause": "logger.info 인라인 객체 줄 길이 초과",
+      "fixInstruction": "biome format --write로 자동 포맷",
+      "status": "fixed"
+    },
+    {
+      "id": "ISSUE-004",
+      "type": "lint_error",
+      "severity": "warn",
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 136,
+      "errorMessage": "format: Formatter would have printed different content",
+      "rootCause": "삼항 연산자 포맷팅 규칙 위반",
+      "fixInstruction": "biome format --write로 자동 포맷",
+      "status": "fixed"
+    }
+  ],
+  "fixPriority": [],
+  "overallStatus": "PASS",
+  "summary": "모든 테스트 통과(205,349), 타입체크 통과, biome 통과. coder의 수정으로 전체 해결."
+}
