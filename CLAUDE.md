@@ -109,6 +109,11 @@ Claude Code Skills + RAG를 연동해 일관된 코드 품질로 자율 개발�
 |------|--------|------|
 | **visual-explainer** | https://lnkd.in/g7Zw9XVT | 코드/아키텍처 시각적 설명 생성 |
 | **Excalidraw MCP** | https://lnkd.in/gWPnWMdt | Excalidraw 다이어그램 자동 생성 |
+| **beautiful-mermaid** | https://lnkd.in/gRkizduS | Mermaid 다이어그램 (Mermaid 사용 시 반드시 이것만 사용) |
+
+### Mermaid 사용 규칙 (절대 준수)
+- Mermaid 다이어그램이 필요할 때 **raw Mermaid 코드 블록 단독 출력 금지**
+- **beautiful-mermaid** (https://lnkd.in/gRkizduS)를 반드시 경유하여 렌더링
 
 ### 다이어그램 생성 절차 (기능 완료 체크리스트)
 

@@ -45,6 +45,11 @@ background: true
 ### 참고 도구
 - visual-explainer: https://lnkd.in/g7Zw9XVT
 - Excalidraw MCP: https://lnkd.in/gWPnWMdt
+- beautiful-mermaid: https://lnkd.in/gRkizduS (Mermaid 다이어그램 사용 시 반드시 사용)
+
+### Mermaid 사용 규칙
+- Mermaid 코드 블록을 단독으로 출력하는 것은 금지
+- 반드시 **beautiful-mermaid**를 경유하여 렌더링
 
 ## 금지
 - 상시 가동
