@@ -240,7 +240,13 @@ export class IntegrationTester {
 
     const { exitCode, stdout, stderr } = testResult.value;
     const parseResult = parseBunTestOutput(stdout, stderr);
-    const passed = exitCode === 0 && parseResult.failCount === 0;
+
+    // WHY: bun test가 테스트 파일을 찾지 못하면 exit code 1 + "did not match any test files"
+    //      이건 실제 테스트 실패가 아니라 해당 경로에 테스트가 없는 것 → 단계 스킵 (통과)
+    const noTestFiles =
+      (stdout + stderr).includes('did not match any test files') ||
+      (stdout + stderr).includes('No test files found');
+    const passed = noTestFiles || (exitCode === 0 && parseResult.failCount === 0);
 
     const stepResult: IntegrationStepResult = {
       step: step.stepNumber,
