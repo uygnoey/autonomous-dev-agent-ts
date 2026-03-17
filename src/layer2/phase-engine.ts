@@ -8,11 +8,24 @@
  *     Validates transition rules, maps participating agents, and tracks transition history.
  */
 
+import { EventEmitter } from 'node:events';
 import { PhaseError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { AgentName, Phase, Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { PhaseTransition } from 'layer2/types.js';
+
+// ── PhaseEngine 이벤트 타입 / PhaseEngine event types ─────────
+
+/**
+ * PhaseEngine이 발행하는 이벤트 맵 / Events emitted by PhaseEngine
+ */
+export interface PhaseEngineEvents {
+  /** Phase 전환 완료 시 발행 / Emitted on successful phase transition */
+  phaseTransition: [transition: PhaseTransition];
+  /** Phase 초기화 시 발행 / Emitted on phase reset */
+  phaseReset: [previousPhase: Phase];
+}
 
 // ── Phase 참여 에이전트 매핑 / Phase participant mapping ────────
 
@@ -87,7 +100,7 @@ const VALID_TRANSITIONS: ReadonlyMap<Phase, readonly Phase[]> = new Map([
  * const engine = new PhaseEngine(logger);
  * const result = engine.transition('CODE', 'qa Gate 통과', 'qa');
  */
-export class PhaseEngine {
+export class PhaseEngine extends EventEmitter<PhaseEngineEvents> {
   private current: Phase = 'DESIGN';
   private readonly history: PhaseTransition[] = [];
   private readonly logger: Logger;
@@ -96,6 +109,7 @@ export class PhaseEngine {
    * @param logger - 로거 인스턴스 / Logger instance
    */
   constructor(logger: Logger) {
+    super();
     this.logger = logger.child({ module: 'phase-engine' });
   }
 
@@ -152,6 +166,9 @@ export class PhaseEngine {
     this.current = to;
     this.history.push(transition);
 
+    // WHY: Phase 전환을 외부 리스너에 통지하여 이벤트 기반 연동을 지원
+    this.emit('phaseTransition', transition);
+
     return ok(transition);
   }
 
@@ -187,9 +204,13 @@ export class PhaseEngine {
    *     Also clears history so the new feature starts with a clean transition record.
    */
   reset(): void {
-    this.logger.debug('Phase 상태 초기화', { from: this.current, to: 'DESIGN' });
+    const previousPhase = this.current;
+    this.logger.debug('Phase 상태 초기화', { from: previousPhase, to: 'DESIGN' });
     this.current = 'DESIGN';
     this.history.length = 0;
+
+    // WHY: 리셋 이벤트를 통지하여 외부에서 상태 변경을 감지할 수 있게 함
+    this.emit('phaseReset', previousPhase);
   }
 
   /**

@@ -7,7 +7,6 @@
  */
 
 import * as fs from 'node:fs/promises';
-import { homedir } from 'node:os';
 import * as path from 'node:path';
 import {
   checkAdevExists,
@@ -108,9 +107,9 @@ export class InitCommand implements IInitCommand {
       this.logger.info('프로젝트 초기화 시작', { projectPath: options.projectPath });
 
       // 1. 프로젝트 경로 설정
-      // WHY: 기본 경로를 ~/adevProjects로 설정하여 홈 디렉토리에 프로젝트를 모아 관리
-      const defaultProjectPath = path.join(homedir(), 'adevProjects');
-      const projectPath = path.resolve(options.projectPath ?? defaultProjectPath);
+      // WHY: 기본값을 process.cwd()로 설정 — adev init을 원하는 폴더에서 바로 실행 가능
+      //      --project-path 옵션으로 명시적 지정도 가능 (yargs에 등록 필요)
+      const projectPath = path.resolve(options.projectPath ?? process.cwd());
 
       // WHY: 프로젝트 경로가 존재하지 않으면 자동 생성
       try {

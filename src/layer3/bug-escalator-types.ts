@@ -32,6 +32,8 @@ export interface ContinuousE2EResult {
 export interface EscalateBugOptions {
   /** 프로젝트 ID / Project ID */
   readonly projectId: string;
+  /** 프로젝트 경로 / Project path (cwd for bun test) */
+  readonly projectPath: string;
   /** 기능 ID (연관된 경우) / Feature ID (if related) */
   readonly featureId?: string;
   /** 실패한 E2E 테스트 결과 / Failed E2E test result */
@@ -122,11 +124,13 @@ export interface IBugEscalator {
    * 계단식 통합 검증을 실행한다 / Execute stepwise integration verification
    *
    * @param projectId - 프로젝트 ID / Project ID
+   * @param projectPath - 프로젝트 경로 / Project path (cwd for bun test)
    * @param featureId - 수정된 기능 ID / Modified feature ID
    * @returns 검증 결과 배열 / Verification result array
    */
   runStepwiseVerification(
     projectId: string,
+    projectPath: string,
     featureId: string,
   ): Promise<Result<readonly StepwiseVerificationResult[]>>;
 

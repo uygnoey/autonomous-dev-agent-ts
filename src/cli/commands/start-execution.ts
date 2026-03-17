@@ -190,6 +190,7 @@ export async function runLayer3(
     // WHY: 4단계 계단식 통합 검증으로 Layer2 결과물을 종합 검증한다
     const verifyResult = await runStepwiseVerification(
       handoff.projectId,
+      session.projectInfo.path,
       'all',
       integrationTester,
       logger,

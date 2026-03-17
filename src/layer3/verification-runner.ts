@@ -15,6 +15,7 @@ import type { StepwiseVerificationResult } from 'layer3/bug-escalator-types.js';
  *
  * @param step - 검증 단계 번호
  * @param projectId - 프로젝트 ID
+ * @param projectPath - 프로젝트 경로 / Project path (cwd for bun test)
  * @param targetId - 검증 대상 ID
  * @param iterations - 반복 횟수
  * @param integrationTester - 통합 테스터 (없으면 시뮬레이션)
@@ -24,6 +25,7 @@ import type { StepwiseVerificationResult } from 'layer3/bug-escalator-types.js';
 export async function runVerificationStep(
   step: number,
   projectId: string,
+  projectPath: string,
   targetId: string,
   iterations: number,
   integrationTester: IntegrationTester | null,
@@ -33,7 +35,7 @@ export async function runVerificationStep(
 
   if (integrationTester) {
     try {
-      const testResult = await integrationTester.runIntegrationTests(projectId, targetId);
+      const testResult = await integrationTester.runIntegrationTests(projectId, projectPath);
       if (testResult.ok) {
         const failCount = testResult.value.filter((r) => !r.passed).length;
         return {
@@ -70,6 +72,7 @@ const STEP4_ITERATIONS = 1_000_000;
  * 4단계 계단식 통합 검증을 실행한다 / Run 4-step stepwise integration verification.
  *
  * @param projectId - 프로젝트 ID
+ * @param projectPath - 프로젝트 경로 / Project path (cwd for bun test)
  * @param featureId - 수정된 기능 ID
  * @param integrationTester - 통합 테스터
  * @param logger - 로거
@@ -77,17 +80,19 @@ const STEP4_ITERATIONS = 1_000_000;
  */
 export async function runStepwiseVerification(
   projectId: string,
+  projectPath: string,
   featureId: string,
   integrationTester: IntegrationTester | null,
   logger: Logger,
 ): Promise<Result<readonly StepwiseVerificationResult[]>> {
-  logger.info('계단식 통합 검증 시작', { projectId, featureId });
+  logger.info('계단식 통합 검증 시작', { projectId, projectPath, featureId });
   const results: StepwiseVerificationResult[] = [];
 
   for (const [step, iterations] of VERIFICATION_STEPS.slice(0, 3)) {
     const r = await runVerificationStep(
       step,
       projectId,
+      projectPath,
       featureId,
       iterations,
       integrationTester,
@@ -103,6 +108,7 @@ export async function runStepwiseVerification(
   const step4Result = await runVerificationStep(
     4,
     projectId,
+    projectPath,
     'all',
     STEP4_ITERATIONS,
     integrationTester,

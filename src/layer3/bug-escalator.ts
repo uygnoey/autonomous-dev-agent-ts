@@ -87,8 +87,8 @@ export class BugEscalator implements IBugEscalator {
    * @returns 에스컬레이션 결과
    */
   async escalateAsync(options: EscalateBugOptions): Promise<Result<BugEscalationResult>> {
-    const { projectId, featureId, failedTest, context } = options;
-    this.logger.info('버그 에스컬레이션 시작', { projectId, featureId, testId: failedTest.id });
+    const { projectId, projectPath, featureId, failedTest, context } = options;
+    this.logger.info('버그 에스컬레이션 시작', { projectId, projectPath, featureId, testId: failedTest.id });
 
     const bugReportResult = await this.analyzeRootCause(failedTest);
     if (!bugReportResult.ok) return err(bugReportResult.error as AdevError);
@@ -101,6 +101,7 @@ export class BugEscalator implements IBugEscalator {
 
     const verificationResult = await this.runStepwiseVerification(
       projectId,
+      projectPath,
       featureId || bugReport.featureId || 'unknown',
     );
     if (!verificationResult.ok) return err(verificationResult.error as AdevError);
@@ -219,9 +220,10 @@ export class BugEscalator implements IBugEscalator {
    */
   async runStepwiseVerification(
     projectId: string,
+    projectPath: string,
     featureId: string,
   ): Promise<Result<readonly StepwiseVerificationResult[]>> {
-    return runStepwiseVerification(projectId, featureId, this.integrationTester, this.logger);
+    return runStepwiseVerification(projectId, projectPath, featureId, this.integrationTester, this.logger);
   }
 
   /** @param bugReport - 버그 리포트 @param changes - 변경 사항 요약 */
