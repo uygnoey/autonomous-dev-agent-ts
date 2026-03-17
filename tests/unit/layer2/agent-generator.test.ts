@@ -916,87 +916,87 @@ describe('AgentGenerator 역할 설명 포함 검증', () => {
     generator = makeGenerator();
   });
 
-  it('architect 시스템 프롬프트에 "설계자" 포함', () => {
+  it('architect system prompt contains "architect"', () => {
     const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.systemPrompt).toContain('설계자');
+      expect(result.value.systemPrompt).toContain('architect');
     }
   });
 
-  it('coder 시스템 프롬프트에 "코드" 포함', () => {
+  it('coder system prompt contains "implementer"', () => {
     const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.systemPrompt).toContain('코드');
+      expect(result.value.systemPrompt).toContain('implementer');
     }
   });
 
-  it('tester 시스템 프롬프트에 "테스터" 포함', () => {
+  it('tester system prompt contains "tester"', () => {
     const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.systemPrompt).toContain('테스터');
+      expect(result.value.systemPrompt).toContain('tester');
     }
   });
 
-  it('qa 시스템 프롬프트에 "QA" 포함', () => {
+  it('qa system prompt contains "QA"', () => {
     const result = generator.generateAgentConfig('qa', 'spec', 'feat-1');
     if (result.ok) {
       expect(result.value.systemPrompt).toContain('QA');
     }
   });
 
-  it('reviewer 시스템 프롬프트에 "리뷰어" 포함', () => {
+  it('reviewer system prompt contains "reviewer"', () => {
     const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.systemPrompt).toContain('리뷰어');
+      expect(result.value.systemPrompt).toContain('reviewer');
     }
   });
 
-  it('documenter 시스템 프롬프트에 "문서" 포함', () => {
+  it('documenter system prompt contains "documenter"', () => {
     const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.systemPrompt).toContain('문서');
+      expect(result.value.systemPrompt).toContain('documenter');
     }
   });
 
-  it('qc 시스템 프롬프트에 "QC" 포함', () => {
+  it('qc system prompt contains "QC"', () => {
     const result = generator.generateAgentConfig('qc', 'spec', 'feat-1');
     if (result.ok) {
       expect(result.value.systemPrompt).toContain('QC');
     }
   });
 
-  it('architect 실행 프롬프트에 "설계" 포함', () => {
+  it('architect prompt contains "design"', () => {
     const result = generator.generateAgentConfig('architect', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.prompt).toContain('설계');
+      expect(result.value.prompt).toContain('design');
     }
   });
 
-  it('coder 실행 프롬프트에 "구현" 포함', () => {
+  it('coder prompt contains "Implement"', () => {
     const result = generator.generateAgentConfig('coder', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.prompt).toContain('구현');
+      expect(result.value.prompt).toContain('Implement');
     }
   });
 
-  it('tester 실행 프롬프트에 "테스트" 포함', () => {
+  it('tester prompt contains "tests"', () => {
     const result = generator.generateAgentConfig('tester', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.prompt).toContain('테스트');
+      expect(result.value.prompt).toContain('tests');
     }
   });
 
-  it('reviewer 실행 프롬프트에 "리뷰" 포함', () => {
+  it('reviewer prompt contains "Review"', () => {
     const result = generator.generateAgentConfig('reviewer', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.prompt).toContain('리뷰');
+      expect(result.value.prompt).toContain('Review');
     }
   });
 
-  it('documenter 실행 프롬프트에 "문서" 포함', () => {
+  it('documenter prompt contains "documentation"', () => {
     const result = generator.generateAgentConfig('documenter', 'spec', 'feat-1');
     if (result.ok) {
-      expect(result.value.prompt).toContain('문서');
+      expect(result.value.prompt).toContain('documentation');
     }
   });
 });

@@ -192,21 +192,41 @@ export class AgentGenerator {
     ragContext?: string,
   ): string {
     const roleDescriptions: Readonly<Record<AgentName, string>> = {
-      architect: '당신은 기술 설계자입니다. 코드를 직접 작성하지 않고, 구조와 설계를 결정합니다.',
-      qa: '당신은 QA 예방 Gate입니다. 코딩 전 스펙 대비 설계 완성도를 검증합니다.',
+      architect:
+        'You are a technical architect. Do NOT write code directly — focus on structure, module decomposition, and design decisions.',
+      qa: 'You are a preventive QA gate. Verify spec completeness and design quality BEFORE coding starts. Do NOT write or modify code.',
       coder:
-        '당신은 코드 구현자입니다. 유일하게 코드 수정 권한이 있습니다. 설계에 따라 구현합니다.',
-      tester: '당신은 테스터입니다. 테스트를 생성하고 실행합니다.',
-      qc: '당신은 QC 검출자입니다. 코딩 후 테스트 결과를 기반으로 합격/불합격을 판정합니다.',
-      reviewer: '당신은 코드 리뷰어입니다. 코드 품질을 판정하고 개선점을 제안합니다.',
-      documenter: '당신은 문서 생성자입니다. Phase 경계에서 트리거되어 문서를 생성합니다.',
+        'You are the sole code implementer. Only you may create or modify source files. Implement strictly per acceptance criteria. Do NOT write test code.',
+      tester:
+        'You are the tester. Write test cases derived from acceptance criteria and run them. Fail-fast: stop at the first failure. Do NOT modify source code.',
+      qc: 'You are the QC inspector. Analyze test results, identify root causes one at a time, and pass/fail judgment. Do NOT modify code.',
+      reviewer:
+        'You are the code reviewer. Review for quality, SOLID principles, and security basics. Provide feedback only — do NOT modify code.',
+      documenter:
+        "You are the documenter. Triggered at phase boundaries to generate documentation. Output in the user's language (not English).",
     };
 
-    let prompt = `${roleDescriptions[agentName]}\n\n프로젝트 스펙:\n${projectSpec}`;
+    // WHY: Agents need explicit MCP/search guidance so they search before implementing.
+    const mcpGuide = `
+## Tool Usage — Search Before Implement (REQUIRED)
+1. Read \`.adev/handoff-context.json\` FIRST — it contains full feature specs and acceptance criteria
+2. Read \`.claude/SKILL.md\` for recommended MCP tools for this project
+3. Before implementing, use \`WebSearch\` to find official documentation for each library
+4. If Context7 MCP is available: \`mcp__context7__resolve-library-id\` → \`mcp__context7__get-library-docs\`
+5. All code and comments must be in English
 
-    // WHY: RAG 검색 결과를 시스템 프롬프트에 주입하여 과거 설계결정/실패이력을 활용
+## Key Files
+- \`.adev/handoff-context.json\` — feature specs, acceptance criteria, test definitions (JSON)
+- \`.adev/contract.json\` — contract schema (JSON)
+- \`.claude/SPEC.md\` — project specification (English)
+- \`.claude/SKILL.md\` — MCP tool guide (English)
+- \`.claude/agents/${agentName}.md\` — your role-specific guide`;
+
+    let prompt = `${roleDescriptions[agentName]}${mcpGuide}\n\n## Project Spec\n${projectSpec}`;
+
+    // WHY: Inject RAG context so agents can reuse past decisions and failure history.
     if (ragContext?.trim()) {
-      prompt += `\n\n## 관련 과거 컨텍스트 (RAG)\n${ragContext}`;
+      prompt += `\n\n## Past Context (RAG)\n${ragContext}`;
     }
 
     return prompt;
@@ -221,13 +241,13 @@ export class AgentGenerator {
    */
   private buildPrompt(agentName: AgentName, featureId: string): string {
     const prompts: Readonly<Record<AgentName, string>> = {
-      architect: `기능 '${featureId}'의 기술 설계를 수행하세요.`,
-      qa: `기능 '${featureId}'의 설계를 스펙 대비 검증하세요.`,
-      coder: `기능 '${featureId}'를 설계에 따라 구현하세요.`,
-      tester: `기능 '${featureId}'의 테스트를 생성하고 실행하세요.`,
-      qc: `기능 '${featureId}'의 테스트 결과를 분석하고 합격/불합격을 판정하세요.`,
-      reviewer: `기능 '${featureId}'의 코드를 리뷰하세요.`,
-      documenter: `기능 '${featureId}'의 문서를 생성하세요.`,
+      architect: `Perform technical design for feature '${featureId}'. Read .adev/handoff-context.json first.`,
+      qa: `Verify design completeness for feature '${featureId}' against the spec and acceptance criteria.`,
+      coder: `Implement feature '${featureId}' per the acceptance criteria in .adev/handoff-context.json. Search for library docs before coding.`,
+      tester: `Generate and run tests for feature '${featureId}'. Derive cases from acceptanceCriteria in handoff-context.json. Fail-fast.`,
+      qc: `Analyze test results for feature '${featureId}'. Root-cause failures one at a time. Pass/fail judgment only.`,
+      reviewer: `Review code for feature '${featureId}'. Check quality, SOLID, security. Feedback only — no code changes.`,
+      documenter: `Generate documentation for feature '${featureId}'. Output in the user's language (not English).`,
     };
 
     return prompts[agentName];

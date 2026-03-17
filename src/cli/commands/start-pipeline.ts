@@ -18,6 +18,7 @@ import {
 } from '../../layer1/contract-verification-reporter.js';
 import type { HandoffPackage } from '../../layer1/types.js';
 import type { ChatUi } from '../tui/chat.js';
+import { generateHandoffDocs } from './start-handoff-docs.js';
 import type { Layer1SessionState } from './start-types.js';
 
 /**
@@ -170,9 +171,14 @@ export async function generateContract(
     await Bun.write(contractPath, JSON.stringify(contractResult.value, null, 2));
     await Bun.write(handoffPath, JSON.stringify(handoffResult.value, null, 2));
 
-    logger.info('Contract + HandoffPackage 생성 완료', { contractPath, handoffPath });
+    logger.info('Contract + HandoffPackage saved', { contractPath, handoffPath });
 
-    // 9. Contract 검증 (구조 + AI 정합성) — 스펙 §6.7
+    // 9. Agent context docs — .adev/handoff-context.json, .claude/{CLAUDE,SPEC,SKILL}.md
+    // WHY: Agents need detailed context files before Layer2 starts.
+    //      Best-effort: warns on failure and continues.
+    await generateHandoffDocs(handoffResult.value, session.projectInfo.path, logger);
+
+    // 10. Contract 검증 (구조 + AI 정합성) — 스펙 §6.7
     chat.startSpinner('Contract 검증 중...');
     const verifyResult = await session.contractVerifier.verifyContract(handoffResult.value);
     chat.stopSpinner();

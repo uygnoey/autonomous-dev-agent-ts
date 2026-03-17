@@ -22,7 +22,7 @@ import type { PhaseTransition } from 'layer2/types.js';
  */
 export interface PhaseEngineEvents {
   /** Phase 전환 완료 시 발행 / Emitted on successful phase transition */
-  phaseTransition: [transition: PhaseTransition];
+  'phase:changed': [transition: PhaseTransition];
   /** Phase 초기화 시 발행 / Emitted on phase reset */
   phaseReset: [previousPhase: Phase];
 }
@@ -166,8 +166,8 @@ export class PhaseEngine extends EventEmitter<PhaseEngineEvents> {
     this.current = to;
     this.history.push(transition);
 
-    // WHY: Phase 전환을 외부 리스너에 통지하여 이벤트 기반 연동을 지원
-    this.emit('phaseTransition', transition);
+    // WHY: Phase 전환을 외부 리스너에 통지하여 이벤트 기반 연동을 지원 (스펙 §: 'phase:changed')
+    this.emit('phase:changed', transition);
 
     return ok(transition);
   }

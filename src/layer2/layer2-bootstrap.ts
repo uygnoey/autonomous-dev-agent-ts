@@ -11,10 +11,12 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { HookCallbackMatcher, TeammateIdleHookInput } from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
 import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
 import { ProcessExecutor } from 'core/process-executor.js';
+import type { AgentName } from 'core/types.js';
 import { ClaudeApi } from 'layer1/claude-api.js';
 import { Layer1Verifier } from 'layer1/verifier.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
@@ -112,7 +114,27 @@ export class Layer2Bootstrap {
   async createTeamLeader(): Promise<TeamLeader> {
     const logger = this.logger;
 
-    // 1. SDK executor: Anthropic Messages API 기반 에이전트 실행기
+    // 1. StreamMonitor 먼저 생성 — TeammateIdle 훅에서 참조하므로 executor보다 앞에 위치
+    const streamMonitor = new StreamMonitor(logger);
+
+    // WHY: CV-001 — TeammateIdle SDK 훅을 StreamMonitor에 연결하여 교착 상태 탐지를 활성화한다.
+    //      SDK 훅은 executor 생성 시 주입되어야 하므로 streamMonitor가 먼저 생성되어야 한다.
+    const teammateIdleHook: HookCallbackMatcher = {
+      hooks: [
+        async (input) => {
+          const idleInput = input as TeammateIdleHookInput;
+          streamMonitor.onEvent({
+            type: 'TeammateIdle',
+            agentName: idleInput.teammate_name as AgentName,
+            data: {},
+            timestamp: new Date(),
+          });
+          return { continue: true };
+        },
+      ],
+    };
+
+    // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle 훅 주입)
     const executor = new V2SessionExecutor({
       authProvider: this.authProvider,
       logger,
@@ -120,9 +142,10 @@ export class Layer2Bootstrap {
         model: 'claude-opus-4-6',
         maxTurns: 50,
       },
+      hooks: { TeammateIdle: [teammateIdleHook] },
     });
 
-    // 2. 핵심 컴포넌트 (서로 독립적)
+    // 3. 핵심 컴포넌트 (서로 독립적)
     const phaseEngine = new PhaseEngine(logger);
     const agentSpawner = new AgentSpawner(executor, logger);
     const sessionManager = new SessionManager(logger);
@@ -130,12 +153,11 @@ export class Layer2Bootstrap {
     const progressTracker = new ProgressTracker(logger);
     const agentGenerator = new AgentGenerator(logger);
     const coderAllocator = new CoderAllocator(logger);
-    const streamMonitor = new StreamMonitor(logger);
     const biasDetector = new BiasDetector(logger);
     const failureHandler = new FailureHandler(logger);
     const verificationGate = new VerificationGate(logger);
 
-    // 3. 통합 테스터: ProcessExecutor + CleanEnvManager 필요
+    // 4. 통합 테스터: ProcessExecutor + CleanEnvManager 필요
     const processExecutor = new ProcessExecutor(logger);
     const cleanEnvManager = new CleanEnvManager(logger);
     // WHY: testing 설정 주입 — TestingConfig 기반 동적 단계 수량 적용 (스펙 §8.4)
@@ -146,7 +168,7 @@ export class Layer2Bootstrap {
       this.testing,
     );
 
-    // 4. 세션 스냅샷 저장소 초기화 (Batch 1 신규 컴포넌트)
+    // 5. 세션 스냅샷 저장소 초기화 (Batch 1 신규 컴포넌트)
     // WHY: LanceDB dbPath는 ~/.adev/data/snapshots 를 사용
     const snapshotDbPath = join(homedir(), '.adev', 'data', 'snapshots');
     const sessionSnapshotStore = new SessionSnapshotStore(snapshotDbPath, logger);
@@ -157,14 +179,14 @@ export class Layer2Bootstrap {
       });
     }
 
-    // 5. 세션 복원 오케스트레이터 (Batch 1 신규 컴포넌트)
+    // 6. 세션 복원 오케스트레이터 (Batch 1 신규 컴포넌트)
     const sessionRestoreOrchestrator = new SessionRestoreOrchestrator({
       sessionSnapshotStore,
       logger,
       authProvider: this.authProvider,
     });
 
-    // 6. 디스크 IPC 폴러 (Batch 1 신규 컴포넌트)
+    // 7. 디스크 IPC 폴러 (Batch 1 신규 컴포넌트)
     // WHY: 팀 메시지/태스크 이벤트를 폴링하기 위해 ~/.claude/teams, ~/.claude/tasks 감시
     const ipcPoller = new IpcPoller({
       teamsDir: join(homedir(), '.claude', 'teams'),
@@ -172,7 +194,7 @@ export class Layer2Bootstrap {
       logger,
     });
 
-    // 7. 병렬 Coder 실행기 (Batch 2 신규 컴포넌트)
+    // 8. 병렬 Coder 실행기 (Batch 2 신규 컴포넌트)
     // WHY: CODE phase에서 다수 Coder를 병렬로 실행하여 구현 속도를 높인다
     // WHY: parallel_workers 설정 해석 — 'auto'면 CPU/메모리 기반 자동 산출 (스펙 §8.4)
     const maxWorkers = resolveParallelWorkers(this.testing?.parallelWorkers ?? 'auto', logger);
@@ -186,7 +208,7 @@ export class Layer2Bootstrap {
       maxWorkers,
     });
 
-    // 8. Git 브랜치 관리자 (Batch 2 신규 컴포넌트)
+    // 9. Git 브랜치 관리자 (Batch 2 신규 컴포넌트)
     // WHY: Coder별 피처 브랜치를 생성하고 병렬 실행 완료 후 main에 병합한다
     const gitBranchManager = new GitBranchManager({
       processExecutor,
@@ -194,12 +216,12 @@ export class Layer2Bootstrap {
       cwd: this.projectCwd,
     });
 
-    // 9. Layer1 검증기 — VERIFY Phase에서 스펙 의도 검증에 사용
+    // 10. Layer1 검증기 — VERIFY Phase에서 스펙 의도 검증에 사용
     // WHY: layer1Verifier 미주입 시 auto-pass로 검증이 skip되므로 반드시 주입한다
     const claudeApi = new ClaudeApi(this.authProvider, logger);
     const layer1Verifier = new Layer1Verifier(logger, claudeApi);
 
-    // 10. 의존성 묶음 구성
+    // 11. 의존성 묶음 구성
     const deps: TeamLeaderDeps = {
       phaseEngine,
       agentSpawner,
