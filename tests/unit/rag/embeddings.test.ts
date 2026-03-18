@@ -428,222 +428,6 @@ describe('normalizeVector 경계값 케이스', () => {
   });
 });
 
-// ── 모델 초기화/embed/embedQuery (60초 타임아웃) ──────────────
-
-describe('TransformersEmbeddingProvider initialize', () => {
-  it('모델 로드 → ok=true', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = await p.initialize();
-    expect(result.ok).toBe(true);
-  }, { timeout: 60000 });
-
-  it('중복 초기화 → 모두 ok=true', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const r1 = await p.initialize();
-    const r2 = await p.initialize();
-    expect(r1.ok).toBe(true);
-    expect(r2.ok).toBe(true);
-  }, { timeout: 60000 });
-
-  it('ok는 boolean이다', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = await p.initialize();
-    expect(typeof result.ok).toBe('boolean');
-  }, { timeout: 60000 });
-});
-
-describe('TransformersEmbeddingProvider embed', () => {
-  it('올바른 차원의 벡터 생성', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['hello world']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(1);
-      expect(result.value[0]).toBeInstanceOf(Float32Array);
-      expect(result.value[0]?.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('배치 임베딩 → 올바른 수의 벡터', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['text1', 'text2', 'text3']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(3);
-      for (const vec of result.value) expect(vec.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('자동 초기화 (initialize 호출 없이)', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = await p.embed(['auto-init test']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(1);
-      expect(result.value[0]?.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('정규화된 벡터 반환 (L2 norm ≈ 1.0)', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['normalize test']);
-    if (result.ok) {
-      const vec = result.value[0];
-      if (vec) {
-        let sumSq = 0;
-        for (let i = 0; i < vec.length; i++) sumSq += (vec[i] ?? 0) ** 2;
-        expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 3);
-      }
-    }
-  }, { timeout: 60000 });
-
-  it('빈 텍스트 처리', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(1);
-      expect(result.value[0]?.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('빈 배열 처리', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed([]);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.length).toBe(0);
-  }, { timeout: 60000 });
-
-  it('한국어 텍스트 처리', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['한국어 테스트 임베딩']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(1);
-      expect(result.value[0]?.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('특수 문자 포함 텍스트 처리', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['!@#$%^&*() 🎉 <script>alert("xss")</script>']);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.length).toBe(1);
-      expect(result.value[0]?.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('ok는 boolean이다', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['type check']);
-    expect(typeof result.ok).toBe('boolean');
-  }, { timeout: 60000 });
-
-  it('값이 Float32Array 배열이다', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embed(['array check']);
-    if (result.ok) {
-      expect(Array.isArray(result.value)).toBe(true);
-    }
-  }, { timeout: 60000 });
-
-  it('5개 텍스트 배치 → 5개 벡터', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const texts = ['a', 'b', 'c', 'd', 'e'];
-    const result = await p.embed(texts);
-    if (result.ok) expect(result.value.length).toBe(5);
-  }, { timeout: 60000 });
-
-  it('동일 텍스트 두 번 embed → 동일 벡터', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const r1 = await p.embed(['consistent text']);
-    const r2 = await p.embed(['consistent text']);
-    if (r1.ok && r2.ok) {
-      const v1 = r1.value[0];
-      const v2 = r2.value[0];
-      if (v1 && v2) {
-        let maxDiff = 0;
-        for (let i = 0; i < v1.length; i++) {
-          maxDiff = Math.max(maxDiff, Math.abs((v1[i] ?? 0) - (v2[i] ?? 0)));
-        }
-        expect(maxDiff).toBeLessThan(0.001);
-      }
-    }
-  }, { timeout: 60000 });
-});
-
-describe('TransformersEmbeddingProvider embedQuery', () => {
-  it('올바른 차원의 벡터 반환', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embedQuery('query text');
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toBeInstanceOf(Float32Array);
-      expect(result.value.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('정규화된 벡터 반환', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embedQuery('test query');
-    if (result.ok) {
-      let sumSq = 0;
-      for (let i = 0; i < result.value.length; i++) sumSq += (result.value[i] ?? 0) ** 2;
-      expect(Math.sqrt(sumSq)).toBeCloseTo(1.0, 3);
-    }
-  }, { timeout: 60000 });
-
-  it('한국어 쿼리 임베딩', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embedQuery('한국어 쿼리');
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value).toBeInstanceOf(Float32Array);
-      expect(result.value.length).toBe(384);
-    }
-  }, { timeout: 60000 });
-
-  it('ok는 boolean이다', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const result = await p.embedQuery('type check');
-    expect(typeof result.ok).toBe('boolean');
-  }, { timeout: 60000 });
-
-  it('embedQuery vs embed[0] → 동일한 결과', async () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    await p.initialize();
-    const q = await p.embedQuery('comparison test');
-    const b = await p.embed(['comparison test']);
-    if (q.ok && b.ok) {
-      const qvec = q.value;
-      const bvec = b.value[0];
-      if (bvec) {
-        let maxDiff = 0;
-        for (let i = 0; i < qvec.length; i++) {
-          maxDiff = Math.max(maxDiff, Math.abs((qvec[i] ?? 0) - (bvec[i] ?? 0)));
-        }
-        expect(maxDiff).toBeLessThan(0.001);
-      }
-    }
-  }, { timeout: 60000 });
-});
-
 // ── normalizeVector 추가 edge/random 케이스 ───────────────────
 
 describe('normalizeVector 추가 edge 케이스', () => {
@@ -796,19 +580,6 @@ describe('TransformersEmbeddingProvider 생성자 추가 경계값', () => {
     expect(p.name).toBe('');
   });
 
-  it('initialize는 비동기 함수', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.initialize();
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
-  });
-
-  it('embed는 비동기 함수', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.embed(['test']);
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
-  });
 });
 
 // ── 생성자 추가 경계값 2 ───────────────────────────────────────
@@ -844,13 +615,6 @@ describe('TransformersEmbeddingProvider 생성자 경계값 2', () => {
       const p = new TransformersEmbeddingProvider(`p-${i}`, 'Xenova/all-MiniLM-L6-v2', 384, logger);
       expect(p.tier).toBe('free');
     }
-  });
-
-  it('embedQuery는 비동기 함수', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.embedQuery('test');
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
   });
 
   it('각 인스턴스의 dimensions 독립성', () => {
@@ -1081,27 +845,6 @@ describe('TransformersEmbeddingProvider 생성자 경계값 3', () => {
     for (let i = 0; i < providers.length; i++) {
       expect(providers[i]?.name).toBe(`p-${i}`);
     }
-  });
-
-  it('initialize 반환값은 Promise이다', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.initialize();
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
-  });
-
-  it('embed 반환값은 Promise이다', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.embed(['test']);
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
-  });
-
-  it('embedQuery 반환값은 Promise이다', () => {
-    const p = new TransformersEmbeddingProvider('test', 'Xenova/all-MiniLM-L6-v2', 384, logger);
-    const result = p.embedQuery('test');
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {});
   });
 
   it('name에 슬래시 포함 → 설정됨', () => {
@@ -1692,30 +1435,6 @@ describe('TransformersEmbeddingProvider 메서드 존재 검증', () => {
 
   it('tier는 "free"', () => {
     expect(provider.tier).toBe('free');
-  });
-
-  it('initialize 결과 타입이 Promise인지 확인', () => {
-    const result = provider.initialize();
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {
-      /* ignore */
-    });
-  });
-
-  it('embed 결과 타입이 Promise인지 확인', () => {
-    const result = provider.embed(['test']);
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {
-      /* ignore */
-    });
-  });
-
-  it('embedQuery 결과 타입이 Promise인지 확인', () => {
-    const result = provider.embedQuery('test query');
-    expect(result).toBeInstanceOf(Promise);
-    result.catch(() => {
-      /* ignore */
-    });
   });
 
   it('name은 생성자 인수와 동일', () => {

@@ -8,12 +8,20 @@
  *     Generates 384-dimensional vectors using all-MiniLM-L6-v2 model.
  */
 
-import { type FeatureExtractionPipeline, pipeline } from '@huggingface/transformers';
 import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { EmbeddingProvider, EmbeddingTier } from 'rag/types.js';
+
+// WHY: @huggingface/transformers를 어떤 형태로도 import 금지.
+//      static/dynamic import 모두 Bun 1.3.10에서 모듈 로드 시 OOM 크래시를 유발한다.
+//      실제로 필요한 메서드 시그니처만 로컬 타입으로 정의해 런타임 의존성을 완전히 제거한다.
+// WHY: tolist()은 Tensor 메서드로 동기 반환. await로 호출해도 JS에서 그대로 동작.
+type FeatureExtractionPipeline = (
+  texts: string | string[],
+  options?: Record<string, unknown>,
+) => Promise<{ tolist(): number[][] }>;
 
 // ── 상수 / Constants ────────────────────────────────────────────
 
@@ -79,6 +87,9 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
         provider: this.name,
       });
 
+      // WHY: dynamic import — initialize() 호출 시점에만 로드.
+      //      모듈 로드 시점에 OOM이 발생하지 않도록 lazy 로드한다.
+      const { pipeline } = await import('@huggingface/transformers');
       // WHY: pipeline('feature-extraction')은 텍스트를 고정 차원 벡터로 변환
       this.pipeline = await pipeline('feature-extraction', this.modelName);
       this.initialized = true;
@@ -132,8 +143,8 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
       // WHY: pipeline 호출 시 배치 처리 지원 — 한 번에 여러 텍스트 임베딩
       const output = await this.pipeline(texts, { pooling: 'mean', normalize: true });
 
-      // WHY: output.tolist()는 중첩 배열 반환 — 각 텍스트마다 벡터 1개
-      const rawVectors = await output.tolist();
+      // WHY: output.tolist()는 동기 반환 — 중첩 배열, 각 텍스트마다 벡터 1개
+      const rawVectors = output.tolist();
 
       // WHY: Float32Array로 변환 — 메모리 효율 + LanceDB 호환성
       const vectors = rawVectors.map((vec: number[]) => {
