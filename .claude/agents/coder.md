@@ -27,6 +27,16 @@ isolation: worktree
 - 일관된 디자인 패턴 사용
 - 300줄 초과 시 파일 분할
 
+## 테스트 환경 설정 (package.json 생성 시 필수)
+- `localStorage`, `document`, `window` 등 브라우저 API를 사용하는 프로젝트는
+  반드시 package.json에 jest 환경을 명시할 것:
+  ```json
+  "jest": { "testEnvironment": "jsdom" }
+  ```
+  또는 `jest.config.js`에 `testEnvironment: 'jsdom'` 설정
+- `@jest-environment jsdom` 인라인 주석만으로는 부족 — 반드시 설정 파일 필요
+- Bun 기반 프로젝트는 `bun test` 사용 (jest 금지)
+
 ## 금지
 - 테스트 코드 작성 (tester 영역)
 - 다른 coder의 모듈/파일 수정

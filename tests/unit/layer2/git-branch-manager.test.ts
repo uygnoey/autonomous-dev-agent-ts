@@ -70,6 +70,76 @@ function collectEvents(gen: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
   })();
 }
 
+// ── ensureGitRepo 테스트 ─────────────────────────────────────────
+
+describe('GitBranchManager.ensureGitRepo', () => {
+  it('git repo 이미 존재 → event 없이 즉시 종료', async () => {
+    const mock = makeMockExecutor([{ exitCode: 0, stdout: '.git' }]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.ensureGitRepo());
+
+    expect(events).toHaveLength(0);
+    expect(mock.calls).toHaveLength(1);
+    expect(mock.calls[0]?.args).toEqual(['rev-parse', '--git-dir']);
+  });
+
+  it('git repo 없음 → git init + 초기 커밋 성공 → message event 1개', async () => {
+    const mock = makeMockExecutor([
+      { exitCode: 128, stderr: 'not a git repository' }, // rev-parse 실패
+      { exitCode: 0, stdout: 'Initialized empty Git repository' }, // git init
+      { exitCode: 0, stdout: '[main (root-commit)] chore: init project' }, // commit
+    ]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.ensureGitRepo());
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('message');
+    expect(mock.calls).toHaveLength(3);
+    expect(mock.calls[1]?.args).toEqual(['init']);
+    expect(mock.calls[2]?.args).toContain('--allow-empty');
+  });
+
+  it('git init 실패 → error event 1개, commit 미실행', async () => {
+    const mock = makeMockExecutor([
+      { exitCode: 128, stderr: 'not a git repository' }, // rev-parse 실패
+      { exitCode: 1, stderr: 'git init failed' },         // init 실패
+    ]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.ensureGitRepo());
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('error');
+    expect(mock.calls).toHaveLength(2); // commit 미실행
+  });
+
+  it('git init 성공, commit 실패 → error event 1개', async () => {
+    const mock = makeMockExecutor([
+      { exitCode: 128, stderr: 'not a git repository' },
+      { exitCode: 0 },                                    // init 성공
+      { exitCode: 1, stderr: 'commit failed' },           // commit 실패
+    ]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.ensureGitRepo());
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('error');
+    expect(events[0]?.content).toContain('초기 커밋 실패');
+  });
+
+  it('rev-parse ProcessExecutor 실패(ok: false) → git init 시도', async () => {
+    const mock = makeMockExecutor([
+      { throwError: new AdevError('process_timeout', '타임아웃') }, // rev-parse 실패
+      { exitCode: 0 }, // init
+      { exitCode: 0 }, // commit
+    ]);
+    const manager = new GitBranchManager({ processExecutor: mock as never, logger });
+    const events = await collectEvents(manager.ensureGitRepo());
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe('message');
+  });
+});
+
 // ── setupBranch 테스트 ──────────────────────────────────────────
 
 describe('GitBranchManager.setupBranch', () => {
@@ -86,12 +156,16 @@ describe('GitBranchManager.setupBranch', () => {
     });
 
     it('checkout -b 성공 → git 명령 1회만 호출', async () => {
-      const mock = makeMockExecutor([{ exitCode: 0 }]);
+      const mock = makeMockExecutor([
+        { exitCode: 0, stdout: '.git' }, // rev-parse --git-dir: repo exists
+        { exitCode: 0 },
+      ]);
       const manager = new GitBranchManager({ processExecutor: mock as never, logger });
       await collectEvents(manager.setupBranch('feat/success'));
 
-      expect(mock.calls).toHaveLength(1);
-      expect(mock.calls[0]?.args).toEqual(['checkout', '-b', 'feat/success']);
+      // WHY: rev-parse --git-dir (1회) + checkout -b (1회) = 2회
+      expect(mock.calls).toHaveLength(2);
+      expect(mock.calls[1]?.args).toEqual(['checkout', '-b', 'feat/success']);
     });
   });
 
@@ -99,6 +173,7 @@ describe('GitBranchManager.setupBranch', () => {
   describe('브랜치 이미 존재 → checkout 재시도 성공', () => {
     it('checkout -b 실패 → checkout 성공 → message event', async () => {
       const mock = makeMockExecutor([
+        { exitCode: 0, stdout: '.git' }, // rev-parse --git-dir: repo exists
         { exitCode: 128, stderr: "fatal: A branch named 'feat/x' already exists." },
         { exitCode: 0, stdout: "Switched to branch 'feat/x'" },
       ]);
@@ -112,15 +187,17 @@ describe('GitBranchManager.setupBranch', () => {
 
     it('checkout -b 실패 → checkout 성공 → git 명령 2회 호출', async () => {
       const mock = makeMockExecutor([
+        { exitCode: 0, stdout: '.git' }, // rev-parse --git-dir: repo exists
         { exitCode: 128, stderr: 'already exists' },
         { exitCode: 0 },
       ]);
       const manager = new GitBranchManager({ processExecutor: mock as never, logger });
       await collectEvents(manager.setupBranch('feat/x'));
 
-      expect(mock.calls).toHaveLength(2);
-      expect(mock.calls[0]?.args).toEqual(['checkout', '-b', 'feat/x']);
-      expect(mock.calls[1]?.args).toEqual(['checkout', 'feat/x']);
+      // WHY: rev-parse (1) + checkout -b (2) + checkout (3) = 3회
+      expect(mock.calls).toHaveLength(3);
+      expect(mock.calls[1]?.args).toEqual(['checkout', '-b', 'feat/x']);
+      expect(mock.calls[2]?.args).toEqual(['checkout', 'feat/x']);
     });
 
     it('checkout -b 실패 → checkout 성공 → event agentName은 architect', async () => {
@@ -147,6 +224,7 @@ describe('GitBranchManager.setupBranch', () => {
 
     it('두 번 모두 실패 → error 내용에 브랜치명 포함', async () => {
       const mock = makeMockExecutor([
+        { exitCode: 0, stdout: '.git' }, // rev-parse --git-dir: repo exists
         { exitCode: 1, stderr: 'fail1' },
         { exitCode: 1, stderr: 'pathspec not found' },
       ]);
@@ -201,11 +279,15 @@ describe('GitBranchManager.setupBranch', () => {
     });
 
     it('특수문자 브랜치명 → git 그대로 전달', async () => {
-      const mock = makeMockExecutor([{ exitCode: 0 }]);
+      const mock = makeMockExecutor([
+        { exitCode: 0, stdout: '.git' }, // rev-parse --git-dir: repo exists
+        { exitCode: 0 },
+      ]);
       const manager = new GitBranchManager({ processExecutor: mock as never, logger });
       await collectEvents(manager.setupBranch('feat/some-feature-123'));
 
-      expect(mock.calls[0]?.args[2]).toBe('feat/some-feature-123');
+      // WHY: calls[0]은 rev-parse, calls[1]이 checkout -b
+      expect(mock.calls[1]?.args[2]).toBe('feat/some-feature-123');
     });
   });
 

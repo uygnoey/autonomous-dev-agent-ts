@@ -61,19 +61,71 @@ export class GitBranchManager {
   }
 
   /**
+   * Git 레포지토리 여부를 확인하고 없으면 초기화한다 / Ensure git repository exists
+   *
+   * @description
+   * KR: `.git` 디렉토리가 없으면 `git init`과 빈 초기 커밋을 생성한다.
+   *     fullrun처럼 새 프로젝트 디렉토리에서 시작할 때 setupBranch 전에 호출해야 한다.
+   * EN: Runs `git init` and an empty initial commit when `.git` is absent.
+   *     Must be called before setupBranch when starting from a fresh project directory.
+   *
+   * @returns AgentEvent 스트림 / AgentEvent stream
+   */
+  async *ensureGitRepo(): AsyncIterable<AgentEvent> {
+    // WHY: rev-parse --git-dir 은 git repo 안에서만 0을 반환 — 가장 가벼운 감지 방법
+    const checkResult = await this.git(['rev-parse', '--git-dir']);
+    if (checkResult.ok) {
+      this.logger.debug('git repo 이미 존재 — init 생략', { cwd: this.cwd });
+      return;
+    }
+
+    this.logger.info('git repo 없음 — git init 실행', { cwd: this.cwd });
+
+    const initResult = await this.git(['init']);
+    if (!initResult.ok) {
+      yield createEvent('error', `git init 실패: ${initResult.error.message}`);
+      return;
+    }
+
+    // WHY: git init 직후에는 HEAD가 없어 브랜치 생성이 불가능하다.
+    //      빈 커밋 1개를 만들어야 main 브랜치가 확정되고 feature 브랜치 분기가 가능해진다.
+    const commitResult = await this.git([
+      'commit',
+      '--allow-empty',
+      '-m',
+      'chore: init project',
+    ]);
+    if (!commitResult.ok) {
+      yield createEvent('error', `초기 커밋 실패: ${commitResult.error.message}`);
+      return;
+    }
+
+    this.logger.info('git init + 초기 커밋 완료', { cwd: this.cwd });
+    yield createEvent('message', 'git 저장소 초기화 완료');
+  }
+
+  /**
    * 브랜치를 생성하거나 체크아웃한다 / Create or checkout a branch
    *
    * @description
    * KR: 브랜치가 없으면 생성 후 체크아웃, 이미 있으면 바로 체크아웃한다.
    *     두 번의 시도 모두 실패하면 error event를 yield한다.
+   *     git repo가 없는 경우를 대비해 ensureGitRepo()를 먼저 호출한다.
    * EN: Creates and checks out new branch, or checks out existing one.
    *     Yields error event if both attempts fail.
+   *     Calls ensureGitRepo() first to handle fresh project directories.
    *
    * @param branchName - 브랜치 이름 / Branch name
    * @returns AgentEvent 스트림 / AgentEvent stream
    */
   async *setupBranch(branchName: string): AsyncIterable<AgentEvent> {
     this.logger.info('브랜치 셋업 시작', { branchName, cwd: this.cwd });
+
+    // WHY: fullrun처럼 새 디렉토리에서 시작할 때 git repo가 없으면 checkout이 즉시 실패한다.
+    for await (const event of this.ensureGitRepo()) {
+      yield event;
+      if (event.type === 'error') return;
+    }
 
     // WHY: 먼저 새 브랜치 생성 시도. 이미 존재하면 exitCode !== 0
     const createResult = await this.git(['checkout', '-b', branchName]);
