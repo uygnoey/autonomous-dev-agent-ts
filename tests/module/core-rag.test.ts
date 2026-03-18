@@ -15,13 +15,57 @@ import { tmpdir } from 'node:os';
 import { ConsoleLogger, MemoryRepository } from 'core/index.js';
 import type { Logger } from 'core/logger.js';
 import type { CodeRecord, MemoryRecord } from 'core/types.js';
+import type { EmbeddingProvider, EmbeddingTier } from 'rag/index.js';
 import {
   ChunkSplitter,
   CodeIndexer,
   CodeVectorStore,
   RagSearcher,
-  createTransformersEmbeddingProvider,
 } from 'rag/index.js';
+import { ok, err } from 'core/types.js';
+import { RagError } from 'core/errors.js';
+
+// WHY: @huggingface/transformers는 Bun 1.3.10에서 OOM 크래시를 유발.
+//      모듈 통합 테스트는 실제 ML 모델이 불필요 — 결정론적 mock으로 대체.
+class MockEmbeddingProvider implements EmbeddingProvider {
+  readonly name = 'mock';
+  readonly dimensions = 384;
+  readonly tier: EmbeddingTier = 'free';
+
+  async embed(texts: string[]): Promise<ReturnType<EmbeddingProvider['embed']>> {
+    if (texts.length === 0) return ok([]);
+    const vectors = texts.map((text) => {
+      const vec = new Float32Array(384);
+      for (let i = 0; i < 384; i++) {
+        // WHY: 텍스트 + 인덱스 기반 결정론적 해시 — 동일 텍스트는 동일 벡터
+        let h = i + 1;
+        for (let j = 0; j < text.length; j++) {
+          h = (h * 31 + text.charCodeAt(j)) & 0x7fffffff;
+        }
+        vec[i] = (h / 0x7fffffff) * 2 - 1;
+      }
+      // L2 정규화
+      let sum = 0;
+      for (let i = 0; i < 384; i++) sum += (vec[i] ?? 0) ** 2;
+      const mag = Math.sqrt(sum);
+      if (mag > 0) for (let i = 0; i < 384; i++) vec[i] = (vec[i] ?? 0) / mag;
+      return vec;
+    });
+    return ok(vectors);
+  }
+
+  async embedQuery(query: string): Promise<ReturnType<EmbeddingProvider['embedQuery']>> {
+    const result = await this.embed([query]);
+    if (!result.ok) return err(result.error);
+    const vec = result.value[0];
+    if (!vec) return err(new RagError('rag_embedding_error', '임베딩 결과 없음'));
+    return ok(vec);
+  }
+}
+
+function createMockEmbeddingProvider(): MockEmbeddingProvider {
+  return new MockEmbeddingProvider();
+}
 
 // ── 테스트 헬퍼 / Test helpers ────────────────────────────────────
 
@@ -146,7 +190,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider로 벡터 생성 → VectorStore에 insert → search로 조회', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'embed-test-db'), logger);
     await store.initialize();
 
@@ -188,7 +232,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('ChunkSplitter → CodeIndexer → RagSearcher 전체 파이프라인', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'pipeline-db'), logger);
     await store.initialize();
 
@@ -336,7 +380,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('LocalEmbeddingProvider가 동일 텍스트에 동일 벡터를 반환 (결정론적)', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
 
     const result1 = await provider.embed(['hello world']);
     const result2 = await provider.embed(['hello world']);
@@ -768,7 +812,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 빈 텍스트 배열 embed 에러', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed([]);
     // WHY: 빈 배열은 에러이거나 빈 결과
     if (result.ok) {
@@ -779,7 +823,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 여러 텍스트 동시 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const texts = [
       'function login()',
       'export class UserService',
@@ -796,7 +840,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 특수문자 포함 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed(['<script>alert("xss")</script> && SELECT * FROM users;']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -804,7 +848,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 한글 코드 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed(['사용자 인증 함수 로그인 회원가입']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -812,7 +856,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: embedQuery vs embed 동일 텍스트 유사 결과', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const text = 'database connection pool';
 
     const embedResult = await provider.embed([text]);
@@ -828,7 +872,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 빈 쿼리 문자열 검색 — 에러이거나 빈 배열', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'empty-query-db'), logger);
     await store.initialize();
 
@@ -843,7 +887,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 레코드 없는 스토어 검색 → 빈 배열', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'empty-store-db'), logger);
     await store.initialize();
 
@@ -855,7 +899,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 여러 언어 파일 혼합 검색', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'multi-lang-db'), logger);
     await store.initialize();
 
@@ -892,7 +936,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('CodeIndexer: 존재하지 않는 파일 인덱싱 에러', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'nonexist-file-db'), logger);
     await store.initialize();
 
@@ -904,7 +948,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('CodeIndexer: 빈 파일 인덱싱 → 0 청크', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'empty-file-db'), logger);
     await store.initialize();
 
@@ -1192,7 +1236,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 매우 긴 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const longText = 'function test() { return true; }'.repeat(100);
     const result = await provider.embed([longText]);
     expect(result.ok).toBe(true);
@@ -1201,7 +1245,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 단일 단어 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed(['hello']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1209,7 +1253,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 숫자만 있는 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed(['1234567890']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1217,7 +1261,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 공백만 있는 텍스트 embed', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const result = await provider.embed(['   ']);
     // 공백만 있는 텍스트는 ok 또는 err — 구현에 따라
     expect(typeof result.ok).toBe('boolean');
@@ -1279,7 +1323,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('CodeIndexer: 여러 함수 포함 파일 인덱싱 → 여러 청크', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'multi-fn-db'), logger);
     await store.initialize();
 
@@ -1299,7 +1343,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 특수문자 쿼리 검색 — ok 반환', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'special-query-db'), logger);
     await store.initialize();
 
@@ -1309,7 +1353,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 한글 쿼리 검색', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'korean-query-db'), logger);
     await store.initialize();
 
@@ -1506,7 +1550,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('RagSearcher: 매우 긴 쿼리 검색', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'long-query-db'), logger);
     await store.initialize();
 
@@ -1577,7 +1621,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('EmbeddingProvider: 10개 텍스트 배치 embed → 10개 벡터', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const texts = Array.from({ length: 10 }, (_, i) =>
       `export function fn${i}(): number { return ${i}; }`,
     );
@@ -1635,7 +1679,7 @@ describe('core ↔ rag 통합 / core ↔ rag integration', () => {
   });
 
   it('CodeVectorStore: searchWithScore 결과의 score가 0~2 범위', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider();
     const store = new CodeVectorStore(join(tmpDir, 'score-range-db'), logger);
     await store.initialize();
 

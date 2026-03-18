@@ -1361,20 +1361,20 @@ describe('layer3 ↔ layer2 통합 / layer3 ↔ layer2 integration', () => {
 
   it('PhaseEngine: DESIGN→CODE 성공 후 currentPhase=CODE', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     expect(engine.currentPhase).toBe('CODE');
   });
 
   it('PhaseEngine: CODE→TEST 성공 후 currentPhase=TEST', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     engine.transition('TEST', 'done', 'coder');
     expect(engine.currentPhase).toBe('TEST');
   });
 
   it('PhaseEngine: TEST→VERIFY 성공 후 currentPhase=VERIFY', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     engine.transition('TEST', 'done', 'coder');
     engine.transition('VERIFY', 'done', 'tester');
     expect(engine.currentPhase).toBe('VERIFY');
@@ -1388,7 +1388,7 @@ describe('layer3 ↔ layer2 통합 / layer3 ↔ layer2 integration', () => {
 
   it('PhaseEngine: VERIFY→CODE 롤백 가능', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     engine.transition('TEST', 'done', 'coder');
     engine.transition('VERIFY', 'done', 'tester');
     const r = engine.transition('CODE', 'rollback', 'qc');
@@ -1398,7 +1398,7 @@ describe('layer3 ↔ layer2 통합 / layer3 ↔ layer2 integration', () => {
 
   it('PhaseEngine: VERIFY→TEST 롤백 가능', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     engine.transition('TEST', 'done', 'coder');
     engine.transition('VERIFY', 'done', 'tester');
     const r = engine.transition('TEST', 'rollback-test', 'qc');
@@ -1550,7 +1550,7 @@ describe('layer3 ↔ layer2 통합 / layer3 ↔ layer2 integration', () => {
 
   it('PhaseEngine: canTransition VERIFY → false (CODE에서)', () => {
     const engine = new PhaseEngine(logger);
-    engine.transition('CODE', 'done', 'arch');
+    engine.transition('CODE', 'done', 'architect');
     expect(engine.canTransition('VERIFY')).toBe(false);
   });
 
