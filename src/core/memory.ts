@@ -85,6 +85,15 @@ export class MemoryRepository implements VectorRepository<MemoryRecord> {
    */
   async close(): Promise<void> {
     this.table = null;
+    // WHY: db.close()는 네이티브 Arrow/NAPI 리소스를 명시적으로 해제.
+    //      null 설정만으로는 GC 타이밍에 의존하여 프로세스 종료 시 크래시 유발.
+    if (this.db !== null) {
+      try {
+        this.db.close();
+      } catch {
+        // WHY: 이미 닫힌 연결에 대한 close는 무시
+      }
+    }
     this.db = null;
   }
 

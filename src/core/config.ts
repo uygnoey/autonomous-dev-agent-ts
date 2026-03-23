@@ -36,6 +36,44 @@ import { deepMerge, validateConfig } from 'core/config-merge.js';
 import { DEFAULT_CONFIG } from 'core/config-schema.js';
 import type { ConfigSchema, EnvironmentVars } from 'core/config-schema.js';
 
+// ── 서브프로세스 안전 환경변수 / Safe env for subprocesses ─────────
+
+/**
+ * 서브프로세스에 전달할 안전한 환경변수 서브셋 반환 / Return safe environment variable subset for subprocesses
+ *
+ * @description
+ * KR: 민감한 인증 정보(API 키, OAuth 토큰 등)를 제외하고
+ *     시스템 동작에 필요한 최소한의 변수만 전달한다.
+ * EN: Excludes sensitive credentials (API keys, OAuth tokens, etc.)
+ *     and passes only minimal system variables needed for subprocess operation.
+ *
+ * @returns 안전한 환경변수 레코드 / Record of safe environment variables
+ */
+export function getSafeEnvForSubprocess(): Record<string, string> {
+  const SAFE_KEYS = [
+    'PATH',
+    'HOME',
+    'USER',
+    'LANG',
+    'TERM',
+    'SHELL',
+    'TMPDIR',
+    'XDG_RUNTIME_DIR',
+    'XDG_CONFIG_HOME',
+    'XDG_DATA_HOME',
+    'XDG_CACHE_HOME',
+  ] as const;
+
+  const result: Record<string, string> = {};
+  for (const key of SAFE_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // ── 환경변수 / Environment Variables ────────────────────────────
 
 /**

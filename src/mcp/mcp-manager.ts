@@ -9,6 +9,7 @@
  */
 
 import type { Subprocess } from 'bun';
+import { getSafeEnvForSubprocess } from 'core/config.js';
 import { McpError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
@@ -130,7 +131,7 @@ export class McpManager {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'ignore',
-        env: { ...process.env, ...config.env },
+        env: { ...getSafeEnvForSubprocess(), ...config.env },
       });
       this.processes.set(name, proc);
 
