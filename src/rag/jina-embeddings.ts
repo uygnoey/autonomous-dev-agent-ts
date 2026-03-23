@@ -10,7 +10,13 @@
  *     No API key required — free local execution.
  */
 
-import { type FeatureExtractionPipeline, pipeline } from '@huggingface/transformers';
+// WHY: @huggingface/transformers를 static import하면 Bun 1.3.10에서 모듈 로드 시 OOM 크래시.
+//      embeddings.ts와 동일하게 dynamic import 패턴으로 전환하여 런타임 의존성을 lazy 로드한다.
+type FeatureExtractionPipeline = (
+  texts: string | string[],
+  options?: Record<string, unknown>,
+) => Promise<{ tolist(): number[][] }>;
+
 import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
@@ -81,6 +87,9 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
         dimensions: this.dimensions,
       });
 
+      // WHY: dynamic import — initialize() 호출 시점에만 로드.
+      //      모듈 로드 시점에 OOM이 발생하지 않도록 lazy 로드한다.
+      const { pipeline } = await import('@huggingface/transformers');
       // WHY: pipeline('feature-extraction')은 텍스트를 고정 차원 벡터로 변환
       this.pipelineInstance = await pipeline('feature-extraction', this.modelName);
       this.initialized = true;

@@ -89,12 +89,7 @@ export class GitBranchManager {
 
     // WHY: git init 직후에는 HEAD가 없어 브랜치 생성이 불가능하다.
     //      빈 커밋 1개를 만들어야 main 브랜치가 확정되고 feature 브랜치 분기가 가능해진다.
-    const commitResult = await this.git([
-      'commit',
-      '--allow-empty',
-      '-m',
-      'chore: init project',
-    ]);
+    const commitResult = await this.git(['commit', '--allow-empty', '-m', 'chore: init project']);
     if (!commitResult.ok) {
       yield createEvent('error', `초기 커밋 실패: ${commitResult.error.message}`);
       return;
