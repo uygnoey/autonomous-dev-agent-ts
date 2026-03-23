@@ -142,6 +142,24 @@ export class Vectorizer {
   }
 
   /**
+   * RAG 시스템 리소스 해제 / Release RAG system resources
+   *
+   * @description
+   * KR: 내부 벡터 저장소의 LanceDB 연결을 해제하고 모든 참조를 정리한다.
+   * EN: Closes the internal vector store's LanceDB connection and clears all references.
+   */
+  async close(): Promise<void> {
+    if (this.vectorStore) {
+      await this.vectorStore.close();
+    }
+    this.vectorStore = null;
+    this.embeddingProvider = null;
+    this.indexer = null;
+    this.searcher = null;
+    this.initialized = false;
+  }
+
+  /**
    * 초기화 상태를 확인 / Ensure the system is initialized
    */
   private ensureInitialized(): Result<void, RagError> {

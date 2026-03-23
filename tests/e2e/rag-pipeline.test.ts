@@ -14,12 +14,83 @@ import { tmpdir } from 'node:os';
 import { ConsoleLogger } from 'core/logger.js';
 import { Vectorizer } from 'rag/vectorizer.js';
 import { ChunkSplitter, detectLanguage, extractModule } from 'rag/chunk-splitter.js';
-import { createTransformersEmbeddingProvider, normalizeVector } from 'rag/embeddings.js';
+import { normalizeVector } from 'rag/embeddings.js';
 import type { EmbeddingConfig } from 'core/config.js';
+// WHY: 'rag/index.js' barrel import는 jina-embeddings.ts를 로드하여
+//      @huggingface/transformers static import를 트리거 → Bun 1.3.10 OOM.
+//      타입만 필요하므로 types.ts에서 직접 import하여 모듈 로딩 체인을 차단.
+import type { EmbeddingProvider, EmbeddingTier } from 'rag/types.js';
+import { ok, err } from 'core/types.js';
+import { RagError } from 'core/errors.js';
+
+// WHY: @huggingface/transformers는 Bun 1.3.10에서 OOM 크래시를 유발.
+//      E2E 테스트는 실제 ML 모델이 불필요 — 결정론적 mock으로 대체.
+class MockEmbeddingProvider implements EmbeddingProvider {
+  readonly name: string;
+  readonly dimensions: number;
+  readonly tier: EmbeddingTier = 'free';
+
+  constructor(name = 'mock', _model?: string, dimensions = 384) {
+    this.name = name;
+    this.dimensions = dimensions;
+  }
+
+  async embed(texts: string[]): Promise<ReturnType<EmbeddingProvider['embed']>> {
+    if (texts.length === 0) return ok([]);
+    const vectors = texts.map((text) => {
+      const vec = new Float32Array(this.dimensions);
+      for (let i = 0; i < this.dimensions; i++) {
+        // WHY: 텍스트 + 인덱스 기반 결정론적 해시 — 동일 텍스트는 동일 벡터
+        let h = i + 1;
+        for (let j = 0; j < text.length; j++) {
+          h = (h * 31 + text.charCodeAt(j)) & 0x7fffffff;
+        }
+        vec[i] = (h / 0x7fffffff) * 2 - 1;
+      }
+      // L2 정규화
+      let sum = 0;
+      for (let i = 0; i < this.dimensions; i++) sum += (vec[i] ?? 0) ** 2;
+      const mag = Math.sqrt(sum);
+      if (mag > 0) for (let i = 0; i < this.dimensions; i++) vec[i] = (vec[i] ?? 0) / mag;
+      return vec;
+    });
+    return ok(vectors);
+  }
+
+  async embedQuery(query: string): Promise<ReturnType<EmbeddingProvider['embedQuery']>> {
+    const result = await this.embed([query]);
+    if (!result.ok) return err(result.error);
+    const vec = result.value[0];
+    if (!vec) return err(new RagError('rag_embedding_error', '임베딩 결과 없음'));
+    return ok(vec);
+  }
+}
+
+function createMockEmbeddingProvider(
+  _logger?: unknown,
+  name = 'mock',
+  model?: string,
+  dimensions = 384,
+): MockEmbeddingProvider {
+  return new MockEmbeddingProvider(name, model, dimensions);
+}
 
 const logger = new ConsoleLogger('error');
 
 let tmpDir: string;
+
+// WHY: Vectorizer 인스턴스를 추적하여 afterEach에서 LanceDB 연결을 해제한다.
+//      네이티브 모듈(lancedb)이 프로세스 종료 시 미해제 리소스로 인해 C++ panic을 유발.
+const activeVectorizers: Vectorizer[] = [];
+
+/**
+ * Vectorizer를 생성하고 자동 cleanup 추적에 등록한다 / Create a Vectorizer and register it for auto-cleanup
+ */
+function createTrackedVectorizer(dbPath: string, embeddingConfig: EmbeddingConfig, log: ConsoleLogger): Vectorizer {
+  const v = new Vectorizer(dbPath, embeddingConfig, log);
+  activeVectorizers.push(v);
+  return v;
+}
 
 beforeEach(async () => {
   tmpDir = join(
@@ -30,6 +101,15 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // WHY: LanceDB 네이티브 연결을 먼저 해제한 후 파일 시스템 정리
+  for (const v of activeVectorizers) {
+    try {
+      await v.close();
+    } catch {
+      // WHY: close 실패는 무시 — 이미 정리된 리소스일 수 있음
+    }
+  }
+  activeVectorizers.length = 0;
   await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -95,7 +175,7 @@ export const add = (a: number, b: number) => a + b;
   });
 
   it('LocalEmbeddingProvider: 결정론적 벡터 생성', async () => {
-    const provider = createTransformersEmbeddingProvider(logger, 'test-provider', 'Xenova/all-MiniLM-L6-v2', 384);
+    const provider = createMockEmbeddingProvider(logger, 'test-provider', 'Xenova/all-MiniLM-L6-v2', 384);
 
     expect(provider.name).toBe('test-provider');
     expect(provider.dimensions).toBe(384);
@@ -118,7 +198,7 @@ export const add = (a: number, b: number) => a + b;
   });
 
   it('LocalEmbeddingProvider: 배치 임베딩', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const texts = ['function hello() {}', 'class Greeter {}', 'const x = 1'];
 
     const result = await provider.embed(texts);
@@ -133,7 +213,7 @@ export const add = (a: number, b: number) => a + b;
   });
 
   it('LocalEmbeddingProvider: 서로 다른 텍스트는 다른 벡터 반환', async () => {
-    const provider = createTransformersEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 384);
+    const provider = createMockEmbeddingProvider(logger, 'test', 'Xenova/all-MiniLM-L6-v2', 384);
 
     const r1 = await provider.embedQuery('error handling code');
     const r2 = await provider.embedQuery('database connection pool');
@@ -179,7 +259,7 @@ export const add = (a: number, b: number) => a + b;
   it('Vectorizer: 초기화 전 검색 시 에러', async () => {
     const dbPath = join(tmpDir, 'lance-no-init');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     const searchResult = await vectorizer.search('test query');
     expect(searchResult.ok).toBe(false);
@@ -373,14 +453,14 @@ class Greeter:
   });
 
   it('LocalEmbeddingProvider: 빈 문자열 임베딩 → 결과 반환', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embedQuery('');
     // WHY: 빈 문자열도 처리하거나 에러를 반환해야 함
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('LocalEmbeddingProvider: 한글 텍스트 임베딩', async () => {
-    const provider = createTransformersEmbeddingProvider(logger, 'kr-test', 'Xenova/all-MiniLM-L6-v2', 384);
+    const provider = createMockEmbeddingProvider(logger, 'kr-test', 'Xenova/all-MiniLM-L6-v2', 384);
     const result = await provider.embedQuery('안녕하세요 세계');
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -389,13 +469,13 @@ class Greeter:
   });
 
   it('LocalEmbeddingProvider: 특수문자 포함 텍스트', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embedQuery('function() { return null; } // @#$%^&*');
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('LocalEmbeddingProvider: 매우 긴 텍스트 (1000자)', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const longText = 'hello world '.repeat(100);
     const result = await provider.embedQuery(longText);
     // WHY: 긴 텍스트도 처리 가능해야 한다 (truncation 또는 정상 처리)
@@ -403,7 +483,7 @@ class Greeter:
   });
 
   it('LocalEmbeddingProvider: 단일 텍스트 배치 임베딩', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embed(['single text']);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -412,7 +492,7 @@ class Greeter:
   });
 
   it('LocalEmbeddingProvider: 빈 배열 배치 임베딩', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embed([]);
     // WHY: 빈 배열은 빈 결과 또는 에러
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -422,14 +502,14 @@ class Greeter:
   });
 
   it('LocalEmbeddingProvider: name/dimensions/tier 속성 확인', () => {
-    const provider = createTransformersEmbeddingProvider(logger, 'my-provider', 'Xenova/all-MiniLM-L6-v2', 768);
+    const provider = createMockEmbeddingProvider(logger, 'my-provider', 'Xenova/all-MiniLM-L6-v2', 768);
     expect(provider.name).toBe('my-provider');
     expect(provider.dimensions).toBe(768);
     expect(provider.tier).toBe('free');
   });
 
   it('LocalEmbeddingProvider: 기본 설정으로 생성 시 속성 정의됨', () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     expect(provider.name).toBeDefined();
     expect(provider.dimensions).toBeGreaterThan(0);
   });
@@ -437,7 +517,7 @@ class Greeter:
   it('Vectorizer: 초기화 전 index 호출 → 에러', async () => {
     const dbPath = join(tmpDir, 'lance-no-init-index');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     const indexResult = await vectorizer.index(tmpDir, {
       extensions: ['ts'],
@@ -452,7 +532,7 @@ class Greeter:
   it('Vectorizer: 초기화 후 빈 디렉토리 인덱싱 → 0 청크', async () => {
     const dbPath = join(tmpDir, 'lance-empty-dir');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -472,7 +552,7 @@ class Greeter:
   it('Vectorizer: 초기화 후 search limit=1 → 최대 1 결과', async () => {
     const dbPath = join(tmpDir, 'lance-limit1');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -497,7 +577,7 @@ class Greeter:
   it('Vectorizer: 동일 디렉토리 2회 인덱싱 → 중복 처리', async () => {
     const dbPath = join(tmpDir, 'lance-dedup');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -514,7 +594,7 @@ class Greeter:
   it('Vectorizer: 한글 파일명 인덱싱 → 에러 없이 처리', async () => {
     const dbPath = join(tmpDir, 'lance-korean');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -528,7 +608,7 @@ class Greeter:
   it('Vectorizer: search 결과 score는 0 이상 1 이하', async () => {
     const dbPath = join(tmpDir, 'lance-score');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -553,7 +633,7 @@ class Greeter:
   it('Vectorizer: search 빈 쿼리 → 에러 또는 빈 결과', async () => {
     const dbPath = join(tmpDir, 'lance-empty-query');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     await vectorizer.initialize();
 
@@ -564,7 +644,7 @@ class Greeter:
   it('Vectorizer: 초기화 전 두 번째 초기화 호출 → 안전 처리', async () => {
     const dbPath = join(tmpDir, 'lance-double-init');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     const r1 = await vectorizer.initialize();
     const r2 = await vectorizer.initialize();
@@ -576,7 +656,7 @@ class Greeter:
   it('Vectorizer: 초기화 → 인덱싱 → 검색 전체 파이프라인', async () => {
     const dbPath = join(tmpDir, 'lance-full');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
 
     // Step 1: 초기화
     const initResult = await vectorizer.initialize();
@@ -827,7 +907,7 @@ export function createConfig(host: string, port: number): Config {
   it('Vectorizer: search 결과 record.chunk는 string', async () => {
     const dbPath = join(tmpDir, 'lance-chunk-type');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-type');
     await Bun.write(join(srcDir, 'type.ts'), 'export function typed() { return "string"; }');
@@ -843,7 +923,7 @@ export function createConfig(host: string, port: number): Config {
   it('Vectorizer: search 결과 record.filePath는 string', async () => {
     const dbPath = join(tmpDir, 'lance-filepath-type');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-fp-type');
     await Bun.write(join(srcDir, 'fp.ts'), 'export function fpTest() {}');
@@ -859,7 +939,7 @@ export function createConfig(host: string, port: number): Config {
   it('Vectorizer: 다른 projectId로 인덱싱 → ok', async () => {
     const dbPath = join(tmpDir, 'lance-proj-id');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-proj-id');
     await Bun.write(join(srcDir, 'a.ts'), 'export const a = 1;');
@@ -872,7 +952,7 @@ export function createConfig(host: string, port: number): Config {
   it('Vectorizer: 여러 확장자 인덱싱 → ok', async () => {
     const dbPath = join(tmpDir, 'lance-multi-ext');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-multi-ext');
     await Bun.write(join(srcDir, 'a.ts'), 'export const a = 1;');
@@ -1114,7 +1194,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 초기화 성공 → ok=true', async () => {
     const dbPath = join(tmpDir, 'lance-init-only');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     const result = await vectorizer.initialize();
     expect(result.ok).toBe(true);
   });
@@ -1122,7 +1202,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 초기화 후 search limit=0 → 결과 처리 가능', async () => {
     const dbPath = join(tmpDir, 'lance-limit0');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const result = await vectorizer.search('test', 0);
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -1131,7 +1211,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 초기화 후 search limit=100 → ok 또는 에러', async () => {
     const dbPath = join(tmpDir, 'lance-limit100');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const result = await vectorizer.search('function', 100);
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -1140,7 +1220,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 여러 파일 인덱싱 후 결과 수는 0 이상', async () => {
     const dbPath = join(tmpDir, 'lance-multi-file');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-multi');
     for (let i = 0; i < 5; i++) {
@@ -1154,7 +1234,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 인덱싱 결과 value는 number', async () => {
     const dbPath = join(tmpDir, 'lance-num');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-num');
     await Bun.write(join(srcDir, 'num.ts'), 'export const n = 1;');
@@ -1165,7 +1245,7 @@ export function getStatus(): Status { return Status.PENDING; }
   it('Vectorizer: 검색 결과 배열 반환', async () => {
     const dbPath = join(tmpDir, 'lance-arr');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-arr');
     await Bun.write(join(srcDir, 'arr.ts'), 'export const arr = [1,2,3];');
@@ -1460,46 +1540,46 @@ export function fibonacci(n: number): number {
   });
 
   it('LocalEmbeddingProvider: 중국어 텍스트 임베딩 → 처리됨', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embedQuery('这是中文文本测试');
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('LocalEmbeddingProvider: 일본어 텍스트 임베딩 → 처리됨', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embedQuery('日本語のテストテキスト');
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('LocalEmbeddingProvider: 코드 스니펫 임베딩 → 처리됨', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const codeSnippet = 'function authenticate(token: string): boolean { return token.length > 0; }';
     const result = await provider.embedQuery(codeSnippet);
     expect(result.ok === true || result.ok === false).toBe(true);
   });
 
   it('LocalEmbeddingProvider: 두 인스턴스 독립성 확인', async () => {
-    const p1 = createTransformersEmbeddingProvider(logger, 'p1', 'Xenova/all-MiniLM-L6-v2', 384);
-    const p2 = createTransformersEmbeddingProvider(logger, 'p2', 'Xenova/all-MiniLM-L6-v2', 384);
+    const p1 = createMockEmbeddingProvider(logger, 'p1', 'Xenova/all-MiniLM-L6-v2', 384);
+    const p2 = createMockEmbeddingProvider(logger, 'p2', 'Xenova/all-MiniLM-L6-v2', 384);
     expect(p1.name).toBe('p1');
     expect(p2.name).toBe('p2');
     expect(p1).not.toBe(p2);
   });
 
   it('LocalEmbeddingProvider: embedQuery 결과 ok는 boolean', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embedQuery('test text');
     expect(typeof result.ok).toBe('boolean');
   });
 
   it('LocalEmbeddingProvider: embed 배치 결과 ok는 boolean', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const result = await provider.embed(['text1', 'text2']);
     expect(typeof result.ok).toBe('boolean');
   });
 
   it('LocalEmbeddingProvider: 5개 텍스트 배치 임베딩', async () => {
-    const provider = createTransformersEmbeddingProvider(logger);
+    const provider = createMockEmbeddingProvider(logger);
     const texts = ['hello', 'world', 'foo', 'bar', 'baz'];
     const result = await provider.embed(texts);
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -1509,7 +1589,7 @@ export function fibonacci(n: number): number {
   });
 
   it('LocalEmbeddingProvider: 같은 텍스트 2번 embed → 결과 동일', async () => {
-    const provider = createTransformersEmbeddingProvider(logger, 'det', 'Xenova/all-MiniLM-L6-v2', 384);
+    const provider = createMockEmbeddingProvider(logger, 'det', 'Xenova/all-MiniLM-L6-v2', 384);
     const r1 = await provider.embed(['consistent text']);
     const r2 = await provider.embed(['consistent text']);
     if (r1.ok && r2.ok) {
@@ -1527,7 +1607,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: search 결과 score는 number 타입', async () => {
     const dbPath = join(tmpDir, 'lance-score-type');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-score-type');
     await Bun.write(join(srcDir, 'score.ts'), 'export function scoreType() { return 99; }');
@@ -1543,7 +1623,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 인덱싱 시 .txt 확장자 파일 → 처리됨', async () => {
     const dbPath = join(tmpDir, 'lance-txt-ext');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-txt-ext');
     await Bun.write(join(srcDir, 'readme.txt'), 'This is a text file.');
@@ -1554,7 +1634,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 빈 문자열 프로젝트 ID → 처리됨 또는 에러', async () => {
     const dbPath = join(tmpDir, 'lance-empty-proj-id');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-empty-proj');
     await Bun.write(join(srcDir, 'file.ts'), 'export const x = 1;');
@@ -1565,7 +1645,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: search limit=-1 → 에러 또는 기본 처리', async () => {
     const dbPath = join(tmpDir, 'lance-negative-limit');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const result = await vectorizer.search('test', -1);
     expect(result.ok === true || result.ok === false).toBe(true);
@@ -1574,7 +1654,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 여러 하위 디렉토리 → 전체 인덱싱됨', async () => {
     const dbPath = join(tmpDir, 'lance-sub-dirs');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-sub-dirs');
     await Bun.write(join(srcDir, 'core', 'index.ts'), 'export const core = true;');
@@ -1590,7 +1670,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: search 후 결과 value는 배열', async () => {
     const dbPath = join(tmpDir, 'lance-search-array');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-search-arr');
     await Bun.write(join(srcDir, 'x.ts'), 'export const x = 42;');
@@ -1604,7 +1684,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: ok=false → error.code는 string', async () => {
     const dbPath = join(tmpDir, 'lance-err-code');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     // WHY: 초기화 없이 검색 → rag_init_error
     const result = await vectorizer.search('query', 5);
     expect(result.ok).toBe(false);
@@ -1614,8 +1694,8 @@ export function fibonacci(n: number): number {
   });
 
   it('Vectorizer: 여러 Vectorizer 인스턴스 독립성', async () => {
-    const v1 = new Vectorizer(join(tmpDir, 'lance-v1'), { default: 'local-placeholder' }, logger);
-    const v2 = new Vectorizer(join(tmpDir, 'lance-v2'), { default: 'local-placeholder' }, logger);
+    const v1 = createTrackedVectorizer(join(tmpDir, 'lance-v1'), { default: 'local-placeholder' }, logger);
+    const v2 = createTrackedVectorizer(join(tmpDir, 'lance-v2'), { default: 'local-placeholder' }, logger);
     const r1 = await v1.initialize();
     const r2 = await v2.initialize();
     expect(r1.ok).toBe(true);
@@ -1626,7 +1706,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: index 결과 value는 정수', async () => {
     const dbPath = join(tmpDir, 'lance-int-value');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-int');
     await Bun.write(join(srcDir, 'int.ts'), 'export const n = 1;');
@@ -1639,7 +1719,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: search 한글 쿼리 → 결과 반환됨', async () => {
     const dbPath = join(tmpDir, 'lance-kr-query');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-kr-query');
     await Bun.write(join(srcDir, 'kr.ts'), 'export const 변수 = "값";');
@@ -1779,7 +1859,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 초기화 결과 ok는 boolean', async () => {
     const dbPath = join(tmpDir, 'lance-init-bool');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     const result = await vectorizer.initialize();
     expect(typeof result.ok).toBe('boolean');
   });
@@ -1787,7 +1867,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 인덱싱 결과 ok는 boolean', async () => {
     const dbPath = join(tmpDir, 'lance-index-bool');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const srcDir = join(tmpDir, 'src-index-bool');
     await Bun.write(join(srcDir, 'bool.ts'), 'export const bool = true;');
@@ -1798,7 +1878,7 @@ export function fibonacci(n: number): number {
   it('Vectorizer: 검색 결과 ok는 boolean', async () => {
     const dbPath = join(tmpDir, 'lance-search-bool');
     const embeddingConfig: EmbeddingConfig = { default: 'local-placeholder' };
-    const vectorizer = new Vectorizer(dbPath, embeddingConfig, logger);
+    const vectorizer = createTrackedVectorizer(dbPath, embeddingConfig, logger);
     await vectorizer.initialize();
     const result = await vectorizer.search('anything', 3);
     expect(typeof result.ok).toBe('boolean');
