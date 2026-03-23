@@ -50,6 +50,41 @@ const DEFAULT_MODEL = 'claude-opus-4-20250514';
 // ── ClaudeApi 클래스 ────────────────────────────────────────
 
 /**
+ * ClaudeApi 인터페이스 / ClaudeApi interface
+ *
+ * @description
+ * KR: Claude Messages API 호출을 위한 인터페이스.
+ * EN: Interface for Claude Messages API calls.
+ */
+export interface IClaudeApi {
+  /**
+   * 비스트리밍 메시지 생성 / Create a non-streaming message
+   *
+   * @param messages - 메시지 배열 / Message array
+   * @param options - 요청 옵션 / Request options
+   * @returns 성공 시 ClaudeApiResponse, 실패 시 AgentError
+   */
+  createMessage(
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options?: ClaudeApiRequestOptions,
+  ): Promise<Result<ClaudeApiResponse, AgentError>>;
+
+  /**
+   * 스트리밍 메시지 생성 / Create a streaming message
+   *
+   * @param messages - 메시지 배열 / Message array
+   * @param onEvent - 스트리밍 이벤트 콜백 / Streaming event callback
+   * @param options - 요청 옵션 / Request options
+   * @returns 성공 시 ok(void), 실패 시 AgentError
+   */
+  streamMessage(
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    onEvent: StreamCallback,
+    options?: ClaudeApiRequestOptions,
+  ): Promise<Result<void, AgentError>>;
+}
+
+/**
  * Claude Messages API 래퍼 클래스 / Claude Messages API wrapper class
  *
  * @description
@@ -66,7 +101,7 @@ const DEFAULT_MODEL = 'claude-opus-4-20250514';
  *   { role: 'user', content: 'Hello!' }
  * ], { maxTokens: 1024 });
  */
-export class ClaudeApi {
+export class ClaudeApi implements IClaudeApi {
   private readonly logger: Logger;
   private readonly retryPolicy: RetryPolicy;
   private readonly client: Anthropic;

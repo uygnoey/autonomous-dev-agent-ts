@@ -33,6 +33,32 @@ export type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 const MAX_ITERATIONS = 10;
 
 /**
+ * TeamLeader 인터페이스 / TeamLeader interface
+ *
+ * @description
+ * KR: 기능 구현 오케스트레이션을 위한 인터페이스.
+ * EN: Interface for orchestrating feature implementation.
+ */
+export interface ITeamLeader {
+  /**
+   * 기능 구현을 오케스트레이션한다 / Orchestrates feature implementation
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param handoffPackage - layer1 인수 패키지 / Handoff package from layer1
+   * @returns 에이전트 이벤트 스트림 / Agent event stream
+   */
+  executeFeature(
+    featureId: string,
+    handoffPackage: HandoffPackage,
+  ): AsyncIterable<AgentEvent>;
+
+  /**
+   * 현재 상태를 반환한다 / Returns current status
+   */
+  getStatus(): { featureId: string | null; phase: Phase; progress: number };
+}
+
+/**
  * 팀 리더 (메인 오케스트레이터) / Team Leader (Main Orchestrator)
  *
  * @description
@@ -45,7 +71,7 @@ const MAX_ITERATIONS = 10;
  *   // 이벤트 처리 / handle event
  * }
  */
-export class TeamLeader {
+export class TeamLeader implements ITeamLeader {
   private readonly phaseEngine: TeamLeaderDeps['phaseEngine'];
   private readonly agentSpawner: TeamLeaderDeps['agentSpawner'];
   private readonly sessionManager: TeamLeaderDeps['sessionManager'];

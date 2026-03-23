@@ -15,6 +15,72 @@ import { err, ok } from 'core/types.js';
 import type { FeatureProgress, VerificationResult } from 'layer2/types.js';
 
 /**
+ * ProgressTracker 인터페이스 / ProgressTracker interface
+ *
+ * @description
+ * KR: 기능 라이프사이클 추적을 위한 인터페이스.
+ * EN: Interface for tracking the entire feature lifecycle.
+ */
+export interface IProgressTracker {
+  /**
+   * 기능 추적을 초기화한다 / Initializes feature tracking
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 초기화된 진행 상태 / Initialized feature progress
+   */
+  initFeature(featureId: string): Result<FeatureProgress>;
+
+  /**
+   * 기능 상태를 갱신한다 / Updates feature status
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param status - 새 상태 / New status
+   * @returns 성공 시 ok / ok on success
+   */
+  updateStatus(featureId: string, status: FeatureStatus): Result<void>;
+
+  /**
+   * 기능의 현재 Phase를 갱신한다 / Updates the current phase of a feature
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param phase - 새 Phase / New phase
+   * @returns 성공 시 ok / ok on success
+   */
+  updatePhase(featureId: string, phase: Phase): Result<void>;
+
+  /**
+   * 검증 결과를 추가한다 / Adds a verification result
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param result - 검증 결과 / Verification result
+   * @returns 성공 시 ok / ok on success
+   */
+  addVerification(featureId: string, result: VerificationResult): Result<void>;
+
+  /**
+   * 기능 진행 상태를 조회한다 / Gets feature progress
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 진행 상태 또는 null / Feature progress or null
+   */
+  getProgress(featureId: string): FeatureProgress | null;
+
+  /**
+   * 모든 기능 진행 상태를 반환한다 / Returns all feature progress
+   *
+   * @returns 전체 기능 진행 상태 배열 / All feature progress entries
+   */
+  getAllProgress(): FeatureProgress[];
+
+  /**
+   * 전체 완료율을 계산한다 / Calculates overall completion rate
+   *
+   * @returns 완료율 (0~1). 기능이 없으면 0 / Completion rate (0~1). 0 if no features.
+   */
+  getOverallCompletion(): number;
+}
+
+/**
  * 진행 상태 추적기 / Progress Tracker
  *
  * @description
@@ -26,7 +92,7 @@ import type { FeatureProgress, VerificationResult } from 'layer2/types.js';
  * tracker.initFeature('feat-1');
  * tracker.updatePhase('feat-1', 'CODE');
  */
-export class ProgressTracker {
+export class ProgressTracker implements IProgressTracker {
   private readonly features: Map<string, FeatureProgress> = new Map();
   private readonly logger: Logger;
 

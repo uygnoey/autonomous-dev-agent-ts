@@ -65,6 +65,7 @@ export type {
 
 export {
   ClaudeApi,
+  type IClaudeApi,
   type ClaudeApiRequestOptions,
   type ClaudeApiResponse,
   type ClaudeApiResponseMetadata,

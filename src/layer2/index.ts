@@ -13,18 +13,18 @@ export { AgentSpawner } from 'layer2/agent-spawner.js';
 export { BiasDetector } from 'layer2/bias-detector.js';
 export { CleanEnvManager } from 'layer2/clean-env-manager.js';
 export { CoderAllocator } from 'layer2/coder-allocator.js';
-export { FailureHandler } from 'layer2/failure-handler.js';
+export { FailureHandler, type IFailureHandler } from 'layer2/failure-handler.js';
 export { HandoffReceiver } from 'layer2/handoff-receiver.js';
 export { IntegrationTester } from 'layer2/integration-tester.js';
-export { PhaseEngine } from 'layer2/phase-engine.js';
-export { ProgressTracker } from 'layer2/progress-tracker.js';
-export { SessionManager } from 'layer2/session-manager.js';
+export { PhaseEngine, type IPhaseEngine, type PhaseParticipants } from 'layer2/phase-engine.js';
+export { ProgressTracker, type IProgressTracker } from 'layer2/progress-tracker.js';
+export { SessionManager, type ISessionManager } from 'layer2/session-manager.js';
 export { StreamMonitor } from 'layer2/stream-monitor.js';
-export { TeamLeader } from 'layer2/team-leader.js';
+export { TeamLeader, type ITeamLeader } from 'layer2/team-leader.js';
 export { TokenMonitor } from 'layer2/token-monitor.js';
 export { UserCheckpoint } from 'layer2/user-checkpoint.js';
 export { V2SessionExecutor } from 'layer2/v2-session-executor.js';
-export { VerificationGate } from 'layer2/verification-gate.js';
+export { VerificationGate, type IVerificationGate } from 'layer2/verification-gate.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
 

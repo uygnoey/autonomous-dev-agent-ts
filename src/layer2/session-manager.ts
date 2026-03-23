@@ -15,6 +15,101 @@ import { err, ok } from 'core/types.js';
 import type { SessionFilter, SessionSnapshot, SessionState } from 'layer2/types.js';
 
 /**
+ * SessionManager 인터페이스 / SessionManager interface
+ *
+ * @description
+ * KR: 에이전트 세션 라이프사이클 관리를 위한 인터페이스.
+ * EN: Interface for managing agent session lifecycle.
+ */
+export interface ISessionManager {
+  /**
+   * 새 세션을 생성한다 / Creates a new session
+   *
+   * @param agentName - 에이전트 이름 / Agent name
+   * @param projectId - 프로젝트 ID / Project ID
+   * @param featureId - 기능 ID / Feature ID
+   * @param phase - 현재 Phase / Current phase
+   * @returns 생성된 세션 스냅샷 / Created session snapshot
+   */
+  createSession(
+    agentName: AgentName,
+    projectId: string,
+    featureId: string,
+    phase: Phase,
+  ): Result<SessionSnapshot>;
+
+  /**
+   * 세션을 ID로 조회한다 / Gets a session by ID
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @returns 세션 스냅샷 또는 null / Session snapshot or null
+   */
+  getSession(sessionId: string): SessionSnapshot | null;
+
+  /**
+   * 세션에 대화 이력을 추가한다 / Append conversation history to a session
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @param entry - 대화 이력 항목 / Conversation history entry
+   * @returns 성공 시 ok, 세션 없으면 err / ok on success, err if session not found
+   */
+  appendConversationHistory(sessionId: string, entry: unknown): Result<void>;
+
+  /**
+   * 세션을 부분 업데이트한다 / Partially updates a session
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @param updates - 업데이트할 필드 / Fields to update
+   * @returns 성공 시 ok, 세션 없으면 err / ok on success, err if session not found
+   */
+  updateSession(
+    sessionId: string,
+    updates: Partial<Pick<SessionSnapshot, 'phase' | 'state' | 'metadata'>>,
+  ): Result<void>;
+
+  /**
+   * 필터 조건에 맞는 세션 목록을 반환한다 / Lists sessions matching filter
+   *
+   * @param filter - 필터 조건 (선택) / Filter conditions (optional)
+   * @returns 매칭된 세션 목록 / Matched sessions
+   */
+  listSessions(filter?: SessionFilter): SessionSnapshot[];
+
+  /**
+   * 세션을 일시 중지한다 / Pauses a session
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @returns 성공 시 ok / ok on success
+   */
+  pauseSession(sessionId: string): Result<void>;
+
+  /**
+   * 세션을 재개한다 / Resumes a session
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @returns 성공 시 ok / ok on success
+   */
+  resumeSession(sessionId: string): Result<void>;
+
+  /**
+   * 세션을 완료 처리한다 / Marks a session as completed
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @returns 성공 시 ok / ok on success
+   */
+  completeSession(sessionId: string): Result<void>;
+
+  /**
+   * 세션을 실패 처리한다 / Marks a session as failed
+   *
+   * @param sessionId - 세션 ID / Session ID
+   * @param reason - 실패 사유 / Failure reason
+   * @returns 성공 시 ok / ok on success
+   */
+  failSession(sessionId: string, reason: string): Result<void>;
+}
+
+/**
  * 세션 관리자 / Session Manager
  *
  * @description
@@ -25,7 +120,7 @@ import type { SessionFilter, SessionSnapshot, SessionState } from 'layer2/types.
  * const manager = new SessionManager(logger);
  * const result = manager.createSession('architect', 'proj-1', 'feat-1', 'DESIGN');
  */
-export class SessionManager {
+export class SessionManager implements ISessionManager {
   private readonly sessions: Map<string, SessionSnapshot> = new Map();
   private readonly logger: Logger;
   private counter = 0;

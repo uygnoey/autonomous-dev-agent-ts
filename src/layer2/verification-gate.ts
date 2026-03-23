@@ -24,6 +24,55 @@ import type { VerificationPhase, VerificationResult } from 'layer2/types.js';
 const VERIFICATION_ORDER: readonly VerificationPhase[] = ['qa_qc', 'reviewer', 'layer1', 'adev'];
 
 /**
+ * VerificationGate 인터페이스 / VerificationGate interface
+ *
+ * @description
+ * KR: 4중 검증 결과 관리 및 최종 판정을 위한 인터페이스.
+ * EN: Interface for managing 4-layer verification results and final verdict.
+ */
+export interface IVerificationGate {
+  /**
+   * 검증 결과를 추가한다 / Adds a verification result
+   *
+   * @param result - 검증 결과 / Verification result
+   * @returns 성공 시 ok / ok on success
+   */
+  addResult(result: VerificationResult): Result<void>;
+
+  /**
+   * 기능별 검증 결과를 조회한다 / Gets verification results for a feature
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 검증 결과 배열 / Verification results
+   */
+  getResults(featureId: string): VerificationResult[];
+
+  /**
+   * 4중 검증이 모두 완료되었는지 확인한다 / Checks if all 4 verification phases are done
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 완료 여부 / Whether all phases are done
+   */
+  isComplete(featureId: string): boolean;
+
+  /**
+   * 4중 검증이 모두 통과했는지 확인한다 / Checks if all 4 verification phases passed
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 전체 통과 여부 / Whether all phases passed
+   */
+  isAllPassed(featureId: string): boolean;
+
+  /**
+   * 검증 요약을 생성한다 / Generates verification summary
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 요약 객체: passed 여부와 요약 문자열 / Summary: passed status and summary string
+   */
+  summarize(featureId: string): Result<{ passed: boolean; summary: string }>;
+}
+
+/**
  * 검증 게이트 / Verification Gate
  *
  * @description
@@ -35,7 +84,7 @@ const VERIFICATION_ORDER: readonly VerificationPhase[] = ['qa_qc', 'reviewer', '
  * gate.addResult({ featureId: 'feat-1', phase: 'qa_qc', passed: true, ... });
  * if (gate.isAllPassed('feat-1')) logger.info('전체 검증 통과');
  */
-export class VerificationGate {
+export class VerificationGate implements IVerificationGate {
   private readonly results: Map<string, VerificationResult[]> = new Map();
   private readonly logger: Logger;
 

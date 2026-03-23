@@ -68,6 +68,33 @@ const RECOVERY_ACTION_MAP: Readonly<Record<FailureType, RecoveryAction>> = {
 };
 
 /**
+ * FailureHandler 인터페이스 / FailureHandler interface
+ *
+ * @description
+ * KR: 실패 분류 및 복구 전략 결정을 위한 인터페이스.
+ * EN: Interface for classifying failures and determining recovery strategy.
+ */
+export interface IFailureHandler {
+  /**
+   * 실패를 분류하고 보고서를 생성한다 / Classifies failure and generates report
+   *
+   * @param featureId - 기능 ID / Feature ID
+   * @param phase - 실패 발생 Phase / Phase where failure occurred
+   * @param error - 에러 메시지 / Error message
+   * @returns 실패 보고서 / Failure report
+   */
+  classify(featureId: string, phase: Phase, error: string): Result<FailureReport>;
+
+  /**
+   * 실패 보고서에서 복구 대상 Phase를 반환한다 / Returns recovery phase from report
+   *
+   * @param report - 실패 보고서 / Failure report
+   * @returns 복구 대상 Phase / Recovery target phase
+   */
+  getRecoveryPhase(report: FailureReport): Phase;
+}
+
+/**
  * 실패 처리기 / Failure Handler
  *
  * @description
@@ -78,7 +105,7 @@ const RECOVERY_ACTION_MAP: Readonly<Record<FailureType, RecoveryAction>> = {
  * const handler = new FailureHandler(logger);
  * const report = handler.classify('feat-1', 'CODE', 'undefined is not a function');
  */
-export class FailureHandler {
+export class FailureHandler implements IFailureHandler {
   private reportCounter = 0;
   private readonly logger: Logger;
 

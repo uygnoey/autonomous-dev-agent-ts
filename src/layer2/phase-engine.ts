@@ -32,7 +32,7 @@ export interface PhaseEngineEvents {
 /**
  * Phase별 에이전트 역할 / Agent roles per phase
  */
-interface PhaseParticipants {
+export interface PhaseParticipants {
   /** 주도 에이전트 / Lead agents */
   readonly lead: readonly AgentName[];
   /** 참여 에이전트 / Active agents */
@@ -90,6 +90,60 @@ const VALID_TRANSITIONS: ReadonlyMap<Phase, readonly Phase[]> = new Map([
 ]);
 
 /**
+ * PhaseEngine 인터페이스 / PhaseEngine interface
+ *
+ * @description
+ * KR: Phase 전환 규칙 관리 및 유효성 검증을 위한 인터페이스.
+ * EN: Interface for managing phase transition rules and validation.
+ */
+export interface IPhaseEngine {
+  /** 현재 Phase를 반환한다 / Returns the current phase */
+  readonly currentPhase: Phase;
+
+  /**
+   * Phase 전환을 시도한다 / Attempts a phase transition
+   *
+   * @param to - 전환 대상 Phase / Target phase
+   * @param reason - 전환 사유 / Transition reason
+   * @param triggeredBy - 전환 트리거 주체 / Triggered by agent or 'adev'
+   * @returns 성공 시 PhaseTransition, 실패 시 PhaseError
+   */
+  transition(
+    to: Phase,
+    reason: string,
+    triggeredBy: AgentName | 'adev',
+  ): Result<PhaseTransition, PhaseError>;
+
+  /**
+   * 특정 Phase로 전환 가능 여부를 반환한다 / Checks if transition is valid
+   *
+   * @param to - 전환 대상 Phase / Target phase
+   * @returns 전환 가능 여부 / Whether transition is valid
+   */
+  canTransition(to: Phase): boolean;
+
+  /**
+   * Phase별 참여 에이전트 목록을 반환한다 / Returns agent participants for a phase
+   *
+   * @param phase - 조회할 Phase / Phase to query
+   * @returns 주도/참여/비참여 에이전트 목록 / Lead, active, inactive agents
+   */
+  getParticipants(phase: Phase): PhaseParticipants;
+
+  /**
+   * Phase 상태를 DESIGN으로 초기화한다 / Resets phase state to DESIGN
+   */
+  reset(): void;
+
+  /**
+   * Phase 전환 이력을 반환한다 / Returns phase transition history
+   *
+   * @returns 전환 이력 배열 (읽기 전용) / Transition history array (readonly)
+   */
+  getHistory(): readonly PhaseTransition[];
+}
+
+/**
  * 4-Phase FSM 엔진 / 4-Phase Finite State Machine Engine
  *
  * @description
@@ -100,7 +154,7 @@ const VALID_TRANSITIONS: ReadonlyMap<Phase, readonly Phase[]> = new Map([
  * const engine = new PhaseEngine(logger);
  * const result = engine.transition('CODE', 'qa Gate 통과', 'qa');
  */
-export class PhaseEngine extends EventEmitter<PhaseEngineEvents> {
+export class PhaseEngine extends EventEmitter<PhaseEngineEvents> implements IPhaseEngine {
   private current: Phase = 'DESIGN';
   private readonly history: PhaseTransition[] = [];
   private readonly logger: Logger;
