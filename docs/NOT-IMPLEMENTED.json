@@ -1,0 +1,208 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-23T17:05:00+09:00",
+    "specVersion": "v2.4",
+    "analyst": "architect-agent",
+    "overallComplianceScore": 62
+  },
+  "summary": {
+    "totalSpecItems": 58,
+    "implemented": 36,
+    "partiallyImplemented": 14,
+    "notImplemented": 8
+  },
+  "notImplemented": [
+    {
+      "id": "NI-001",
+      "specRef": "§8.1/8.3 DESIGN Phase — session.stream() + Agent Teams 팀 토론",
+      "requirement": "DESIGN Phase에서 session.stream() 1개 + Agent Teams env 활성화하여 architect/qa/coder/reviewer가 teammate로 참여하는 실시간 팀 토론 실행",
+      "reason": "team-leader.ts에서 DESIGN Phase를 executePhase()로 실행하지만, session.stream() + Agent Teams 기반 팀 토론 로직은 미구현. v2-session-executor.ts에 Agent Teams env 설정 코드는 있으나 실제 TeamCreate → teammate spawn → SendMessage 토론 흐름은 없음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer2/team-leader.ts", "src/layer2/team-leader-helpers.ts", "src/layer2/v2-session-executor.ts"]
+    },
+    {
+      "id": "NI-002",
+      "specRef": "§8.3 adev Hook + 디스크 IPC 폴링 실시간 모니터링",
+      "requirement": "DESIGN Phase에서 adev가 Hook(PreToolUse/PostToolUse/TeammateIdle) + 디스크 IPC 폴링(~/.claude/teams/ + tasks/)으로 실시간 모니터링하며 이상 패턴 감지 시 세션 종료 + 재spawn",
+      "reason": "stream-monitor.ts에 HookEvent 수집/분석 구조 존재, ipc-poller.ts에 디스크 폴링 구조 존재하나, 이들을 DESIGN Phase session.stream()과 연결하여 실시간 모니터링하는 통합 파이프라인이 미구현. 이상 감지 시 세션 종료→재spawn 흐름도 없음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer2/stream-monitor.ts", "src/layer2/ipc-poller.ts", "src/layer2/v2-session-executor.ts"]
+    },
+    {
+      "id": "NI-003",
+      "specRef": "§8.4 CODE Phase — architect/reviewer 감독 별도 세션",
+      "requirement": "CODE Phase에서 coder×N 병렬 실행 시 architect와 reviewer가 별도 세션으로 설계 준수/코드 품질을 감독",
+      "reason": "parallel-coder-runner.ts에서 coder 병렬 실행은 구현되어 있고 parallel-coder-supervision.ts에 감독 호출 구조는 있으나, 실제 architect/reviewer 별도 세션 spawn 및 감독 결과 반영 로직이 스텁 수준",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/parallel-coder-runner.ts", "src/layer2/parallel-coder-supervision.ts"]
+    },
+    {
+      "id": "NI-004",
+      "specRef": "§6.7 Contract 정합성 검증 — architect + qa AI 검증",
+      "requirement": "Contract 정합성 검증 시 architect + qa 에이전트가 참여하여: 의존 기능 출력/입력 타입 호환, 모든 인수 조건에 대응 테스트 카테고리 존재, 모듈 책임 중복/누락, 설계↔제약사항 모순 검증",
+      "reason": "contract-verifier.ts에 ContractVerifier 클래스는 존재하나, 실제 architect/qa 에이전트를 spawn하여 AI 기반 정합성 검증을 수행하는 로직은 미구현. handoff-receiver.ts의 validateConsistencyInternal()은 구조적 검증만 수행",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer1/contract-verifier.ts", "src/layer2/handoff-receiver.ts"]
+    },
+    {
+      "id": "NI-005",
+      "specRef": "§9.2 문서 생성 협업 — 1계층(뼈대) + 2계층(상세) + 1계층(검토) 3단계",
+      "requirement": "3계층 통합 문서 생성 시 1계층이 구조/방향/톤 결정 → 2계층 documenter가 기술 상세 채움 → 1계층 최종 검토의 3단계 협업 흐름",
+      "reason": "doc-collaborator.ts에 Claude API 호출 구조와 bridge 패턴은 있으나, 실제 1계층→2계층→1계층 3단계 반복 협업 및 adev 중계 로직은 스텁/플레이스홀더 수준",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer3/doc-collaborator.ts", "src/layer3/doc-collaborator-bridge.ts"]
+    },
+    {
+      "id": "NI-006",
+      "specRef": "§9.3 3계층 지속 E2E 검증",
+      "requirement": "3계층에서 산출물 생성과 병행하여 지속적 E2E 실행. 1개 실패 시 즉시 중단 → 2계층 전체 루프 재실행",
+      "reason": "production-tester.ts에 지속 E2E 실행 구조(executeOnce 기반)는 있으나, 실패 시 2계층 전체 루프 재실행 트리거 + 계단식 통합 검증 + 3계층 복귀 흐름이 미구현",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer3/production-tester.ts", "src/layer3/bug-escalator.ts"]
+    },
+    {
+      "id": "NI-007",
+      "specRef": "§7.3 documenter 이벤트 트리거 spawn — 실제 이벤트 시스템",
+      "requirement": "documenter가 Phase 완료/테스트 실행/버그 발생/Phase 경계 이벤트 발생 시 자동 spawn → LanceDB 컨텍스트 복원 → 문서 생성 → 종료",
+      "reason": "team-leader-phase.ts에 spawnDocumenter() 호출은 있으나 VERIFY 완료 시에만 트리거. 스펙이 요구하는 5가지 이벤트 유형(기능 완료/테스트 실행/버그 발생/Phase 경계/coder 수정 완료)별 자동 트리거 시스템은 미구현",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader.ts", "src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "NI-008",
+      "specRef": "§6.2~6.5 1계층 대화 흐름 — 무한 제안 + 확정 전 개발 언급 금지",
+      "requirement": "1계층 Claude API가 유저와 대화하며 적극적으로 아이디어 무한 제안. 유저가 '확정'이라고 명시하기 전까지 개발 시작 언급 절대 안 함. 대화 흐름: 아이디어 도출 → 기획 → 설계 → 디자인 → 스택 선정 → 문서 목록 확정 → 테스트 유형 정의서 → 확정 → Contract → 2계층 전환",
+      "reason": "conversation.ts에 LanceDB 영구 저장 연동은 있으나, 실제 대화 FSM(아이디어→기획→설계→확정 전환), 무한 제안 로직, '확정' 키워드 감지 후 Contract 생성 트리거 등 1계층 대화 흐름 전체가 미구현. planner.ts/designer.ts/spec-builder.ts도 인터페이스/타입 수준",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer1/conversation.ts", "src/layer1/planner.ts", "src/layer1/designer.ts", "src/layer1/spec-builder.ts"]
+    }
+  ],
+  "partiallyImplemented": [
+    {
+      "id": "PI-001",
+      "specRef": "§13 임베딩 4-Provider Tier",
+      "requirement": "4개 임베딩 Provider: Xenova all-MiniLM-L6-v2(무료), Jina v3(무료), Voyage voyage-3-lite(유료), Voyage voyage-code-3(유료). EmbeddingProvider 인터페이스로 추상화",
+      "implemented": "EmbeddingProvider 인터페이스 정의, TransformersEmbeddingProvider(Xenova) 구현, embedding-factory.ts에 4-tier 분기, jina-embeddings.ts/voyage-embeddings.ts 파일 존재",
+      "missing": "Jina v3와 Voyage Provider의 실제 API 통신 로직이 스텁/부분 구현일 가능성 높음 (voyage-client.ts 존재하나 실제 HTTP 호출 미검증). 팩토리의 auto-fallback 체인 미구현",
+      "priority": "LOW",
+      "affectedFiles": ["src/rag/embedding-factory.ts", "src/rag/jina-embeddings.ts", "src/rag/voyage-embeddings.ts", "src/rag/voyage-client.ts"]
+    },
+    {
+      "id": "PI-002",
+      "specRef": "§11 토큰 관리 — 세션 복원 흐름",
+      "requirement": "토큰 한도 임박 감지 → 모든 에이전트 세션 LanceDB 스냅샷 저장 → graceful 종료 → reset 대기 → 스냅샷 로드 → 세션 순서대로 복원",
+      "implemented": "token-monitor.ts에 shouldPauseAll() 판단, token-wait-loop.ts에 스냅샷 저장+대기+복원 흐름, session-snapshot-store.ts에 LanceDB 스냅샷 저장소, session-restore-orchestrator.ts에 복원 오케스트레이터",
+      "missing": "실제 team-leader.ts의 Phase 루프와 통합되어 한도 도달 시 자동 트리거되는 흐름 미연결. API key 모드의 retry-after 기반 정확한 대기 vs Subscription 모드의 5시간 윈도우 기반 리셋 타이머 분기가 token-wait-loop에서 하드코딩 수준",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/token-monitor.ts", "src/layer2/token-wait-loop.ts", "src/layer2/session-restore-orchestrator.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "id": "PI-003",
+      "specRef": "§8.4 4중 검증 (qa/qc → reviewer → 1계층 → adev)",
+      "requirement": "VERIFY Phase에서 4단계 순차 검증: ① qa/qc 스펙+테스트 ② reviewer 코드품질 ③ 1계층 의도 기반 ④ adev 종합 판단 + 확증편향 체크. 4개 모두 통과해야 다음 기능",
+      "implemented": "verification-gate.ts에 4중 검증 순서(qa_qc→reviewer→layer1→adev) 관리, layer1-verifier.ts에 1계층 검증 호출, verification-escalator.ts에 모델 에스컬레이션 체인",
+      "missing": "실제 각 검증 단계에서 에이전트를 spawn하여 unstable_v2_prompt()로 검증 실행하는 통합 흐름 미구현. team-leader-verify.ts에서 검증 결과를 수집하여 gate에 기록하는 파이프라인이 스텁 수준",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer2/verification-gate.ts", "src/layer2/team-leader-verify.ts", "src/layer2/layer1-verifier.ts"]
+    },
+    {
+      "id": "PI-004",
+      "specRef": "§8.5 통합 검증 (2계층-B) — 계단식 Fail-Fast",
+      "requirement": "4단계 계단식: Step1 수정 기능 E2E 10만+ → Step2 연관 1만 → Step3 비연관 1천 → Step4 통합 100만회. 클린 환경에서 실행",
+      "implemented": "integration-tester.ts에 4단계 구조 정의, integration-tester-steps.ts에 Step 빌드, clean-env-manager.ts에 환경 관리",
+      "missing": "실제 테스트 실행(bun test 호출)과 Fail-Fast 중단 로직의 E2E 통합이 부족. 클린 환경에서의 '클린 설치 → 테스트 → 삭제 → 잔여물 확인' 전체 라이프사이클 미완성. 2계층-A 전체 루프 재실행 트리거 미구현",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer2/integration-tester.ts", "src/layer2/clean-env-manager.ts", "src/layer2/integration-tester-steps.ts"]
+    },
+    {
+      "id": "PI-005",
+      "specRef": "§9.1 3계층 통합 문서 생성 — 프로젝트 문서 8개 + 비즈니스 4개",
+      "requirement": "프로젝트 문서 기본 8개(README, API, 아키텍처, 사용설명서, 설치가이드, 테스트리포트, CHANGELOG, 기여가이드) + 비즈니스 4개(포트폴리오, 사업계획서, 투자제안서, PPTX)",
+      "implemented": "doc-integrator.ts에 통합 문서 생성, deliverable-builder.ts에 비즈니스 산출물 4종 지원, PDF/PPTX/DOCX/HTML 렌더러 모두 존재",
+      "missing": "프로젝트 문서 8종 각각의 구체적 템플릿/생성 로직이 doc-integrator-template.ts에 부분적. 유저 커스텀 템플릿 로드(~/.adev/templates/ + .adev/templates/) 경로 실제 연동 미확인",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer3/doc-integrator.ts", "src/layer3/doc-integrator-template.ts", "src/layer3/deliverable-builder.ts", "src/layer3/deliverable-builder-template.ts"]
+    },
+    {
+      "id": "PI-006",
+      "specRef": "§5.5 프로젝트 관리 CLI (add/remove/list/switch/update)",
+      "requirement": "adev project add/remove/list/switch/update 5개 서브커맨드. .adev/ 디렉터리 생성, projects.json 관리, 이름 중복 처리",
+      "implemented": "project.ts에 5개 서브커맨드 라우팅, project-crud.ts/project-crud-reads.ts/project-mutate.ts/project-registry.ts에 CRUD 구현",
+      "missing": ".adev/ 프로젝트별 디렉터리 구조(agents/, sessions/, mcp/, skills/, templates/) 자동 scaffold 완전성 미확인. 이름 중복 시 유저 상호작용(다른 이름/기존 업데이트/취소) 미구현",
+      "priority": "LOW",
+      "affectedFiles": ["src/cli/commands/project.ts", "src/cli/commands/project-crud.ts", "src/cli/commands/project-mutate.ts"]
+    },
+    {
+      "id": "PI-007",
+      "specRef": "§7.4 agent.md 초안 → 유저 검토/수정 → 확정 흐름",
+      "requirement": "Step1: 프로젝트 스펙 기반 7개 에이전트 .md 초안 AI 생성 → Step2: 유저에게 보여주고 수정/승인 → Step3: 확정된 .md를 .adev/agents/에 저장",
+      "implemented": "agent-md-generator.ts에 Step1(AI 초안 생성) + Step3(파일 저장) 구현. 7개 에이전트별 프롬프트 구조 정의",
+      "missing": "Step2 유저 검토/수정 UI 흐름 미구현. CLI에서 초안을 보여주고 유저 편집을 받아 확정하는 인터랙티브 흐름 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer1/agent-md-generator.ts", "src/cli/commands/start.ts"]
+    },
+    {
+      "id": "PI-008",
+      "specRef": "§5.4 설정 우선순위 — 프로젝트 > 글로벌",
+      "requirement": "MCP/SKILL/config/templates 모두 프로젝트별(.adev/) > 글로벌(~/.adev/) 우선순위. 동일 이름은 프로젝트가 덮어씀",
+      "implemented": "config-merge.ts에 deepMerge 유틸리티, config.ts에 loadConfig시 병합, plugin-loader.ts에 글로벌+프로젝트 플러그인 로드(프로젝트가 덮어씀), skill-merger.ts에 SKILL 병합",
+      "missing": "templates 우선순위 병합 미확인. MCP 로더(mcp/loader.ts)에서 프로젝트 > 글로벌 우선순위 실제 적용 검증 부족",
+      "priority": "LOW",
+      "affectedFiles": ["src/core/config.ts", "src/core/config-merge.ts", "src/mcp/loader.ts"]
+    },
+    {
+      "id": "PI-009",
+      "specRef": "§3 인증 — 동시 설정 방지 + 초기화 흐름",
+      "requirement": "API key와 Subscription 동시 설정 불가(하나만 사용). adev init에서 선택. Subscription: setup-token 1년 유효, 401 시 재발급 안내",
+      "implemented": "auth-manager.ts에 API key/Subscription 분기, api-key-auth.ts에 rate limit 헤더 파싱, subscription-auth.ts에 5시간 롤링 윈도우 추정, oauth-expiry-checker.ts 존재",
+      "missing": "adev init에서 '어떤 인증 사용?' 대화형 선택 흐름의 실제 CLI 통합 미확인. 두 환경변수 동시 설정 시 에러 처리 미확인. 401 수신 시 'claude setup-token 재실행' 안내 흐름 미확인",
+      "priority": "LOW",
+      "affectedFiles": ["src/auth/auth-manager.ts", "src/cli/commands/init.ts"]
+    },
+    {
+      "id": "PI-010",
+      "specRef": "§8.6 유저 확인 (2계층-C)",
+      "requirement": "통합 검증 통과 후 유저에게 결과물+테스트 결과서 전달 → 수정 필요 시 2계층-A/B로 돌아감 → 확정 시 3계층 진입",
+      "implemented": "user-checkpoint.ts에 CheckpointData 구조, approve/revise 결정 기록",
+      "missing": "실제 CLI에서 유저에게 결과를 보여주고 approve/revise 입력 받는 인터랙티브 흐름 미구현. revise 시 2계층-A/B로 라우팅하는 로직 미구현. 3계층 진입 트리거 미구현",
+      "priority": "HIGH",
+      "affectedFiles": ["src/layer2/user-checkpoint.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "id": "PI-011",
+      "specRef": "§6.6 테스트 케이스 유형 정의서",
+      "requirement": "카테고리 정의(정상/경계값/예외 등), 카테고리별 규칙, 샘플 100~200개, random 80%+ 비율, 목표 수량(Unit 1만/Module 1만/E2E 10만+)",
+      "implemented": "test-type-designer.ts에 TestTypeDesigner 클래스, 수락 기준→테스트 카테고리 매핑, 샘플 테스트 생성, 80%+ edge case 비율 규칙 상수 정의",
+      "missing": "카테고리당 10~20개 샘플 생성 로직이 단순화됨(카테고리당 1개만 생성). 목표 수량(1만/1만/10만+) 설정 연동 부재. 랜덤 조합 규칙/제약 조건 상세 생성 미구현",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer1/test-type-designer.ts"]
+    },
+    {
+      "id": "PI-012",
+      "specRef": "§10.2 LanceDB 스키마 4종",
+      "requirement": "MemoryRecord, CodeRecord, DesignDecision, FailureRecord 4종 스키마 + CRUD + 벡터 검색",
+      "implemented": "core/memory.ts에 MemoryRepository, rag/vector-store.ts에 CodeVectorStore, rag/design-decision-store.ts에 DesignDecisionRepository, rag/failure-store.ts에 FailureRepository. 4종 모두 존재하며 CRUD + 벡터 검색 구현",
+      "missing": "session_snapshots 테이블(스펙에는 없지만 구현됨)과의 관계. 실제 Phase 실행 중 자동으로 DesignDecision/FailureRecord를 기록하는 통합 파이프라인 미연결",
+      "priority": "LOW",
+      "affectedFiles": ["src/core/memory.ts", "src/rag/vector-store.ts", "src/rag/design-decision-store.ts", "src/rag/failure-store.ts"]
+    },
+    {
+      "id": "PI-013",
+      "specRef": "§5.6 MCP 역할 — builtin 전부 유지 + adev 직접 활용",
+      "requirement": "builtin MCP(os-control, browser, web-search, git) 전부 유지. adev가 MCP로 직접 감시/조회. 에이전트에 allowedTools로 MCP 도구 포함",
+      "implemented": "mcp-manager.ts에 서버 라이프사이클 관리, registry.ts에 서버 등록, loader.ts에 글로벌+프로젝트 로드, builtin/ 디렉토리에 os-control/browser/web-search/git 4종",
+      "missing": "실제 MCP 서버 프로세스 spawn 후 JSON-RPC 핸드셰이크가 동작하는지 미검증. adev가 직접 MCP로 리소스 모니터링/branch 상태 확인하는 사용 흐름 미구현. 에이전트 spawn 시 allowedTools에 MCP 도구 자동 포함 로직 미확인",
+      "priority": "LOW",
+      "affectedFiles": ["src/mcp/mcp-manager.ts", "src/mcp/registry.ts", "src/mcp/loader.ts"]
+    },
+    {
+      "id": "PI-014",
+      "specRef": "§6.7 Contract 변경 관리",
+      "requirement": "확정 후 변경 시: version 증가, 변경 사유 기록, 영향받는 기능/테스트 자동 식별, 2계층 검증 재실행 + 유저 재컨펌, 회귀 테스트 트리거",
+      "implemented": "contract-change-manager.ts에 applyChange()로 version 증가 + 변경 이력 기록 + diff 계산. contract-change-types.ts에 ContractChangeRecord/ContractDiffEntry 정의",
+      "missing": "영향받는 기능/테스트 자동 식별 로직 미구현. 변경 후 2계층 검증 재실행 + 유저 재컨펌 트리거 미구현. 이미 완료된 기능의 회귀 테스트 자동 트리거 미구현",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer1/contract-change-manager.ts", "src/layer2/team-leader.ts"]
+    }
+  ]
+}
