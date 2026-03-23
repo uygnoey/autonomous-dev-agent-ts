@@ -1,126 +1,83 @@
 {
   "_meta": {
-    "analyzedAt": "2026-03-23T08:05:00.000Z",
+    "analyzedAt": "2026-03-23T09:15:00.000Z",
     "analyst": "qc-agent",
     "totalBugsFound": 10,
-    "testResults": "14231 pass / 0 fail / 50938 expect() calls"
+    "totalFixed": 10,
+    "totalRemaining": 0,
+    "note": "2026-03-23 버그 수정 후 재검증 — 10개 버그 모두 코드 확인 완료"
   },
-  "critical": [
+  "fixed": [
     {
       "id": "BUG-C001",
       "severity": "critical",
       "title": "MemoryRepository.close()에서 db.close() 호출 누락 — 네이티브 리소스 미해제",
-      "file": "src/core/memory.ts",
-      "line": 86,
-      "description": "MemoryRepository.close()는 this.table = null; this.db = null; 만 수행하고 this.db.close()를 호출하지 않는다. 반면 CodeVectorStore.close()는 this.db.close()를 명시적으로 호출한다. 동일한 LanceDB Connection인데 한쪽만 close()를 호출.",
-      "rootCause": "CodeVectorStore(vector-store.ts:61-73)에서 db.close() 패턴을 구현할 때 MemoryRepository에는 적용하지 않음. WHY 주석(Bun 1.3.10에서 NAPI 리소스 미해제 시 C++ panic)이 vector-store.ts에만 있고 memory.ts에는 반영 안 됨.",
-      "impact": "프로세스 종료 시 네이티브 Arrow/NAPI 리소스가 GC 타이밍에 의존. Bun 1.3.10에서 C++ panic 크래시 가능성. 장기 실행 시 메모리 누수.",
-      "fixDirection": "MemoryRepository.close()에 CodeVectorStore.close()와 동일한 this.db.close() 호출 추가"
+      "fixedIn": "src/core/memory.ts",
+      "fixSummary": "close()에 this.db.close() 호출 추가 + try-catch로 이미 닫힌 연결 예외 무시"
     },
     {
       "id": "BUG-C002",
       "severity": "critical",
       "title": "MCP 서버 startServer()에서 process.env 직접 스프레드 — 컨벤션 위반 + 환경 오염",
-      "file": "src/mcp/mcp-manager.ts",
-      "line": 133,
-      "description": "Bun.spawn에 env: { ...process.env, ...config.env }로 전체 process.env를 직접 스프레드한다. 프로젝트 컨벤션상 process.env 직접 접근은 src/core/config.ts에서만 허용.",
-      "rootCause": "MCP 서버 프로세스에 환경변수를 전달하기 위해 process.env를 직접 참조. config.ts 경유 패턴이 적용되지 않음.",
-      "impact": "민감한 환경변수(API 키 등)가 MCP 서버 자식 프로세스에 무분별하게 전달됨. 보안 위험.",
-      "fixDirection": "core/config.ts에서 안전한 환경변수 서브셋을 반환하는 함수를 추가하고, MCP 서버에 필요한 변수만 전달"
-    }
-  ],
-  "high": [
+      "fixedIn": "src/mcp/mcp-manager.ts",
+      "fixSummary": "core/config.ts의 getSafeEnvForSubprocess()를 import하여 process.env 직접 스프레드 대체"
+    },
     {
       "id": "BUG-H001",
       "severity": "high",
       "title": "BugEscalator 생성자의 unsafe 타입 캐스팅 — 런타임 오류 가능",
-      "file": "src/layer3/bug-escalator.ts",
-      "line": 48,
-      "description": "constructor(teamLeader: TeamLeader | Logger, ...)에서 첫 번째 인자가 Logger인지 TeamLeader인지를 failureHandler/integrationTester/logger의 존재 여부로만 판별한다. 구분 조건이 불완전: teamLeader만 전달하고 나머지를 undefined로 두면 Logger로 캐스팅되어 .child()에서 런타임 에러 발생.",
-      "rootCause": "오버로드 시그니처 대신 union 타입 + 런타임 판별에 의존. 판별 조건 !(failureHandler || integrationTester || logger)이 호출 측 의도를 정확히 반영하지 못함.",
-      "impact": "TeamLeader만 전달 시 (teamLeader as Logger).child()에서 TypeError 발생. DocCollaborator, DeliverableBuilder 등 동일 패턴 3곳에서 동일 위험.",
-      "fixDirection": "오버로드 시그니처 사용하거나 'child' in teamLeader 같은 duck-typing 가드로 타입 판별"
+      "fixedIn": "src/layer3/bug-escalator.ts",
+      "fixSummary": "'child' in teamLeader duck-typing 가드로 Logger vs TeamLeader 안전 판별"
     },
     {
       "id": "BUG-H002",
       "severity": "high",
       "title": "ProcessExecutor.timeout()에서 clearTimeout 누락 — 타이머 누수",
-      "file": "src/core/process-executor.ts",
-      "line": 134,
-      "description": "Promise.race([collectOutput, timeout])에서 collectOutput이 먼저 resolve되면 timeout Promise의 setTimeout이 계속 살아있다. clearTimeout이 없어 GC될 때까지 타이머가 남아있음.",
-      "rootCause": "timeout() 메서드가 setTimeout handle을 외부에 노출하지 않아 취소할 수 없는 구조.",
-      "impact": "대량의 프로세스 실행 시 불필요한 타이머가 이벤트 루프에 누적. 장기 실행 시나리오에서 미세한 메모리 누수. 단발성 실행에서는 실질적 영향 미미.",
-      "fixDirection": "AbortController 패턴 또는 clearTimeout을 race 결과 후 호출하는 래퍼 사용"
+      "fixedIn": "src/core/process-executor.ts",
+      "fixSummary": "timeoutId 변수 캡처 + finally 블록에서 clearTimeout(timeoutId) 호출로 타이머 누수 방지"
     },
     {
       "id": "BUG-H003",
       "severity": "high",
       "title": "CoderAllocator.completeAllocation()이 모듈을 assignedModules에서 해제하지 않음",
-      "file": "src/layer2/coder-allocator.ts",
-      "line": 110,
-      "description": "completeAllocation()은 status만 'completed'로 변경하지만 assignedModules에서 해당 모듈을 delete하지 않는다. mergeAllocation()만 모듈을 해제함. complete 후 같은 모듈로 새 할당 시도 시 충돌 에러 발생.",
-      "rootCause": "완료(complete)와 병합(merge)의 모듈 해제 시점이 다른 것이 의도적인지 불분명. 하지만 merge 없이 complete만 하는 흐름이 존재하면 모듈이 영구 잠김.",
-      "impact": "같은 기능의 모듈을 재할당할 수 없는 상태에 빠질 수 있음. 버그 수정 후 재코딩 시나리오에서 문제 발생 가능.",
-      "fixDirection": "completeAllocation()에서도 assignedModules에서 모듈 해제하거나, complete→merge 흐름을 강제하는 상태 머신 추가"
+      "fixedIn": "src/layer2/coder-allocator.ts",
+      "fixSummary": "completeAllocation()에서 allocation.modules를 순회하며 assignedModules.delete(mod) 추가"
     },
     {
       "id": "BUG-H004",
       "severity": "high",
       "title": "StreamMonitor의 events 배열이 무한 성장 — 메모리 누수",
-      "file": "src/layer2/stream-monitor.ts",
-      "line": 47,
-      "description": "StreamMonitor.events는 private readonly events: HookEvent[] = []로 선언되어 있고, onEvent()에서 push만 하며 clear/trim 메서드가 없다. 장기 실행 에이전트에서 이벤트가 무한 축적.",
-      "rootCause": "StreamMonitor에 이벤트 버퍼 크기 제한이나 주기적 정리 메커니즘이 없음.",
-      "impact": "장기 실행 시 메모리가 계속 증가. 특히 여러 에이전트가 대량의 도구 호출을 수행하는 CODE Phase에서 심각.",
-      "fixDirection": "최대 이벤트 수(예: 1000)를 설정하고 초과 시 오래된 이벤트 제거하는 circular buffer 패턴 적용"
-    }
-  ],
-  "medium": [
+      "fixedIn": "src/layer2/stream-monitor.ts",
+      "fixSummary": "MAX_EVENTS=1000 상수 + onEvent()에서 splice로 초과 이벤트 제거 (circular buffer)"
+    },
     {
       "id": "BUG-M001",
       "severity": "medium",
       "title": "Conversation searchContext()에서 벡터 검색 후 TypeScript 레벨 필터링 — 결과 부족",
-      "file": "src/layer1/conversation.ts",
-      "line": 172,
-      "description": "search()로 limit개를 가져온 후 TypeScript에서 projectId/type 필터링을 수행한다. 다른 프로젝트/타입의 레코드가 limit개를 차지하면 해당 프로젝트 결과가 0개가 될 수 있다.",
-      "rootCause": "WHY 주석에 'vectorSearch().where() 호환성 문제 우회'라고 명시되어 있으나, limit을 늘려서 보상하는 로직이 없음.",
-      "impact": "멀티 프로젝트 환경에서 특정 프로젝트의 대화 컨텍스트 검색 결과가 불완전해질 수 있음.",
-      "fixDirection": "limit을 충분히 큰 값(예: limit * 5)으로 설정하여 필터링 후에도 원하는 수의 결과를 확보"
+      "fixedIn": "src/layer1/conversation.ts",
+      "fixSummary": "search limit을 limit*5로 over-fetch하여 TypeScript 필터링 후에도 충분한 결과 확보"
     },
     {
       "id": "BUG-M002",
       "severity": "medium",
-      "title": "HandoffReceiver.hasCyclicDependencies()에서 white 집합을 순회 중 수정",
-      "file": "src/layer2/handoff-receiver.ts",
-      "line": 212,
-      "description": "for (const featureId of [...white])에서 spread로 복사본을 순회하므로 직접적인 에러는 없지만, dfs() 내부에서 white.delete(nodeId)를 호출하면서 이미 방문한 노드가 외부 루프의 white.has(featureId) 조건에서 걸러지지 않을 수 있다(spread 시점의 스냅샷이므로). 실질적으로는 gray 집합에서 걸러지므로 정확성에는 영향 없으나, 불필요한 dfs 재진입이 발생.",
-      "rootCause": "DFS 알고리즘 구현 시 black 집합(완전 방문)을 사용하지 않아 효율성이 떨어짐.",
-      "impact": "대규모 기능 목록에서 불필요한 재탐색으로 성능 저하. 정확성에는 영향 없음.",
-      "fixDirection": "black 집합을 추가하여 완전히 방문한 노드의 재탐색을 방지"
+      "title": "HandoffReceiver.hasCyclicDependencies()에서 black 집합 미사용 — 불필요한 재탐색",
+      "fixedIn": "src/layer2/handoff-receiver.ts",
+      "fixSummary": "black 집합 추가하여 완전 방문 노드 재진입 방지, DFS 효율성 확보"
     },
     {
       "id": "BUG-M003",
       "severity": "medium",
-      "title": "E2E executeE2E()에서 사용자 입력 명령어를 토큰으로 분리 후 직접 실행 — 명령 인젝션 위험",
-      "file": "src/layer3/e2e-runner.ts",
-      "line": 130,
-      "description": "command.trim().split(/\\s+/)로 명령어를 분리하여 Bun.spawn에 전달한다. 따옴표 처리나 이스케이프가 없어, 명령어에 공백이 포함된 경로나 인자가 있으면 잘못 분리됨.",
-      "rootCause": "단순 whitespace 분리만 수행. 셸 파싱 규칙(따옴표, 백슬래시 이스케이프)을 무시.",
-      "impact": "공백이 포함된 파일 경로 인자가 있는 테스트 명령어가 잘못 분리되어 실행 실패. 의도하지 않은 명령 실행 가능성은 낮음(Bun.spawn은 셸을 경유하지 않으므로).",
-      "fixDirection": "셸 인자 파싱 라이브러리 사용 또는 명령어를 배열(command, args)로 받는 인터페이스로 변경"
-    }
-  ],
-  "low": [
+      "title": "E2E executeE2E()에서 단순 whitespace 분리 — 따옴표 미처리",
+      "fixedIn": "src/layer3/e2e-runner.ts",
+      "fixSummary": "parseCommandArgs() 함수 도입 — 따옴표(싱글/더블) 내 공백을 올바르게 처리하는 파서"
+    },
     {
       "id": "BUG-L001",
       "severity": "low",
       "title": "VerificationEscalator가 stepFn throw 시 즉시 err 반환 — 나머지 체인 미시도",
-      "file": "src/layer2/verification-escalator.ts",
-      "line": 136,
-      "description": "stepFn에서 throw가 발생하면 catch에서 즉시 err를 반환하고 나머지 에스컬레이션 체인을 시도하지 않는다. stepResult.passed === false인 경우에만 다음 단계로 진행.",
-      "rootCause": "의도적 설계(WHY 주석: 'stepFn에서 throw된 에러는 에스컬레이션 실패로 처리')이나, API 일시 오류(429 등)에서도 에스컬레이션이 완전히 중단됨.",
-      "impact": "API 일시 오류 시 haiku에서 실패하면 sonnet/opus 시도 없이 전체 검증 실패. 정상 실패(passed=false)와 예외 실패의 처리가 비대칭.",
-      "fixDirection": "throw 발생 시에도 attempts에 기록하고 다음 모델로 에스컬레이션 시도하도록 변경. 또는 재시도 정책 추가."
+      "fixedIn": "src/layer2/verification-escalator.ts",
+      "fixSummary": "catch에서 attempts.push 후 continue로 다음 모델 에스컬레이션 시도, 체인 중단 방지"
     }
-  ]
+  ],
+  "remaining": []
 }
