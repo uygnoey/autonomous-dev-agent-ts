@@ -17,6 +17,8 @@ import { RagError } from 'core/errors.js';
 import {
   TOKEN_WAIT_CHECK_INTERVAL_MS,
   TOKEN_WAIT_MAX_DURATION_MS,
+  TOKEN_WAIT_SUBSCRIPTION_INTERVAL_MS,
+  TOKEN_WAIT_SUBSCRIPTION_MAX_DURATION_MS,
   runTokenWaitLoop,
   type TokenWaitLoopDeps,
 } from 'layer2/token-wait-loop.js';
@@ -64,14 +66,19 @@ function mockBunSleep(_ms: number): Promise<void> {
 
 // ── TokenMonitor mock ────────────────────────────────────────────
 
-function makeTokenMonitor(shouldPauseAllValues: boolean[]): {
+function makeTokenMonitor(
+  shouldPauseAllValues: boolean[],
+  options: { authMode?: 'api-key' | 'oauth-token'; retryAfterSeconds?: number | null } = {},
+): {
   shouldPauseAll: ReturnType<typeof mock>;
   shouldThrottleSpawn: ReturnType<typeof mock>;
   getStatus: ReturnType<typeof mock>;
   updateFromResponse: ReturnType<typeof mock>;
+  authMode: 'api-key' | 'oauth-token';
 } {
   let callIdx = 0;
   return {
+    authMode: options.authMode ?? 'api-key',
     shouldPauseAll: mock(() => {
       const val = shouldPauseAllValues[callIdx] ?? false;
       callIdx += 1;
@@ -82,7 +89,7 @@ function makeTokenMonitor(shouldPauseAllValues: boolean[]): {
       requestsRemaining: 50,
       inputTokensRemaining: null,
       outputTokensRemaining: null,
-      retryAfterSeconds: null,
+      retryAfterSeconds: options.retryAfterSeconds ?? null,
       requestsLimit: null,
       isLimitApproaching: false,
     })),
@@ -141,11 +148,16 @@ function makeDeps(overrides: {
   sessions?: SessionSnapshot[];
   restoreEvents?: AgentEvent[];
   saveMock?: ReturnType<typeof mock>;
+  authMode?: 'api-key' | 'oauth-token';
+  retryAfterSeconds?: number | null;
 } = {}): TokenWaitLoopDeps {
   const logger = new ConsoleLogger('error');
 
   return {
-    tokenMonitor: makeTokenMonitor(overrides.shouldPauseAllValues ?? [false]) as unknown as TokenWaitLoopDeps['tokenMonitor'],
+    tokenMonitor: makeTokenMonitor(
+      overrides.shouldPauseAllValues ?? [false],
+      { authMode: overrides.authMode, retryAfterSeconds: overrides.retryAfterSeconds },
+    ) as unknown as TokenWaitLoopDeps['tokenMonitor'],
     sessionManager: makeSessionManager(overrides.sessions ?? [makeSessionSnapshot()]) as unknown as TokenWaitLoopDeps['sessionManager'],
     sessionSnapshotStore: makeSnapshotStore({
       save: overrides.saveMock,
@@ -456,5 +468,137 @@ describe('runTokenWaitLoop — 에러/타임아웃 케이스', () => {
     await withMockSleep(() => collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')));
 
     expect(sleepCallCount).toBe(3);
+  });
+});
+
+// ── PI-002: 인증 방식별 대기 타이밍 테스트 / Auth-mode-aware wait timing tests ──
+
+describe('runTokenWaitLoop — 인증 방식별 대기 타이밍 (PI-002)', () => {
+  it('API Key 모드 — 대기 메시지에 "API Key" 포함', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [true, false],
+      authMode: 'api-key',
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const waitMsg = events.find((e) => e.content.includes('토큰 대기 중'));
+    expect(waitMsg).toBeDefined();
+    expect(waitMsg!.content).toContain('API Key');
+  });
+
+  it('Subscription 모드 — 대기 메시지에 "Subscription" 포함', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [true, false],
+      authMode: 'oauth-token',
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const waitMsg = events.find((e) => e.content.includes('토큰 대기 중'));
+    expect(waitMsg).toBeDefined();
+    expect(waitMsg!.content).toContain('Subscription');
+  });
+
+  it('Subscription 모드 — 타임아웃 메시지에 "5시간 윈도우" 포함', async () => {
+    // WHY: Subscription 모드에서 최대 대기 시간 초과 시
+    const maxIterations = TOKEN_WAIT_SUBSCRIPTION_MAX_DURATION_MS / TOKEN_WAIT_SUBSCRIPTION_INTERVAL_MS;
+    const shouldPauseAllValues = new Array(maxIterations + 1).fill(true) as boolean[];
+    const deps = makeDeps({
+      shouldPauseAllValues,
+      authMode: 'oauth-token',
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const errorEvents = events.filter((e) => e.type === 'error');
+    expect(errorEvents).toHaveLength(1);
+    expect(errorEvents[0]!.content).toContain('5시간 윈도우');
+  });
+
+  it('API Key 모드 — 타임아웃 메시지에 "1시간" 포함', async () => {
+    const maxIterations = TOKEN_WAIT_MAX_DURATION_MS / TOKEN_WAIT_CHECK_INTERVAL_MS;
+    const shouldPauseAllValues = new Array(maxIterations + 1).fill(true) as boolean[];
+    const deps = makeDeps({
+      shouldPauseAllValues,
+      authMode: 'api-key',
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const errorEvents = events.filter((e) => e.type === 'error');
+    expect(errorEvents).toHaveLength(1);
+    expect(errorEvents[0]!.content).toContain('1시간');
+  });
+
+  it('API Key 모드 + retryAfterSeconds → retry-after 대기 메시지 yield', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [false],
+      authMode: 'api-key',
+      retryAfterSeconds: 30,
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    // WHY: retry-after 30초 대기 메시지가 포함되어야 함
+    const retryMsg = events.find((e) => e.content.includes('retry-after'));
+    expect(retryMsg).toBeDefined();
+    expect(retryMsg!.content).toContain('30');
+  });
+
+  it('Subscription 모드 — retry-after 대기 없음 (5시간 윈도우 기반)', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [false],
+      authMode: 'oauth-token',
+      retryAfterSeconds: 30,
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    // WHY: Subscription 모드에서는 retry-after 대기를 하지 않음
+    const retryMsg = events.find((e) => e.content.includes('retry-after'));
+    expect(retryMsg).toBeUndefined();
+  });
+
+  it('API Key 모드 — retryAfterSeconds null → retry-after 대기 없음', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [false],
+      authMode: 'api-key',
+      retryAfterSeconds: null,
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const retryMsg = events.find((e) => e.content.includes('retry-after'));
+    expect(retryMsg).toBeUndefined();
+  });
+
+  it('API Key 모드 — retryAfterSeconds 0 → retry-after 대기 없음', async () => {
+    const deps = makeDeps({
+      shouldPauseAllValues: [false],
+      authMode: 'api-key',
+      retryAfterSeconds: 0,
+    });
+
+    const events = await withMockSleep(() =>
+      collectEvents(runTokenWaitLoop(deps, 'feat-1', 'proj-1')),
+    );
+
+    const retryMsg = events.find((e) => e.content.includes('retry-after'));
+    expect(retryMsg).toBeUndefined();
   });
 });

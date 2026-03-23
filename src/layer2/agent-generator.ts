@@ -13,6 +13,7 @@ import type { AgentName, Result } from 'core/types.js';
 import { ok } from 'core/types.js';
 import type { IAgentDraftLoader } from 'layer2/agent-draft-loader-types.js';
 import type { AgentConfig } from 'layer2/types.js';
+import type { McpTool } from 'mcp/types.js';
 
 // ── 역할별 도구 정의 / Per-role tool definitions ─────────────────
 
@@ -48,6 +49,49 @@ const AGENT_MAX_TURNS: Readonly<Record<AgentName, number>> = {
   documenter: 40,
 };
 
+// ── MCP 도구 역할 매핑 / Per-role MCP tool pattern mapping ──────
+
+/**
+ * 역할별 MCP 도구 이름 패턴 / MCP tool name patterns per agent role
+ *
+ * @description
+ * KR: 에이전트 역할에 따라 허용할 MCP 도구 이름 패턴(prefix)을 정의한다.
+ *     실제 도구 목록은 McpManager.listTools()에서 런타임에 제공받는다.
+ * EN: Defines MCP tool name patterns (prefixes) allowed per agent role.
+ *     Actual tool list is provided at runtime from McpManager.listTools().
+ */
+const MCP_TOOL_PATTERNS: Readonly<Record<AgentName, readonly string[]>> = {
+  architect: ['mcp__context7__', 'mcp__sequential__'],
+  qa: ['mcp__context7__'],
+  coder: ['mcp__context7__', 'mcp__morphllm__'],
+  tester: ['mcp__playwright__'],
+  qc: ['mcp__sequential__'],
+  reviewer: ['mcp__context7__', 'mcp__sequential__'],
+  documenter: ['mcp__context7__'],
+};
+
+/**
+ * 사용 가능한 MCP 도구 중 에이전트 역할에 해당하는 도구만 필터링한다 /
+ * Filter available MCP tools for a specific agent role
+ *
+ * @param agentName - 에이전트 이름 / Agent name
+ * @param availableMcpTools - 현재 실행 중인 MCP 서버에서 제공하는 도구 목록 / Available MCP tools from running servers
+ * @returns 에이전트에 허용된 MCP 도구 이름 배열 / Array of allowed MCP tool names for the agent
+ *
+ * @example
+ * const mcpTools = getMcpToolsForAgent('coder', mcpManager.listTools());
+ * // ['mcp__context7__get-library-docs', 'mcp__morphllm__apply-pattern', ...]
+ */
+export function getMcpToolsForAgent(
+  agentName: AgentName,
+  availableMcpTools: readonly McpTool[],
+): string[] {
+  const patterns = MCP_TOOL_PATTERNS[agentName];
+  return availableMcpTools
+    .filter((tool) => patterns.some((prefix) => tool.name.startsWith(prefix)))
+    .map((tool) => tool.name);
+}
+
 /**
  * 에이전트 설정 생성기 / Agent Configuration Generator
  *
@@ -64,14 +108,17 @@ const AGENT_MAX_TURNS: Readonly<Record<AgentName, number>> = {
 export class AgentGenerator {
   private readonly logger: Logger;
   private readonly draftLoader?: IAgentDraftLoader;
+  private readonly mcpTools: readonly McpTool[];
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
    * @param draftLoader - 에이전트 드래프트 로더 (선택) / Agent draft loader (optional)
+   * @param mcpTools - MCP 서버에서 제공하는 도구 목록 (선택) / Available MCP tools (optional)
    */
-  constructor(logger: Logger, draftLoader?: IAgentDraftLoader) {
+  constructor(logger: Logger, draftLoader?: IAgentDraftLoader, mcpTools?: readonly McpTool[]) {
     this.logger = logger.child({ module: 'agent-generator' });
     this.draftLoader = draftLoader;
+    this.mcpTools = mcpTools ?? [];
   }
 
   /**
@@ -91,7 +138,10 @@ export class AgentGenerator {
   ): Result<AgentConfig> {
     const systemPrompt = this.buildSystemPrompt(agentName, projectSpec, ragContext);
     const prompt = this.buildPrompt(agentName, featureId);
-    const tools = AGENT_TOOLS[agentName];
+    const baseTools = AGENT_TOOLS[agentName];
+    // WHY: MCP 도구를 역할별 패턴에 따라 자동 포함 — 스펙 §5 allowedTools 자동 구성
+    const mcpToolNames = getMcpToolsForAgent(agentName, this.mcpTools);
+    const tools = [...baseTools, ...mcpToolNames];
     const maxTurns = AGENT_MAX_TURNS[agentName];
 
     const config: AgentConfig = {
@@ -105,7 +155,12 @@ export class AgentGenerator {
       maxTurns,
     };
 
-    this.logger.info('에이전트 설정 생성', { agentName, featureId, toolCount: tools.length });
+    this.logger.info('에이전트 설정 생성', {
+      agentName,
+      featureId,
+      toolCount: tools.length,
+      mcpToolCount: mcpToolNames.length,
+    });
     return ok(config);
   }
 
@@ -155,7 +210,10 @@ export class AgentGenerator {
     const baseSystemPrompt = this.buildSystemPrompt(agentName, projectSpec, ragContext);
     const systemPrompt = draftPrefix ? `${draftPrefix}${baseSystemPrompt}` : baseSystemPrompt;
     const prompt = this.buildPrompt(agentName, featureId);
-    const tools = AGENT_TOOLS[agentName];
+    const baseTools = AGENT_TOOLS[agentName];
+    // WHY: MCP 도구를 역할별 패턴에 따라 자동 포함 — 스펙 §5 allowedTools 자동 구성
+    const mcpToolNames = getMcpToolsForAgent(agentName, this.mcpTools);
+    const tools = [...baseTools, ...mcpToolNames];
     const maxTurns = AGENT_MAX_TURNS[agentName];
 
     const config: AgentConfig = {
@@ -173,6 +231,7 @@ export class AgentGenerator {
       agentName,
       featureId,
       toolCount: tools.length,
+      mcpToolCount: mcpToolNames.length,
       hasDraft: draftPrefix.length > 0,
     });
     return ok(config);

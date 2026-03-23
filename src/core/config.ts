@@ -103,6 +103,17 @@ export function loadEnvironment(): Result<EnvironmentVars, ConfigError> {
     );
   }
 
+  // WHY: 스펙 §3 — API key와 Subscription 동시 설정 불가. 혼동 방지를 위해 하나만 허용
+  if (apiKey && oauthToken) {
+    return err(
+      new ConfigError(
+        'config_dual_auth',
+        'ANTHROPIC_API_KEY와 CLAUDE_CODE_OAUTH_TOKEN이 동시에 설정되어 있습니다. 하나만 사용하세요. ' +
+          '제거: unset ANTHROPIC_API_KEY 또는 unset CLAUDE_CODE_OAUTH_TOKEN',
+      ),
+    );
+  }
+
   return ok({
     authMode: apiKey ? 'api-key' : 'oauth-token',
     anthropicApiKey: apiKey,

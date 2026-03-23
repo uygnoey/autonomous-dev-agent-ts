@@ -15,6 +15,8 @@ import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
 import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
 import type { AgentMdGeneratorConfig } from '../../layer1/agent-md-generator.js';
+import { AgentMdReviewer } from '../../layer1/agent-md-reviewer.js';
+import type { AgentMdReviewInput } from '../../layer1/agent-md-reviewer.js';
 import type { HandoffPackage } from '../../layer1/types.js';
 import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
 import { IntegrationTester } from '../../layer2/integration-tester.js';
@@ -68,15 +70,34 @@ export async function generateAgentMds(
       return ok(undefined);
     }
 
-    const saveResult = await generator.saveDrafts(session.projectInfo.path, draftsResult.value);
+    chat.succeedSpinner('에이전트 문서 초안 생성 완료');
+
+    // WHY: §7.4 Step 2 — 유저 검토/수정 인터랙션
+    //      ChatUi를 AgentMdReviewInput 어댑터로 변환하여 검토 수행
+    const reviewInput: AgentMdReviewInput = {
+      system: (msg: string) => chat.system(msg),
+      success: (msg: string) => chat.success(msg),
+      waitForInput: async () => {
+        const event = await chat.waitForInput();
+        return { type: event.type, text: 'text' in event ? event.text : undefined };
+      },
+    };
+
+    const reviewer = new AgentMdReviewer(logger);
+    const confirmed = await reviewer.reviewAll(draftsResult.value, reviewInput);
+
+    // WHY: §7.4 Step 3 — 확정된 .md를 저장
+    chat.startSpinner('에이전트 문서 저장 중...');
+
+    const saveResult = await generator.saveDrafts(session.projectInfo.path, confirmed);
     if (!saveResult.ok) {
       chat.failSpinner('에이전트 문서 저장 실패 (건너뜀)');
       logger.warn('에이전트 .md 초안 저장 실패, 건너뜀', { error: saveResult.error.message });
       return ok(undefined);
     }
 
-    chat.succeedSpinner(`에이전트 문서 생성 완료 (${agentsDir})`);
-    logger.info('에이전트 .md 초안 저장 완료', { agentsDir });
+    chat.succeedSpinner(`에이전트 문서 저장 완료 (${agentsDir})`);
+    logger.info('에이전트 .md 검토 후 저장 완료', { agentsDir });
 
     return ok(undefined);
   } catch (error: unknown) {

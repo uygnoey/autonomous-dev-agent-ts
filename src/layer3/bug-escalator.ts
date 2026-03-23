@@ -35,6 +35,17 @@ export type {
   TriggerLayer2Options,
 } from 'layer3/bug-escalator-types.js';
 
+/**
+ * 2계층 재실행 콜백 타입 / Layer 2 re-execution callback type
+ *
+ * @description
+ * KR: 지속 E2E 실패 시 2계층 전체 루프 재실행을 외부에서 주입할 수 있는 콜백.
+ *     §9.4: "버그 발견 → 2계층 전체 루프 재실행 (architect부터)"
+ * EN: Callback injectable from outside to trigger Layer 2 full loop re-execution on E2E failure.
+ *     §9.4: "Bug found → Layer 2 full loop re-execution (from architect)"
+ */
+export type OnLayer2RerunRequired = (report: BugReport) => Promise<void>;
+
 /** BugEscalator 구현 클래스 / BugEscalator implementation */
 export class BugEscalator implements IBugEscalator {
   private reportCounter = 0;
@@ -43,12 +54,21 @@ export class BugEscalator implements IBugEscalator {
   private readonly teamLeader: TeamLeader | null;
   private readonly failureHandler: FailureHandler | null;
   private readonly integrationTester: IntegrationTester | null;
+  private readonly onLayer2RerunRequired: OnLayer2RerunRequired | null;
 
+  /**
+   * @param teamLeader - TeamLeader 또는 Logger (간단 API) / TeamLeader or Logger (simple API)
+   * @param failureHandler - 실패 분류기 (선택) / Failure classifier (optional)
+   * @param integrationTester - 통합 테스터 (선택) / Integration tester (optional)
+   * @param logger - 로거 (선택) / Logger (optional)
+   * @param onLayer2RerunRequired - 2계층 재실행 콜백 (선택) / Layer 2 re-execution callback (optional)
+   */
   constructor(
     teamLeader: TeamLeader | Logger,
     failureHandler?: FailureHandler,
     integrationTester?: IntegrationTester,
     logger?: Logger,
+    onLayer2RerunRequired?: OnLayer2RerunRequired,
   ) {
     // WHY: duck-typing으로 Logger vs TeamLeader를 안전하게 판별
     const isLogger =
@@ -58,11 +78,13 @@ export class BugEscalator implements IBugEscalator {
       this.teamLeader = null;
       this.failureHandler = null;
       this.integrationTester = null;
+      this.onLayer2RerunRequired = null;
     } else {
       this.teamLeader = teamLeader as TeamLeader;
       this.failureHandler = failureHandler ?? null;
       this.integrationTester = integrationTester ?? null;
       this.logger = logger ? logger.child({ module: 'bug-escalator' }) : new ConsoleLogger('info');
+      this.onLayer2RerunRequired = onLayer2RerunRequired ?? null;
     }
   }
 
@@ -182,6 +204,26 @@ export class BugEscalator implements IBugEscalator {
   async triggerLayer2(options: TriggerLayer2Options): Promise<Result<void>> {
     const { projectId, bugReport, startPhase } = options;
     this.logger.info('2계층 재실행 트리거', { projectId, bugId: bugReport.id, startPhase });
+
+    // WHY: onLayer2RerunRequired 콜백이 있으면 우선 호출 — 실제 2계층 재실행 위임
+    //      §9.4: "2계층 전체 루프 재실행 (architect부터)"
+    if (this.onLayer2RerunRequired) {
+      try {
+        this.logger.info('onLayer2RerunRequired 콜백 호출', {
+          bugId: bugReport.id,
+          featureId: bugReport.featureId,
+        });
+        await this.onLayer2RerunRequired(bugReport);
+        this.logger.info('onLayer2RerunRequired 콜백 완료', { bugId: bugReport.id });
+        return ok(undefined);
+      } catch (callbackError) {
+        return err(
+          new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 콜백 실패', {
+            error: String(callbackError),
+          }),
+        );
+      }
+    }
 
     if (this.teamLeader && this.failureHandler) {
       try {

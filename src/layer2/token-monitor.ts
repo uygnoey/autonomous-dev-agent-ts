@@ -9,6 +9,7 @@
  */
 
 import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
+import type { AuthMode } from 'core/config.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { ok } from 'core/types.js';
@@ -109,6 +110,15 @@ export class TokenMonitor {
     }
 
     return false;
+  }
+
+  /**
+   * 현재 인증 방식을 반환한다 / Returns current authentication mode
+   *
+   * @returns 인증 방식 / Authentication mode
+   */
+  get authMode(): AuthMode {
+    return this.authProvider.authMode;
   }
 
   /**

@@ -51,3 +51,17 @@ export type {
   PersistableSessionSnapshot,
   FlatSessionSnapshot,
 } from 'layer2/session-snapshot-store-types.js';
+
+export type {
+  DocumenterEventType,
+  DocumenterEvent,
+  FeatureCompleteContext,
+  TestExecutedContext,
+  BugDetectedContext,
+  PhaseBoundaryContext,
+  TranslationContext,
+} from 'layer2/documenter-event-types.js';
+
+export {
+  DOCUMENTER_OUTPUT_MAP,
+} from 'layer2/documenter-event-types.js';

@@ -6,6 +6,8 @@
  * EN: Provides template registration, listing, and loading logic extracted from DocIntegrator.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Layer3Error } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
@@ -206,4 +208,98 @@ export async function readTemplateSource(
   logger: Logger,
 ): Promise<string> {
   return readTemplateSourceFile(template, logger);
+}
+
+/** 커스텀 템플릿 검색 디렉토리 / Custom template search directories */
+const CUSTOM_TEMPLATE_DIRS = [
+  '.adev/templates',
+  join(homedir(), '.adev', 'templates'),
+] as const;
+
+/**
+ * 커스텀 템플릿을 디스크에서 스캔하여 레지스트리에 로드한다 / Scan and load custom templates from disk
+ *
+ * @description
+ * KR: `.adev/templates/` (프로젝트 로컬) + `~/.adev/templates/` (글로벌) 경로에서
+ *     `.hbs` 파일을 검색하여 커스텀 템플릿으로 등록한다.
+ *     프로젝트 로컬이 글로벌보다 우선순위가 높아, 동일 이름 시 덮어쓴다.
+ * EN: Scans `.adev/templates/` (project local) + `~/.adev/templates/` (global) for `.hbs` files
+ *     and registers them as custom templates. Project local takes priority over global.
+ *
+ * @param registry - 템플릿 레지스트리 맵 / Template registry map
+ * @param logger - 로거 / Logger
+ */
+export async function loadCustomTemplates(
+  registry: Map<string, DocumentTemplate>,
+  logger: Logger,
+): Promise<void> {
+  // WHY: 글로벌 → 프로젝트 순으로 로드하여 프로젝트 템플릿이 글로벌을 덮어쓰게 함
+  const dirsToScan = [CUSTOM_TEMPLATE_DIRS[1], CUSTOM_TEMPLATE_DIRS[0]];
+
+  for (const dir of dirsToScan) {
+    await scanAndRegisterTemplates(dir, registry, logger);
+  }
+}
+
+/**
+ * 특정 디렉토리에서 .hbs 템플릿 파일을 스캔하여 등록한다 / Scan directory for .hbs template files
+ *
+ * @param dir - 스캔할 디렉토리 / Directory to scan
+ * @param registry - 템플릿 레지스트리 맵 / Template registry map
+ * @param logger - 로거 / Logger
+ */
+async function scanAndRegisterTemplates(
+  dir: string,
+  registry: Map<string, DocumentTemplate>,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const dirFile = Bun.file(join(dir, '.'));
+    const dirExists = await dirFile.exists().catch(() => false);
+    if (!dirExists) {
+      // WHY: 디렉토리가 없으면 조용히 건너뜀 — 커스텀 템플릿은 선택적
+      return;
+    }
+
+    const { Glob } = await import('bun');
+    const glob = new Glob('**/*.hbs');
+
+    for await (const filePath of glob.scan(dir)) {
+      try {
+        const fullPath = join(dir, filePath);
+        // WHY: 파일명에서 유형을 추론 (예: readme.hbs → readme)
+        const typeName = filePath.replace(/\.hbs$/, '').replace(/\//g, '-');
+        const templateId = `custom-${typeName}`;
+        const isProjectType = VALID_PROJECT_TYPES.has(typeName);
+
+        const template: DocumentTemplate = {
+          id: templateId,
+          name: typeName,
+          type: isProjectType ? (typeName as ProjectDocumentType) : 'custom',
+          templatePath: fullPath,
+          format: 'md',
+          description: `Custom template from ${dir}`,
+          custom: true,
+        };
+
+        // WHY: 동일 ID가 있으면 덮어씀 (프로젝트 > 글로벌 우선순위)
+        registry.set(templateId, template);
+
+        // WHY: 프로젝트 유형과 일치하면 기본 템플릿도 덮어씀
+        if (isProjectType) {
+          registry.set(`default-${typeName}`, template);
+        }
+
+        logger.debug('커스텀 템플릿 로드', { templateId, path: fullPath });
+      } catch (fileError) {
+        logger.warn('커스텀 템플릿 파일 처리 실패', {
+          filePath,
+          error: fileError instanceof Error ? fileError.message : String(fileError),
+        });
+      }
+    }
+  } catch {
+    // WHY: 디렉토리 스캔 실패는 경고만 — 커스텀 템플릿은 선택적 기능
+    logger.debug('커스텀 템플릿 디렉토리 스캔 생략', { dir });
+  }
 }

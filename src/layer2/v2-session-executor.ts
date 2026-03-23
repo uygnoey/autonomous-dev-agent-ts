@@ -24,6 +24,7 @@ import type {
   V2SessionExecutorOptions,
   V2SessionFactory,
 } from 'layer2/v2-session-executor-types.js';
+import type { HandoffPackage } from 'layer1/types.js';
 import {
   createErrorEvent,
   extractAgentNameFromSessionId,
@@ -242,6 +243,115 @@ export class V2SessionExecutor implements AgentExecutor {
           `Failed to create session for agent ${config.name}`,
           error,
         ),
+      );
+    }
+  }
+
+  /**
+   * DESIGN Phase 전용 실행 — session.stream() + Agent Teams env
+   *
+   * @description
+   * KR: DESIGN Phase에서 architect/qa/coder/reviewer가 teammate로 실시간 토론한다.
+   *     Agent Teams 환경변수(CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)를 활성화하고,
+   *     AbortSignal로 이상 감지 시 세션을 중단할 수 있다.
+   * EN: Enables real-time discussion among architect/qa/coder/reviewer as teammates in DESIGN Phase.
+   *     Activates Agent Teams env var, supports AbortSignal for anomaly-based session termination.
+   *
+   * @param config - 에이전트 설정 / Agent configuration
+   * @param options - DESIGN Phase 옵션 / DESIGN phase options
+   * @returns 에이전트 이벤트 스트림 / Agent event stream
+   */
+  async *executeDesignPhase(
+    config: AgentConfig,
+    options: {
+      readonly featureId: string;
+      readonly handoff: HandoffPackage;
+      readonly signal?: AbortSignal;
+    },
+  ): AsyncGenerator<AgentEvent> {
+    this.logger.info('DESIGN Phase 실행 시작 (Agent Teams)', {
+      agentName: config.name,
+      featureId: options.featureId,
+    });
+
+    // WHY: DESIGN Phase는 반드시 Agent Teams 활성화 필요
+    const designConfig: AgentConfig = {
+      ...config,
+      phase: 'DESIGN',
+      env: {
+        ...(config.env ?? {}),
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+      },
+    };
+
+    try {
+      const sessionEnv = buildSessionEnvironment(designConfig, this.authProvider);
+      const sessionResult = await this.createSession(designConfig, sessionEnv);
+      if (!sessionResult.ok) {
+        yield createErrorEvent(config.name, sessionResult.error.message);
+        return;
+      }
+
+      const { session, options: sessionOptions } = sessionResult.value;
+      const sessionId = generateSessionId(
+        config.projectId,
+        options.featureId,
+        config.name,
+        'DESIGN',
+      );
+      this.activeSessions.set(sessionId, { session, options: sessionOptions });
+
+      try {
+        const fullPrompt = config.systemPrompt
+          ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
+          : config.prompt;
+
+        this.logger.info('DESIGN Phase session send 시작', {
+          agentName: config.name,
+          promptLen: fullPrompt.length,
+        });
+        await session.send(fullPrompt);
+
+        for await (const sdkEvent of session.stream()) {
+          // WHY: AbortSignal이 발생하면 세션을 즉시 종료
+          if (options.signal?.aborted) {
+            this.logger.warn('DESIGN Phase 세션 abort 신호 수신 — 세션 종료', {
+              agentName: config.name,
+              featureId: options.featureId,
+            });
+            session.close();
+            this.activeSessions.delete(sessionId);
+            yield createErrorEvent(config.name, 'DESIGN Phase 세션이 이상 감지로 중단됨');
+            return;
+          }
+
+          const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
+            this.logger.debug('Unhandled SDK event type', { eventType });
+          });
+          if (mappedEvent) {
+            yield mappedEvent;
+          }
+
+          if (mappedEvent?.type === 'done') {
+            this.logger.info('DESIGN Phase 완료', { agentName: config.name });
+            session.close();
+            this.activeSessions.delete(sessionId);
+          }
+        }
+      } catch (streamError) {
+        const errMsg =
+          streamError instanceof Error
+            ? `${streamError.message}\n${streamError.stack ?? ''}`
+            : String(streamError);
+        this.logger.error('DESIGN Phase stream error', { agentName: config.name, errorMsg: errMsg });
+        yield createErrorEvent(config.name, errMsg || 'Unknown DESIGN stream error');
+        this.activeSessions.delete(sessionId);
+      }
+    } catch (error) {
+      this.logger.error('DESIGN Phase 실행 실패', { agentName: config.name, error });
+      yield createErrorEvent(
+        config.name,
+        error instanceof Error ? error.message : 'Unknown DESIGN execution error',
       );
     }
   }

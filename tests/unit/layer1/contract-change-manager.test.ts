@@ -24,13 +24,13 @@ function makeContract(overrides: Partial<ContractSchema> = {}): ContractSchema {
   };
 }
 
-function makeFeature(id: string) {
+function makeFeature(id: string, deps: string[] = []) {
   return {
     id,
     name: `Feature ${id}`,
     description: `Description for ${id}`,
     acceptanceCriteria: [],
-    dependencies: [],
+    dependencies: deps,
     inputs: [],
     outputs: [],
   };
@@ -367,7 +367,7 @@ describe('ContractChangeManager', () => {
       expect(history[0]).toEqual(record);
     });
 
-    it('[edge] applyChange 후 getChangeHistory → 누적된 이력 반환', () => {
+    it('[edge] applyChange 후 getChangeHistory → 누적 이력 반환', () => {
       let pkg = makeHandoffPackage({}, { version: 0 });
       const next1 = makeContract({ projectType: 'api' });
       const res1 = manager.applyChange(pkg, next1, '1차 변경', 'user');
@@ -383,6 +383,220 @@ describe('ContractChangeManager', () => {
         expect(history).toHaveLength(2);
         expect(history[0]?.changedBy).toBe('user');
         expect(history[1]?.changedBy).toBe('system');
+      }
+    });
+  });
+
+  // ── analyzeImpact ────────────────────────────────────────────
+
+  describe('analyzeImpact()', () => {
+    it('[edge] 동일한 Contract → 변경 없음', () => {
+      const schema = makeContract({ features: [makeFeature('f1')] });
+      const impact = manager.analyzeImpact(schema, schema);
+      expect(impact.changedFeatureIds).toHaveLength(0);
+      expect(impact.addedFeatureIds).toHaveLength(0);
+      expect(impact.removedFeatureIds).toHaveLength(0);
+      expect(impact.reverificationRequired).toBe(false);
+      expect(impact.userReconfirmRequired).toBe(false);
+    });
+
+    it('[edge] 기능 추가 → addedFeatureIds에 포함', () => {
+      const prev = makeContract({ features: [makeFeature('f1')] });
+      const next = makeContract({ features: [makeFeature('f1'), makeFeature('f2')] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.addedFeatureIds).toContain('f2');
+      expect(impact.changedFeatureIds).toHaveLength(0);
+      expect(impact.reverificationRequired).toBe(true);
+    });
+
+    it('[edge] 기능 제거 → removedFeatureIds에 포함', () => {
+      const prev = makeContract({ features: [makeFeature('f1'), makeFeature('f2')] });
+      const next = makeContract({ features: [makeFeature('f1')] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.removedFeatureIds).toContain('f2');
+      expect(impact.reverificationRequired).toBe(true);
+    });
+
+    it('[edge] 기능 내용 변경 → changedFeatureIds에 포함', () => {
+      const f1v1 = makeFeature('f1');
+      const f1v2 = { ...makeFeature('f1'), description: 'Updated description' };
+      const prev = makeContract({ features: [f1v1] });
+      const next = makeContract({ features: [f1v2] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.changedFeatureIds).toContain('f1');
+    });
+
+    it('[edge] 의존 체인 추적 — f2가 f1에 의존 + f1 변경 → f2가 dependencyAffectedIds에 포함', () => {
+      const f1v1 = makeFeature('f1');
+      const f1v2 = { ...makeFeature('f1'), description: 'Changed' };
+      const f2 = makeFeature('f2', ['f1']);
+      const prev = makeContract({ features: [f1v1, f2] });
+      const next = makeContract({ features: [f1v2, f2] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.changedFeatureIds).toContain('f1');
+      expect(impact.dependencyAffectedIds).toContain('f2');
+    });
+
+    it('[edge] 3단계 의존 체인 — f3→f2→f1, f1 변경 → f2, f3 모두 간접 영향', () => {
+      const f1v1 = makeFeature('f1');
+      const f1v2 = { ...makeFeature('f1'), description: 'v2' };
+      const f2 = makeFeature('f2', ['f1']);
+      const f3 = makeFeature('f3', ['f2']);
+      const prev = makeContract({ features: [f1v1, f2, f3] });
+      const next = makeContract({ features: [f1v2, f2, f3] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.dependencyAffectedIds).toContain('f2');
+      expect(impact.dependencyAffectedIds).toContain('f3');
+    });
+
+    it('[edge] testRerunFeatureIds에 변경 + 간접 영향 기능 모두 포함', () => {
+      const f1v1 = makeFeature('f1');
+      const f1v2 = { ...makeFeature('f1'), description: 'v2' };
+      const f2 = makeFeature('f2', ['f1']);
+      const prev = makeContract({ features: [f1v1, f2] });
+      const next = makeContract({ features: [f1v2, f2] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.testRerunFeatureIds).toContain('f1');
+      expect(impact.testRerunFeatureIds).toContain('f2');
+    });
+
+    it('[edge] 기능 없는 Contract → 변경 없음', () => {
+      const prev = makeContract({ features: [] });
+      const next = makeContract({ features: [] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.reverificationRequired).toBe(false);
+    });
+
+    it('[edge] 추가된 기능의 테스트도 재실행 대상', () => {
+      const prev = makeContract({ features: [] });
+      const next = makeContract({ features: [makeFeature('f-new')] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.testRerunFeatureIds).toContain('f-new');
+    });
+
+    it('[normal] userReconfirmRequired는 변경 있을 때 true', () => {
+      const prev = makeContract({ features: [makeFeature('f1')] });
+      const next = makeContract({ features: [makeFeature('f1'), makeFeature('f2')] });
+      const impact = manager.analyzeImpact(prev, next);
+      expect(impact.userReconfirmRequired).toBe(true);
+    });
+  });
+
+  // ── triggerRevalidation ─────────────────────────────────────
+
+  describe('triggerRevalidation()', () => {
+    it('[edge] reverificationRequired=false → 콜백 미호출, ok 반환', async () => {
+      const impact: import('layer1/contract-change-types.js').ContractImpactAnalysis = {
+        changedFeatureIds: [],
+        addedFeatureIds: [],
+        removedFeatureIds: [],
+        dependencyAffectedIds: [],
+        testRerunFeatureIds: [],
+        reverificationRequired: false,
+        userReconfirmRequired: false,
+      };
+      let called = false;
+      const result = await manager.triggerRevalidation(impact, async () => {
+        called = true;
+      });
+      expect(result.ok).toBe(true);
+      expect(called).toBe(false);
+    });
+
+    it('[normal] reverificationRequired=true → 콜백에 testRerunFeatureIds 전달', async () => {
+      const impact: import('layer1/contract-change-types.js').ContractImpactAnalysis = {
+        changedFeatureIds: ['f1'],
+        addedFeatureIds: [],
+        removedFeatureIds: [],
+        dependencyAffectedIds: ['f2'],
+        testRerunFeatureIds: ['f1', 'f2'],
+        reverificationRequired: true,
+        userReconfirmRequired: true,
+      };
+      let receivedIds: readonly string[] = [];
+      const result = await manager.triggerRevalidation(impact, async (ids) => {
+        receivedIds = ids;
+      });
+      expect(result.ok).toBe(true);
+      expect(receivedIds).toEqual(['f1', 'f2']);
+    });
+
+    it('[edge] 콜백이 throw → err 반환 (contract_revalidation_failed)', async () => {
+      const impact: import('layer1/contract-change-types.js').ContractImpactAnalysis = {
+        changedFeatureIds: ['f1'],
+        addedFeatureIds: [],
+        removedFeatureIds: [],
+        dependencyAffectedIds: [],
+        testRerunFeatureIds: ['f1'],
+        reverificationRequired: true,
+        userReconfirmRequired: false,
+      };
+      const result = await manager.triggerRevalidation(impact, async () => {
+        throw new Error('콜백 실패');
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('contract_revalidation_failed');
+      }
+    });
+
+    it('[edge] testRerunFeatureIds 빈 배열 + reverificationRequired=true → 콜백 호출됨', async () => {
+      const impact: import('layer1/contract-change-types.js').ContractImpactAnalysis = {
+        changedFeatureIds: [],
+        addedFeatureIds: [],
+        removedFeatureIds: [],
+        dependencyAffectedIds: [],
+        testRerunFeatureIds: [],
+        reverificationRequired: true,
+        userReconfirmRequired: false,
+      };
+      let called = false;
+      const result = await manager.triggerRevalidation(impact, async () => {
+        called = true;
+      });
+      expect(result.ok).toBe(true);
+      expect(called).toBe(true);
+    });
+  });
+
+  // ── applyChangeWithImpact ────────────────────────────────────
+
+  describe('applyChangeWithImpact()', () => {
+    it('[normal] 변경 적용 + 영향 분석 결과를 함께 반환', () => {
+      const pkg = makeHandoffPackage(
+        { features: [makeFeature('f1')] },
+        { version: 1 },
+      );
+      const next = makeContract({ features: [makeFeature('f1'), makeFeature('f2')] });
+      const result = manager.applyChangeWithImpact(pkg, next, '기능 추가', 'user');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.pkg.version).toBe(2);
+        expect(result.value.impact.addedFeatureIds).toContain('f2');
+        expect(result.value.impact.reverificationRequired).toBe(true);
+      }
+    });
+
+    it('[edge] 빈 reason → 오류 반환', () => {
+      const pkg = makeHandoffPackage({}, { version: 1 });
+      const next = makeContract();
+      const result = manager.applyChangeWithImpact(pkg, next, '', 'user');
+      expect(result.ok).toBe(false);
+    });
+
+    it('[edge] 의존 체인이 impact에 포함', () => {
+      const f1 = makeFeature('f1');
+      const f2 = makeFeature('f2', ['f1']);
+      const pkg = makeHandoffPackage({ features: [f1, f2] }, { version: 1 });
+      const f1v2 = { ...makeFeature('f1'), description: 'Changed' };
+      const next = makeContract({ features: [f1v2, f2] });
+      const result = manager.applyChangeWithImpact(pkg, next, '기능 수정', 'system');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.impact.changedFeatureIds).toContain('f1');
+        expect(result.value.impact.dependencyAffectedIds).toContain('f2');
+        expect(result.value.impact.testRerunFeatureIds).toContain('f1');
+        expect(result.value.impact.testRerunFeatureIds).toContain('f2');
       }
     });
   });

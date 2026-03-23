@@ -11,8 +11,15 @@
 
 export type {
   ConversationMessage,
+  ConversationPhase,
   Layer1VerificationRequest,
   Layer1VerificationResult,
+} from 'layer1/conversation-types.js';
+
+export {
+  CONFIRMATION_KEYWORDS,
+  PHASE_SYSTEM_PROMPTS,
+  PHASE_TRANSITIONS,
 } from 'layer1/conversation-types.js';
 
 export type {
@@ -22,6 +29,7 @@ export type {
   SampleTest,
   TestCategory,
   TestRatios,
+  TestTargetCounts,
   TestTypeDefinition,
 } from 'layer1/feature-types.js';
 

@@ -48,6 +48,8 @@ export class StreamMonitor {
   private readonly MAX_EVENTS = 1000;
   private readonly events: HookEvent[] = [];
   private readonly logger: Logger;
+  /** 실시간 모니터링 타이머 핸들 / Real-time monitoring timer handle */
+  private monitorTimerId: ReturnType<typeof setInterval> | null = null;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
@@ -96,6 +98,62 @@ export class StreamMonitor {
     }
 
     return alerts;
+  }
+
+  /**
+   * 세션 스트림과 연결하여 실시간 모니터링을 시작한다
+   *
+   * @description
+   * KR: 주기적으로 detectAnomalies()를 호출하고 이상 감지 시 AbortController로
+   *     세션 중단 신호를 전송한다. stop()으로 모니터링을 중단할 수 있다.
+   * EN: Periodically calls detectAnomalies() and aborts the session via AbortController
+   *     when anomalies are detected. Call stop() to stop monitoring.
+   *
+   * @param controller - 이상 감지 시 abort 신호를 보낼 AbortController / AbortController for session abort
+   * @param intervalMs - 감지 주기 (기본 5000ms) / Detection interval (default 5000ms)
+   */
+  startMonitoring(controller: AbortController, intervalMs = 5_000): void {
+    if (this.monitorTimerId !== null) {
+      this.logger.warn('StreamMonitor already monitoring — startMonitoring() ignored');
+      return;
+    }
+
+    this.logger.info('StreamMonitor 실시간 모니터링 시작', { intervalMs });
+
+    this.monitorTimerId = setInterval(() => {
+      const alerts = this.detectAnomalies();
+      const highAlerts = alerts.filter((a) => a.severity === 'high');
+
+      if (highAlerts.length > 0) {
+        this.logger.warn('HIGH 이상 패턴 감지 — 세션 중단 신호 전송', {
+          alertCount: highAlerts.length,
+          alerts: highAlerts.map((a) => ({
+            type: a.type,
+            agent: a.agentName,
+            description: a.description,
+          })),
+        });
+        controller.abort();
+        this.stopMonitoring();
+      }
+    }, intervalMs);
+  }
+
+  /**
+   * 실시간 모니터링을 중단한다 / Stops real-time monitoring
+   */
+  stopMonitoring(): void {
+    if (this.monitorTimerId === null) return;
+    clearInterval(this.monitorTimerId);
+    this.monitorTimerId = null;
+    this.logger.info('StreamMonitor 모니터링 중단');
+  }
+
+  /**
+   * 모니터링이 실행 중인지 반환 / Whether monitoring is active
+   */
+  isMonitoring(): boolean {
+    return this.monitorTimerId !== null;
   }
 
   /**

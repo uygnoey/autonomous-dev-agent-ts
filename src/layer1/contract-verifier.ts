@@ -14,6 +14,7 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type Result, err, ok } from 'core/types.js';
 import type { ClaudeApi } from 'layer1/claude-api.js';
+import { ContractAiConsistencyVerifier } from 'layer1/contract-ai-consistency-verifier.js';
 import type {
   ContractVerificationIssue,
   ContractVerificationResult,
@@ -96,6 +97,35 @@ export class ContractVerifier {
 
     // WHY: 로컬 검사를 통과한 경우에만 Claude API를 호출한다.
     return this.runAiVerification(pkg, modelName);
+  }
+
+  /**
+   * architect + qa 에이전트 기반 Contract 정합성 검증 / Agent-based contract consistency verification
+   *
+   * @description
+   * KR: ContractAiConsistencyVerifier에 위임하여 architect(I/O 호환, 모듈 책임, 설계 모순)와
+   *     qa(테스트 커버리지) 관점의 AI 검증을 수행한다.
+   * EN: Delegates to ContractAiConsistencyVerifier for architect (I/O compat, module responsibility,
+   *     design contradictions) and qa (test coverage) AI verification.
+   *
+   * @param pkg - 검증할 패키지 / Package to verify
+   * @param modelName - 사용할 모델 (선택) / Model to use (optional)
+   * @returns 검증 결과 또는 에러 / Verification result or error
+   */
+  async verifyWithAgents(
+    pkg: HandoffPackage,
+    modelName?: string,
+  ): Promise<Result<ContractVerificationResult, AdevError>> {
+    this.logger.debug('에이전트 기반 정합성 검증 시작 / Starting agent-based consistency verification', {
+      packageId: pkg.id,
+    });
+
+    const consistencyVerifier = new ContractAiConsistencyVerifier({
+      claudeApi: this.claudeApi,
+      logger: this.logger,
+    });
+
+    return consistencyVerifier.verify(pkg, modelName);
   }
 
   /**

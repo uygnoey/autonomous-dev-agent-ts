@@ -63,17 +63,15 @@ describe('loadEnvironment', () => {
     }
   });
 
-  it('둘 다 설정 시 api-key 모드로 ok=true 반환한다', () => {
+  it('둘 다 설정 시 config_dual_auth 에러 반환 (동시 설정 금지)', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test';
     process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-test';
 
     const result = loadEnvironment();
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.authMode).toBe('api-key');
-      expect(result.value.anthropicApiKey).toBe('sk-ant-test');
-      expect(result.value.claudeCodeOauthToken).toBe('sk-ant-oat01-test');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('config_dual_auth');
     }
   });
 
@@ -165,12 +163,12 @@ describe('loadEnvironment', () => {
     }
   });
 
-  it('둘 다 설정 → api-key 모드로 ok=true', () => {
+  it('둘 다 설정 → config_dual_auth 에러', () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-ant-a';
     process.env['CLAUDE_CODE_OAUTH_TOKEN'] = 'sk-ant-oat01-b';
     const result = loadEnvironment();
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.authMode).toBe('api-key');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('config_dual_auth');
   });
 });
 

@@ -251,4 +251,117 @@ export class DocCollaborator implements IDocCollaborator {
 
     return ok(state);
   }
+
+  /**
+   * 3단계 협업 문서를 생성한다 / Generate collaborative document via 3-step pipeline
+   *
+   * @description
+   * KR: §9.2 — 명시적 3단계 협업:
+   *     Step 1: Layer1(Claude Opus)에 구조/방향/톤 결정 요청 → 뼈대 생성
+   *     Step 2: 결과를 documenter에게 전달하여 기술 상세 채움 (agentSpawner spawn)
+   *     Step 3: 완성된 문서를 Layer1에 최종 검토 요청 → 검토 완료 문서 반환
+   * EN: §9.2 — Explicit 3-step collaboration:
+   *     Step 1: Request Layer1 (Claude Opus) for structure/direction/tone → generate skeleton
+   *     Step 2: Pass result to documenter to fill technical details (agentSpawner spawn)
+   *     Step 3: Request Layer1 for final review → return reviewed document
+   *
+   * @param projectId - 프로젝트 ID / Project ID
+   * @param docType - 문서 유형 / Document type
+   * @param context - 프로젝트 컨텍스트 / Project context
+   * @param fragments - 2계층 조각 문서 / Layer 2 fragment documents
+   * @param outputPath - 출력 경로 / Output path
+   * @returns 완성된 협업 문서 / Completed collaborative document
+   */
+  async generateCollaborativeDoc(
+    projectId: string,
+    docType: import('layer3/doc-types.js').ProjectDocumentType | import('layer3/doc-types.js').BusinessDeliverableType,
+    context: string,
+    fragments: readonly import('layer3/doc-types.js').DocumentFragment[],
+    outputPath: string,
+  ): Promise<Result<CollaborativeDocResult>> {
+    this.logger.info('3단계 협업 문서 생성 시작', { projectId, docType });
+
+    // WHY: claudeApi와 documenterSpawner가 모두 있어야 3단계 협업이 가능
+    if (!this.claudeApi) {
+      return err(
+        new AgentError(
+          'agent_not_configured',
+          '3단계 협업 문서 생성에는 Claude API가 필요합니다',
+        ),
+      );
+    }
+
+    // Step 1: Layer1에 구조/방향/톤 결정 요청 / Request L1 for structure
+    this.logger.info('Step 1: Layer1 구조 생성 요청', { docType });
+    const structureResult = await callLayer1(this.claudeApi, {
+      type: 'create-structure',
+      docType,
+      context,
+    });
+    if (!structureResult.ok) {
+      return err(structureResult.error);
+    }
+    const structure = structureResult.value.content;
+    this.logger.info('Step 1 완료: Layer1 뼈대 생성', { structureLength: structure.length });
+
+    // Step 2: documenter에게 기술 상세 채움 요청 / Request L2 documenter to fill details
+    let details: string;
+    if (this.documenterSpawner) {
+      this.logger.info('Step 2: Layer2 documenter 기술 상세 작성 요청', { docType });
+      const detailResult = await callLayer2(this.documenterSpawner, {
+        docType,
+        structure,
+        fragments,
+      });
+      if (!detailResult.ok) {
+        // WHY: L2 실패 시 L1 뼈대만으로 진행
+        this.logger.warn('Step 2 실패: L1 뼈대만으로 진행', {
+          error: detailResult.error.message,
+        });
+        details = structure;
+      } else {
+        details = detailResult.value.content;
+        this.logger.info('Step 2 완료: Layer2 상세 작성', { detailsLength: details.length });
+      }
+    } else {
+      // WHY: spawner 없을 때 조각 직접 병합
+      this.logger.info('Step 2: spawner 없음 — 조각 직접 병합');
+      const fragContent = fragments.map((f) => f.content).join('\n\n');
+      details = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
+    }
+
+    // Step 3: Layer1에 최종 검토 요청 / Request L1 for final review
+    this.logger.info('Step 3: Layer1 최종 검토 요청', { docType });
+    const reviewResult = await callLayer1(this.claudeApi, {
+      type: 'review-and-refine',
+      docType,
+      context: structure,
+      layer2Details: details,
+    });
+
+    let finalContent: string;
+    if (reviewResult.ok) {
+      finalContent = reviewResult.value.content;
+      this.logger.info('Step 3 완료: Layer1 최종 검토', { finalLength: finalContent.length });
+    } else {
+      // WHY: L1 review 실패 시 L2 상세 내용으로 fallback
+      this.logger.warn('Step 3 실패: L2 상세 내용으로 fallback', {
+        error: reviewResult.error.message,
+      });
+      finalContent = details;
+    }
+
+    this.logger.info('3단계 협업 문서 생성 완료', {
+      projectId,
+      docType,
+      finalLength: finalContent.length,
+    });
+
+    return ok({
+      id: randomUUID(),
+      content: finalContent,
+      outputPath,
+      generatedAt: new Date(),
+    });
+  }
 }

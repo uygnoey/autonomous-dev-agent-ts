@@ -15,6 +15,7 @@ import type { CoderAllocator } from 'layer2/coder-allocator.js';
 import type { FailureHandler } from 'layer2/failure-handler.js';
 import type { GitBranchManager } from 'layer2/git-branch-manager.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { ModifiedFiles } from 'layer2/integration-tester-steps.js';
 import type { IpcPoller } from 'layer2/ipc-poller.js';
 import type { ParallelCoderRunner } from 'layer2/parallel-coder-runner.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
@@ -24,6 +25,7 @@ import type { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestr
 import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
+import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import type { VerificationGate } from 'layer2/verification-gate.js';
 import type { RagSearcher } from 'rag/search.js';
 
@@ -62,4 +64,12 @@ export interface TeamLeaderDeps {
   readonly gitBranchManager?: GitBranchManager;
   /** layer1 검증기 (선택) — VERIFY Phase에서 스펙 의도 검증에 사용 / Layer1 verifier (optional) for spec intent verification in VERIFY phase */
   readonly layer1Verifier?: Layer1Verifier;
+  /** 사용자 체크포인트 (선택) — PI-010 유저 확인에 사용 / User checkpoint (optional) for PI-010 user confirmation */
+  readonly userCheckpoint?: UserCheckpoint;
+  /** 사용자 입력 제공자 (선택) — PI-010 CLI 인터랙션에 사용 / User input provider (optional) for PI-010 CLI interaction */
+  readonly userInputProvider?: UserInputProvider;
+  /** 프로젝트 경로 (선택) — 통합 테스트에 사용 / Project path (optional) for integration tests */
+  readonly projectPath?: string;
+  /** 수정된 파일 목록 (선택) — 통합 테스트에 사용 / Modified files (optional) for integration tests */
+  readonly modifiedFiles?: ModifiedFiles;
 }

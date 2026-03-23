@@ -13,7 +13,8 @@
 import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import type { Layer1Verifier } from 'layer1/verifier.js';
-import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { IntegrationTester, StaircaseTestResult } from 'layer2/integration-tester.js';
+import type { ModifiedFiles } from 'layer2/integration-tester-steps.js';
 import { createEvent, queryRagContext } from 'layer2/team-leader-helpers.js';
 import type { ExecutePhaseDeps } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent } from 'layer2/types.js';
@@ -25,6 +26,10 @@ export interface ExecuteVerifyPhaseDeps extends ExecutePhaseDeps {
   readonly integrationTester: IntegrationTester;
   /** layer1 검증기 (선택) — 스펙 의도 검증에 사용 / Layer1 verifier (optional) for spec intent verification */
   readonly layer1Verifier?: Layer1Verifier;
+  /** 프로젝트 경로 (선택) — 통합 테스트에 사용 / Project path (optional) for integration tests */
+  readonly projectPath?: string;
+  /** 수정된 파일 목록 (선택) — 통합 테스트에 사용 / Modified files (optional) for integration tests */
+  readonly modifiedFiles?: ModifiedFiles;
 }
 
 /**
@@ -158,15 +163,95 @@ export async function* executeVerifyPhase(
 
   deps.logger.info('layer1 검증 결과', { featureId, passed: layer1Result.passed });
 
+  // WHY: PI-004 — 계단식 Fail-Fast 통합 테스트를 4중 검증의 일부로 실행
+  const integrationResult = await runIntegrationTests(deps, featureId, handoffPackage);
+
+  // WHY: PI-003 — adev 종합 판단 — qa_qc, reviewer, layer1, 통합 테스트 결과를 종합하여 최종 판정
+  const adevPassed = qaQcPassed && reviewerPassed && layer1Result.passed && integrationResult.allPassed;
+  const adevFeedbackParts: string[] = [];
+
+  if (!qaQcPassed) adevFeedbackParts.push('qa_qc 검증 실패');
+  if (!reviewerPassed) adevFeedbackParts.push('reviewer 검증 실패');
+  if (!layer1Result.passed) adevFeedbackParts.push('layer1 검증 실패');
+  if (!integrationResult.allPassed) {
+    adevFeedbackParts.push(
+      `통합 테스트 실패 (Step ${integrationResult.failedAtStep ?? '?'})`,
+    );
+  }
+
+  const adevFeedback = adevPassed
+    ? 'adev 종합 판단: 전체 통과'
+    : `adev 종합 판단: 실패 — ${adevFeedbackParts.join(', ')}`;
+
   deps.verificationGate.addResult({
     featureId,
     phase: 'adev',
-    passed: true,
-    feedback: 'adev auto-pass',
+    passed: adevPassed,
+    feedback: adevFeedback,
     timestamp: new Date(),
   });
 
-  deps.logger.info('4중 검증 결과 등록 완료', { featureId });
+  deps.logger.info('4중 검증 결과 등록 완료', {
+    featureId,
+    adevPassed,
+    integrationAllPassed: integrationResult.allPassed,
+  });
+}
+
+/**
+ * 계단식 Fail-Fast 통합 테스트를 실행한다 / Runs staircase Fail-Fast integration tests
+ *
+ * @description
+ * KR: PI-004 — Step1(수정 E2E) → Step2(연관) → Step3(비연관) → Step4(전체).
+ *     클린 환경에서 실행하며 1개 실패 시 즉시 중단한다.
+ *     projectPath가 없으면 스킵(전체 통과 처리).
+ * EN: PI-004 — Runs 4-step staircase tests in clean env with Fail-Fast.
+ *
+ * @param deps - VERIFY Phase 의존성 / VERIFY phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @returns 통합 테스트 결과 / Integration test result
+ */
+async function runIntegrationTests(
+  deps: ExecuteVerifyPhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+): Promise<StaircaseTestResult> {
+  if (!deps.projectPath) {
+    deps.logger.info('projectPath 미제공 — 통합 테스트 스킵', { featureId });
+    return { stepResults: [], allPassed: true };
+  }
+
+  const modifiedFiles: ModifiedFiles = deps.modifiedFiles ?? { paths: [] };
+
+  deps.logger.info('계단식 통합 테스트 시작', {
+    featureId,
+    projectPath: deps.projectPath,
+    modifiedFileCount: modifiedFiles.paths.length,
+  });
+
+  const result = await deps.integrationTester.runStaircaseTests(
+    handoffPackage.projectId,
+    deps.projectPath,
+    modifiedFiles,
+  );
+
+  if (!result.ok) {
+    deps.logger.error('통합 테스트 실행 실패', {
+      featureId,
+      error: result.error.message,
+    });
+    // WHY: 실행 자체가 실패하면 전체 실패로 처리 — Step 1 실패로 기록
+    return { stepResults: [], allPassed: false, failedAtStep: 1 };
+  }
+
+  deps.logger.info('계단식 통합 테스트 완료', {
+    featureId,
+    allPassed: result.value.allPassed,
+    failedAtStep: result.value.failedAtStep,
+  });
+
+  return result.value;
 }
 
 /**

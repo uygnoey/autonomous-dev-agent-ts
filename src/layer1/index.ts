@@ -13,6 +13,7 @@ export type {
   AcceptanceCriterion,
   ContractSchema,
   ConversationMessage,
+  ConversationPhase,
   FeatureSpec,
   HandoffPackage,
   IODefinition,
@@ -21,13 +22,24 @@ export type {
   SampleTest,
   TestCategory,
   TestRatios,
+  TestTargetCounts,
   TestTypeDefinition,
   VerificationMatrix,
+} from 'layer1/types.js';
+
+export {
+  CONFIRMATION_KEYWORDS,
+  PHASE_SYSTEM_PROMPTS,
+  PHASE_TRANSITIONS,
 } from 'layer1/types.js';
 
 // ── 대화 관리 ───────────────────────────────────────────────────
 
 export { ConversationManager } from 'layer1/conversation.js';
+
+// ── 대화 Phase FSM ──────────────────────────────────────────────
+
+export { ConversationFsm } from 'layer1/conversation-fsm.js';
 
 // ── 기획 ────────────────────────────────────────────────────────
 
@@ -60,6 +72,18 @@ export type {
   ContractVerificationIssue,
   ContractVerificationResult,
 } from 'layer1/contract-verifier-types.js';
+
+// ── Contract AI 정합성 검증기 ─────────────────────────────────────
+
+export { ContractAiConsistencyVerifier } from 'layer1/contract-ai-consistency-verifier.js';
+export type { ContractAiConsistencyDeps } from 'layer1/contract-ai-consistency-verifier.js';
+
+// ── Agent .md 생성 + 검토 ────────────────────────────────────────
+
+export { AgentMdGenerator } from 'layer1/agent-md-generator.js';
+export type { AgentMdGeneratorConfig } from 'layer1/agent-md-generator.js';
+export { AgentMdReviewer } from 'layer1/agent-md-reviewer.js';
+export type { AgentMdReviewInput, AgentReviewResult, ReviewDecision } from 'layer1/agent-md-reviewer.js';
 
 // ── Claude API ──────────────────────────────────────────────────
 

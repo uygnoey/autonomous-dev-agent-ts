@@ -18,11 +18,17 @@ import type { TokenMonitor } from 'layer2/token-monitor.js';
 
 // ── 상수 / Constants ──────────────────────────────────────────────
 
-/** 토큰 대기 확인 주기 (1분) / Token wait check interval (1 minute) */
+/** API Key 모드: 토큰 대기 확인 주기 (1분) / API Key mode: check interval (1 minute) */
 export const TOKEN_WAIT_CHECK_INTERVAL_MS = 60_000;
 
-/** 토큰 대기 최대 시간 (1시간) / Max token wait duration (1 hour) */
+/** Subscription 모드: 5시간 윈도우 확인 주기 (5분) / Subscription mode: 5h window check interval (5 min) */
+export const TOKEN_WAIT_SUBSCRIPTION_INTERVAL_MS = 300_000;
+
+/** API Key 모드: 최대 대기 시간 (1시간) / API Key mode: max wait (1 hour) */
 export const TOKEN_WAIT_MAX_DURATION_MS = 3_600_000;
+
+/** Subscription 모드: 최대 대기 시간 (5시간 + 10분 마진) / Subscription mode: max wait (5h + 10min margin) */
+export const TOKEN_WAIT_SUBSCRIPTION_MAX_DURATION_MS = 5 * 3_600_000 + 600_000;
 
 // ── 의존성 인터페이스 / Dependency Interface ─────────────────────
 
@@ -113,25 +119,54 @@ export async function* runTokenWaitLoop(
   // 3. 스냅샷 저장 완료 메시지 / Snapshot save complete message
   yield makeMessageEvent('토큰 한도 도달 — 세션 스냅샷 저장 완료');
 
-  // 4. 토큰 대기 루프 / Token wait loop
+  // 4. 인증 방식별 대기 타이밍 결정 / Determine wait timing based on auth mode
+  // WHY: API Key 모드는 retry-after 기반 정확한 대기, Subscription 모드는 5시간 윈도우 기반 리셋 타이머
+  const isSubscription = deps.tokenMonitor.authMode === 'oauth-token';
+  const checkInterval = isSubscription
+    ? TOKEN_WAIT_SUBSCRIPTION_INTERVAL_MS
+    : TOKEN_WAIT_CHECK_INTERVAL_MS;
+  const maxDuration = isSubscription
+    ? TOKEN_WAIT_SUBSCRIPTION_MAX_DURATION_MS
+    : TOKEN_WAIT_MAX_DURATION_MS;
+
+  // WHY: API Key 모드에서 retryAfterSeconds가 있으면 해당 시간만큼 먼저 대기
+  const status = deps.tokenMonitor.getStatus();
+  if (!isSubscription && status.retryAfterSeconds !== null && status.retryAfterSeconds > 0) {
+    const retryWaitMs = status.retryAfterSeconds * 1000;
+    logger.info('API Key 모드 — retry-after 기반 대기', { retryAfterMs: retryWaitMs });
+    yield makeMessageEvent(`429 응답 — retry-after ${status.retryAfterSeconds}초 대기`);
+    await Bun.sleep(retryWaitMs);
+  }
+
+  logger.info('토큰 대기 루프 시작', {
+    authMode: deps.tokenMonitor.authMode,
+    checkIntervalMs: checkInterval,
+    maxDurationMs: maxDuration,
+  });
+
+  // 5. 토큰 대기 루프 / Token wait loop
   let waited = 0;
 
-  while (waited < TOKEN_WAIT_MAX_DURATION_MS) {
-    await Bun.sleep(TOKEN_WAIT_CHECK_INTERVAL_MS);
-    waited += TOKEN_WAIT_CHECK_INTERVAL_MS;
+  while (waited < maxDuration) {
+    await Bun.sleep(checkInterval);
+    waited += checkInterval;
 
     // WHY: shouldPauseAll()이 false면 토큰 윈도우 리셋됨 → 복원 시작
     if (!deps.tokenMonitor.shouldPauseAll()) {
       break;
     }
 
-    yield makeMessageEvent(`토큰 대기 중 (${waited / 1000}초 경과)`);
+    yield makeMessageEvent(`토큰 대기 중 (${Math.floor(waited / 1000)}초 경과, ${isSubscription ? 'Subscription' : 'API Key'} 모드)`);
   }
 
-  // 5. 최대 대기 시간 초과 확인 / Check max wait exceeded
-  if (waited >= TOKEN_WAIT_MAX_DURATION_MS && deps.tokenMonitor.shouldPauseAll()) {
-    logger.error('토큰 한도 대기 시간 초과', { waitedMs: waited });
-    yield makeErrorEvent('토큰 한도 대기 시간 초과');
+  // 6. 최대 대기 시간 초과 확인 / Check max wait exceeded
+  if (waited >= maxDuration && deps.tokenMonitor.shouldPauseAll()) {
+    logger.error('토큰 한도 대기 시간 초과', {
+      waitedMs: waited,
+      maxDurationMs: maxDuration,
+      authMode: deps.tokenMonitor.authMode,
+    });
+    yield makeErrorEvent(`토큰 한도 대기 시간 초과 (${isSubscription ? '5시간 윈도우' : '1시간'} 초과)`);
     return;
   }
 

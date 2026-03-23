@@ -30,6 +30,7 @@ import {
 import {
   generateAllDocuments,
   listTemplates as listTemplatesHelper,
+  loadCustomTemplates,
   loadDefaultTemplates,
   readTemplateSource as readTemplateSourceHelper,
   registerTemplate as registerTemplateHelper,
@@ -47,14 +48,27 @@ export class DocIntegrator implements IDocIntegrator {
   constructor(logger: Logger) {
     this.logger = logger.child({ module: 'doc-integrator' });
     this.templateRegistry = new Map();
-    this.loadDefaultTemplates();
+    this.loadDefaultTemplatesSync();
   }
 
   /**
    * 기본 템플릿 로드 / Load default templates
    */
-  private loadDefaultTemplates(): void {
+  private loadDefaultTemplatesSync(): void {
     loadDefaultTemplates(this.templateRegistry, this.logger);
+  }
+
+  /**
+   * 커스텀 템플릿 로드 / Load custom templates from disk
+   *
+   * @description
+   * KR: `.adev/templates/` (프로젝트) + `~/.adev/templates/` (글로벌) 경로에서 커스텀 템플릿을 스캔하여
+   *     기본 템플릿을 덮어쓴다. 프로젝트 로컬이 글로벌보다 우선순위가 높다.
+   * EN: Scans `.adev/templates/` (project) + `~/.adev/templates/` (global) for custom templates
+   *     that override defaults. Project local takes priority over global.
+   */
+  async loadCustomTemplatesFromDisk(): Promise<void> {
+    await loadCustomTemplates(this.templateRegistry, this.logger);
   }
 
   /**

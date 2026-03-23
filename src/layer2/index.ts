@@ -25,6 +25,7 @@ export { TokenMonitor } from 'layer2/token-monitor.js';
 export { UserCheckpoint } from 'layer2/user-checkpoint.js';
 export { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 export { VerificationGate, type IVerificationGate } from 'layer2/verification-gate.js';
+export { DocumenterEventDispatcher } from 'layer2/documenter-event-dispatcher.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
 
@@ -57,3 +58,17 @@ export type {
 export type { TeamLeaderDeps } from 'layer2/team-leader.js';
 export type { CheckpointData, UserDecision } from 'layer2/user-checkpoint.js';
 export type { V2SessionExecutorOptions } from 'layer2/v2-session-executor.js';
+
+export type {
+  DocumenterEventType,
+  DocumenterEvent,
+  FeatureCompleteContext,
+  TestExecutedContext,
+  BugDetectedContext,
+  PhaseBoundaryContext,
+  TranslationContext,
+} from 'layer2/types.js';
+
+export {
+  DOCUMENTER_OUTPUT_MAP,
+} from 'layer2/types.js';

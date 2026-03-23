@@ -92,6 +92,10 @@ export class TeamLeader implements ITeamLeader {
   private readonly parallelCoderRunner: TeamLeaderDeps['parallelCoderRunner'];
   private readonly gitBranchManager: TeamLeaderDeps['gitBranchManager'];
   private readonly layer1Verifier: TeamLeaderDeps['layer1Verifier'];
+  private readonly userCheckpoint: TeamLeaderDeps['userCheckpoint'];
+  private readonly userInputProvider: TeamLeaderDeps['userInputProvider'];
+  private readonly projectPath: TeamLeaderDeps['projectPath'];
+  private readonly modifiedFiles: TeamLeaderDeps['modifiedFiles'];
   private currentFeatureId: string | null = null;
 
   /**
@@ -118,6 +122,10 @@ export class TeamLeader implements ITeamLeader {
     this.parallelCoderRunner = deps.parallelCoderRunner;
     this.gitBranchManager = deps.gitBranchManager;
     this.layer1Verifier = deps.layer1Verifier;
+    this.userCheckpoint = deps.userCheckpoint;
+    this.userInputProvider = deps.userInputProvider;
+    this.projectPath = deps.projectPath;
+    this.modifiedFiles = deps.modifiedFiles;
   }
 
   /**
@@ -193,6 +201,8 @@ export class TeamLeader implements ITeamLeader {
               verificationGate: this.verificationGate,
               integrationTester: this.integrationTester,
               layer1Verifier: this.layer1Verifier,
+              projectPath: this.projectPath,
+              modifiedFiles: this.modifiedFiles,
             },
             featureId,
             handoffPackage,
@@ -243,12 +253,16 @@ export class TeamLeader implements ITeamLeader {
               agentGenerator: this.agentGenerator,
               agentSpawner: this.agentSpawner,
               logger: this.logger,
+              userCheckpoint: this.userCheckpoint,
+              userInputProvider: this.userInputProvider,
             },
             featureId,
             handoffPackage,
             iteration,
           );
-          if (this.verificationGate.isAllPassed(featureId)) return;
+          // WHY: handleVerifyResult에서 유저 revise/revise_integration 시 Phase 전환 후 return
+          //      approve 시 isAllPassed는 여전히 true이고 done 이벤트가 yield된다
+          if (this.verificationGate.isAllPassed(featureId) && this.phaseEngine.currentPhase === 'VERIFY') return;
         } else {
           advancePhase(
             { phaseEngine: this.phaseEngine, progressTracker: this.progressTracker },
