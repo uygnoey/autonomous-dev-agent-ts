@@ -50,8 +50,10 @@ export class BugEscalator implements IBugEscalator {
     integrationTester?: IntegrationTester,
     logger?: Logger,
   ) {
-    // WHY: 간단한 API 지원 - logger만 전달하는 경우
-    if (!(failureHandler || integrationTester || logger)) {
+    // WHY: duck-typing으로 Logger vs TeamLeader를 안전하게 판별
+    const isLogger =
+      'child' in teamLeader && typeof (teamLeader as { child: unknown }).child === 'function';
+    if (isLogger && !(failureHandler || integrationTester || logger)) {
       this.logger = (teamLeader as Logger).child({ module: 'bug-escalator' });
       this.teamLeader = null;
       this.failureHandler = null;

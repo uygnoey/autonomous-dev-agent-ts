@@ -130,11 +130,18 @@ export class ProcessExecutor {
         proc.stdin.end();
       }
 
-      // WHY: 타임아웃과 프로세스 완료를 경쟁시킴
-      const resultOrTimeout = await Promise.race([
-        this.collectOutput(proc),
-        this.timeout(timeoutMs),
-      ]);
+      // WHY: 타임아웃과 프로세스 완료를 경쟁시킴. finally로 타이머 누수 방지
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        timeoutId = setTimeout(() => resolve('timeout'), timeoutMs);
+      });
+
+      let resultOrTimeout: Awaited<ReturnType<typeof this.collectOutput>> | 'timeout';
+      try {
+        resultOrTimeout = await Promise.race([this.collectOutput(proc), timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (resultOrTimeout === 'timeout') {
         proc.kill();
@@ -246,14 +253,4 @@ export class ProcessExecutor {
     return combined;
   }
 
-  /**
-   * 타임아웃 Promise / Timeout promise
-   *
-   * @description
-   * KR: 지정된 시간 후 'timeout' 문자열을 반환하는 Promise.
-   * EN: Promise that resolves to 'timeout' string after specified duration.
-   */
-  private timeout(ms: number): Promise<'timeout'> {
-    return new Promise((resolve) => setTimeout(() => resolve('timeout'), ms));
-  }
 }

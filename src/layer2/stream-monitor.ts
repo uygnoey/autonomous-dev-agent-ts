@@ -44,6 +44,8 @@ const IDLE_THRESHOLD_MS = 300_000;
  * const alerts = monitor.detectAnomalies();
  */
 export class StreamMonitor {
+  /** 최대 이벤트 보관 수 / Maximum events to retain */
+  private readonly MAX_EVENTS = 1000;
   private readonly events: HookEvent[] = [];
   private readonly logger: Logger;
 
@@ -62,6 +64,10 @@ export class StreamMonitor {
    */
   onEvent(event: HookEvent): Result<void> {
     this.events.push(event);
+    // WHY: circular buffer — 오래된 이벤트를 제거하여 메모리 누수 방지
+    if (this.events.length > this.MAX_EVENTS) {
+      this.events.splice(0, this.events.length - this.MAX_EVENTS);
+    }
     this.logger.debug('훅 이벤트 기록', {
       type: event.type,
       agent: event.agentName,

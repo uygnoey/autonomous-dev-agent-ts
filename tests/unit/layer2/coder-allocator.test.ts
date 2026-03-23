@@ -125,13 +125,13 @@ describe('CoderAllocator.allocate', () => {
     }
   });
 
-  it('완료 후 같은 모듈은 아직 점유 중 (completed는 해제 안 됨)', () => {
+  it('완료 후 같은 모듈 재할당 가능 (완료 시 모듈 해제)', () => {
     const r1 = allocator.allocate('feat-1', ['auth']);
     if (r1.ok) {
       allocator.completeAllocation(r1.value[0]!.coderId);
-      // complete는 모듈을 해제하지 않음
+      // WHY: complete 시 모듈이 해제되어 재할당 가능
       const r2 = allocator.allocate('feat-2', ['auth']);
-      expect(r2.ok).toBe(false);
+      expect(r2.ok).toBe(true);
     }
   });
 
@@ -507,11 +507,11 @@ describe('CoderAllocator.hasConflict', () => {
     }
   });
 
-  it('완료 후에도 충돌 (모듈 미해제)', () => {
+  it('완료 후 충돌 해소 (완료 시 모듈 해제)', () => {
     const r = allocator.allocate('feat-1', ['auth']);
     if (r.ok) {
       allocator.completeAllocation(r.value[0]!.coderId);
-      expect(allocator.hasConflict(['auth'])).toBe(true);
+      expect(allocator.hasConflict(['auth'])).toBe(false);
     }
   });
 
@@ -579,10 +579,9 @@ describe('CoderAllocator 복합 시나리오', () => {
     const a = makeAllocator();
     const r1 = a.allocate('feat-1', ['module-x']);
     if (r1.ok) {
-      // 완료하면 모듈이 해제되지 않음
+      // WHY: 완료 시 모듈이 해제되어 재할당 가능
       a.completeAllocation(r1.value[0]!.coderId);
-      // 같은 모듈은 여전히 충돌
-      expect(a.hasConflict(['module-x'])).toBe(true);
+      expect(a.hasConflict(['module-x'])).toBe(false);
     }
   });
 
@@ -608,14 +607,14 @@ describe('CoderAllocator 복합 시나리오', () => {
     }
   });
 
-  it('할당 → 완료 → 재할당 시도 → 여전히 충돌', () => {
+  it('할당 → 완료 → 재할당 시도 → 성공 (완료 시 모듈 해제)', () => {
     const a = makeAllocator();
     const r1 = a.allocate('feat-1', ['critical-module']);
     if (r1.ok) {
       a.completeAllocation(r1.value[0]!.coderId);
-      // complete는 모듈을 해제하지 않으므로 여전히 충돌
+      // WHY: complete 시 모듈 해제되어 재할당 가능
       const r2 = a.allocate('feat-2', ['critical-module']);
-      expect(r2.ok).toBe(false);
+      expect(r2.ok).toBe(true);
     }
   });
 
@@ -900,12 +899,12 @@ describe('CoderAllocator 추가 edge case', () => {
     expect(typeof result.ok).toBe('boolean');
   });
 
-  it('completeAllocation 후 모듈은 hasConflict=true 유지', () => {
+  it('completeAllocation 후 모듈은 hasConflict=false (완료 시 해제)', () => {
     const a = makeAllocator();
     const r = a.allocate('feat-1', ['locked-mod']);
     if (r.ok && r.value[0]) {
       a.completeAllocation(r.value[0].coderId);
-      expect(a.hasConflict(['locked-mod'])).toBe(true);
+      expect(a.hasConflict(['locked-mod'])).toBe(false);
     }
   });
 
@@ -1219,12 +1218,12 @@ describe('CoderAllocator 상태 전이 검증', () => {
     }
   });
 
-  it('할당 → 완료 → hasConflict=true (미해제)', () => {
+  it('할당 → 완료 → hasConflict=false (완료 시 모듈 해제)', () => {
     const a = makeAllocator();
     const r = a.allocate('feat-1', ['locked-state-mod']);
     if (r.ok && r.value[0]) {
       a.completeAllocation(r.value[0].coderId);
-      expect(a.hasConflict(['locked-state-mod'])).toBe(true);
+      expect(a.hasConflict(['locked-state-mod'])).toBe(false);
     }
   });
 
@@ -1249,13 +1248,13 @@ describe('CoderAllocator 상태 전이 검증', () => {
     }
   });
 
-  it('완료 후 재할당 시도 → 실패 (모듈 미해제)', () => {
+  it('완료 후 재할당 시도 → 성공 (완료 시 모듈 해제)', () => {
     const a = makeAllocator();
     const r1 = a.allocate('feat-1', ['complete-only-mod']);
     if (r1.ok && r1.value[0]) {
       a.completeAllocation(r1.value[0].coderId);
       const r2 = a.allocate('feat-2', ['complete-only-mod']);
-      expect(r2.ok).toBe(false);
+      expect(r2.ok).toBe(true);
     }
   });
 
@@ -1749,14 +1748,14 @@ describe('CoderAllocator batch75 추가 케이스 C', () => {
     }
   });
 
-  it('complete 후 hasConflict 각각 true (해제 안 됨)', () => {
+  it('complete 후 hasConflict 각각 false (완료 시 모듈 해제)', () => {
     const a = makeAllocator();
     const mods = ['j9a', 'j9b'];
     const r = a.allocate('feat-j9', mods);
     if (r.ok) {
       for (const alloc of r.value) a.completeAllocation(alloc.coderId);
       for (const m of mods) {
-        expect(a.hasConflict([m])).toBe(true);
+        expect(a.hasConflict([m])).toBe(false);
       }
     }
   });

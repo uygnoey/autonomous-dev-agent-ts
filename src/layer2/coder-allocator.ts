@@ -118,6 +118,11 @@ export class CoderAllocator {
     const updated: CoderAllocation = { ...allocation, status: 'completed' };
     this.allocations.set(coderId, updated);
 
+    // WHY: complete 시에도 모듈 해제하여 재할당 가능하게 함
+    for (const mod of allocation.modules) {
+      this.assignedModules.delete(mod);
+    }
+
     this.logger.info('Coder 할당 완료', { coderId, featureId: allocation.featureId });
     return ok(undefined);
   }
