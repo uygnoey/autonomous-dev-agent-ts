@@ -19,7 +19,100 @@ import {
 import type { HandoffPackage } from '../../layer1/types.js';
 import type { ChatUi } from '../tui/chat.js';
 import { generateHandoffDocs } from './start-handoff-docs.js';
+import { generateAgentMds, runLayer2, runLayer3 } from './start-execution.js';
 import type { Layer1SessionState } from './start-types.js';
+
+/**
+ * Contract 후처리 결과 / Contract post-processing result
+ *
+ * @description
+ * KR: contract case에서 후속 흐름(AgentMd 생성, 품질 검증, Layer2 진행)의 결과를 나타낸다.
+ * EN: Represents the outcome of post-contract flow (AgentMd, quality check, Layer2 launch).
+ */
+export type ContractFlowAction = 'exit' | 'continue_conversation';
+
+/**
+ * Contract 생성 후 후속 흐름 처리 / Handle post-contract flow
+ *
+ * @description
+ * KR: Contract 생성 성공 후 AgentMd 생성 확인, 품질 검증, Layer2 진행 여부를 처리한다.
+ *     chat.waitForInput()으로 유저 확인을 받으므로 async 함수이다.
+ * EN: Handles AgentMd generation prompt, quality gate check, and Layer2 launch confirmation.
+ *
+ * @param session - Layer1 세션 상태 / Layer1 session state
+ * @param handoff - HandoffPackage
+ * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @returns 'exit' (루프 종료) 또는 'continue_conversation' (대화 계속)
+ */
+export async function handleContractPostProcess(
+  session: Layer1SessionState,
+  handoff: HandoffPackage,
+  chat: ChatUi,
+  logger: Logger,
+): Promise<ContractFlowAction> {
+  const contractPath = `${session.projectInfo.path}/.adev/contract.json`;
+  chat.showContractComplete(contractPath);
+
+  // AgentMd 생성 확인
+  chat.system(
+    'AI로 에이전트 가이드 문서(.adev/agents/*.md)를 생성하려면 "yes"를 입력하세요.',
+  );
+  const agentMdEvent = await chat.waitForInput();
+  if (
+    agentMdEvent.type === 'message' &&
+    ['yes', 'y', '네', '예'].includes(agentMdEvent.text.toLowerCase())
+  ) {
+    await generateAgentMds(session, handoff, chat, logger);
+  }
+
+  // WHY: CV-002 — completenessScore < 1.0 시 부족한 항목을 명시하고
+  //      유저가 대화를 이어가 개선할 수 있도록 안내한다 (스펙 §6.7).
+  const matrix = handoff.contract.verificationMatrix;
+  const hasQualityIssues =
+    matrix.completenessScore < 1.0 ||
+    !matrix.allIODefined ||
+    !matrix.allFeaturesHaveCriteria;
+
+  if (hasQualityIssues) {
+    const missing: string[] = [];
+    if (!matrix.allIODefined) missing.push('기능 입출력 정의');
+    if (!matrix.allFeaturesHaveCriteria) missing.push('수락 기준');
+    if (matrix.completenessScore < 1.0)
+      missing.push(`완전성 점수 (현재: ${matrix.completenessScore})`);
+    chat.system(
+      `⚠️ Contract 품질 미달: [${missing.join(', ')}] 항목이 부족합니다.\n계속 진행하려면 "yes"를 입력하세요. 대화로 개선하려면 다른 메시지를 입력하세요.`,
+    );
+  } else {
+    chat.system('Layer2 자율 개발을 시작하려면 "yes"를 입력하세요.');
+  }
+
+  const confirmEvent = await chat.waitForInput();
+  if (
+    confirmEvent.type === 'message' &&
+    ['yes', 'y', '네', '예'].includes(confirmEvent.text.toLowerCase())
+  ) {
+    const layer2Result = await runLayer2(session, handoff, chat, logger);
+    if (!layer2Result.ok) {
+      chat.error(`Layer2 실행 실패: ${layer2Result.error.message}`);
+    } else {
+      // WHY: Layer2 성공 시 Layer3 E2E 검증 자동 실행 (스펙 §계층 연동)
+      await runLayer3(session, handoff, chat, logger);
+    }
+    return 'exit';
+  }
+
+  // WHY: 품질 이슈가 있고 유저가 "yes"를 입력하지 않으면 대화 루프를 유지해
+  //      누락된 항목을 보완할 수 있도록 한다.
+  if (hasQualityIssues) {
+    chat.system(
+      '대화를 계속하여 누락된 항목을 추가해 주세요. Contract를 다시 생성하려면 "/contract"를 입력하세요.',
+    );
+    return 'continue_conversation';
+  }
+
+  return 'exit';
+}
 
 /**
  * Contract 생성 파이프라인 / Generate Contract via Layer1 pipeline

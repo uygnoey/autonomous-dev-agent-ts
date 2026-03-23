@@ -8,11 +8,11 @@
  *     Executes git commands via ProcessExecutor and yields results as AgentEvent stream.
  */
 
-import { AdevError } from 'core/errors.js';
+import type { AdevError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { ProcessExecutor } from 'core/process-executor.js';
-import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
+import { collectConflictedFiles, executeGit } from 'layer2/git-branch-utils.js';
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent } from 'layer2/types.js';
 
@@ -199,7 +199,7 @@ export class GitBranchManager {
     }
 
     // 3. 충돌 여부 확인 — 충돌 파일 목록 수집
-    const conflictedFiles = await this.collectConflictedFiles();
+    const conflictedFiles = await collectConflictedFiles(this.processExecutor, this.cwd);
     const fileList = conflictedFiles.join(', ') || '(파일 목록 없음)';
 
     this.logger.warn('병합 충돌 발생 — abort 수행', { branchName, conflictedFiles });
@@ -267,38 +267,6 @@ export class GitBranchManager {
    * @returns 표준 출력 또는 에러 / stdout or error
    */
   private async git(args: readonly string[]): Promise<Result<string, AdevError>> {
-    const result = await this.processExecutor.execute('git', args, { cwd: this.cwd });
-
-    if (!result.ok) {
-      return err(result.error);
-    }
-
-    if (result.value.exitCode !== 0) {
-      const detail = result.value.stderr || result.value.stdout || '알 수 없는 오류';
-      return err(new AdevError('git_command_error', `git ${args[0]} 실패: ${detail.trim()}`));
-    }
-
-    return ok(result.value.stdout);
-  }
-
-  /**
-   * 충돌 파일 목록을 수집한다 / Collect conflicted file paths
-   *
-   * @description
-   * KR: `git diff --name-only --diff-filter=U`로 충돌 파일을 나열한다.
-   *     실패 시 빈 배열을 반환한다.
-   * EN: Lists conflicted files via `git diff --name-only --diff-filter=U`.
-   *     Returns empty array on failure.
-   */
-  private async collectConflictedFiles(): Promise<readonly string[]> {
-    const result = await this.git(['diff', '--name-only', '--diff-filter=U']);
-    if (!(result.ok && result.value.trim())) {
-      return [];
-    }
-    return result.value
-      .trim()
-      .split('\n')
-      .map((f) => f.trim())
-      .filter((f) => f.length > 0);
+    return executeGit(this.processExecutor, args, this.cwd);
   }
 }
