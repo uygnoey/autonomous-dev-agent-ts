@@ -140,6 +140,14 @@ export async function* executeCodePhase(
   if (!deps.parallelCoderRunner) {
     // WHY: parallelCoderRunner 미주입 시 단일 순차 실행으로 폴백
     yield* executePhase(deps, 'CODE', featureId, handoffPackage);
+
+    // WHY: 단일 순차 실행에서도 coder 작업 완료 후 커밋이 필요하다.
+    //       이 커밋이 없으면 merge 시 변경사항이 누락되거나 git 이력이 init 1개뿐이 된다.
+    if (deps.gitBranchManager) {
+      yield* deps.gitBranchManager.commitChanges(
+        `feat(${featureId}): CODE phase 완료`,
+      );
+    }
     return;
   }
 
