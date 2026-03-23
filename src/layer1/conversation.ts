@@ -169,7 +169,9 @@ export class ConversationManager {
 
     // WHY: vectorSearch는 필터 없이 실행 후 TypeScript 레벨에서 projectId/type 필터링
     //      vectorSearch().where() 호환성 문제 우회
-    const searchResult = await this.memoryRepository.search(queryVector, limit);
+    // WHY: 다른 프로젝트/타입의 레코드가 limit개를 차지하면 결과가 0개가 될 수 있으므로
+    //      충분한 후보를 확보하여 TypeScript 레벨 필터링 후에도 원하는 수의 결과를 보장
+    const searchResult = await this.memoryRepository.search(queryVector, limit * 5);
 
     if (!searchResult.ok) {
       return searchResult as Result<ConversationMessage[], AdevError>;

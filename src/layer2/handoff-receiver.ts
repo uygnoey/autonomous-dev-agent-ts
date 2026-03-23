@@ -194,6 +194,7 @@ export class HandoffReceiver {
 
     const white = new Set(contract.features.map((f) => f.id));
     const gray = new Set<string>();
+    const black = new Set<string>(); // WHY: 완전 방문 노드 재탐색 방지
 
     const dfs = (nodeId: string): boolean => {
       white.delete(nodeId);
@@ -202,15 +203,16 @@ export class HandoffReceiver {
       const deps = adjacency.get(nodeId) ?? [];
       for (const dep of deps) {
         if (gray.has(dep)) return true;
-        if (white.has(dep) && dfs(dep)) return true;
+        if (white.has(dep) && !black.has(dep) && dfs(dep)) return true;
       }
 
       gray.delete(nodeId);
+      black.add(nodeId);
       return false;
     };
 
     for (const featureId of [...white]) {
-      if (white.has(featureId) && dfs(featureId)) {
+      if (white.has(featureId) && !black.has(featureId) && dfs(featureId)) {
         return true;
       }
     }

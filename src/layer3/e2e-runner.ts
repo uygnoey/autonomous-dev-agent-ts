@@ -16,6 +16,37 @@ import { err, ok } from 'core/types.js';
 import type { E2ETestRun, TestExecutionReport, TestFailure } from 'layer3/types.js';
 
 /**
+ * 따옴표를 고려하여 명령어를 인자 배열로 분리 / Parse command string into args respecting quotes
+ *
+ * @description
+ * KR: 쉘 명령어 문자열을 공백으로 분리하되, 따옴표 내부의 공백은 보존한다.
+ * EN: Splits shell command by spaces while preserving spaces inside quotes.
+ *
+ * @param command - 명령어 문자열 / Command string
+ * @returns 인자 배열 / Argument array
+ */
+function parseCommandArgs(command: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let inQuote: '"' | "'" | null = null;
+  for (const ch of command) {
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+      else current += ch;
+    } else if (ch === '"' || ch === "'") {
+      inQuote = ch;
+    } else if (ch === ' ' && current) {
+      args.push(current);
+      current = '';
+    } else if (ch !== ' ') {
+      current += ch;
+    }
+  }
+  if (current) args.push(current);
+  return args;
+}
+
+/**
  * 간단한 E2E 테스트를 실행한다 (동기 버전) / Run simple E2E tests synchronously
  *
  * @description
@@ -126,8 +157,8 @@ export async function executeE2E(
       break; // WHY: Fail-Fast
     }
 
-    // WHY: 명령어를 토큰으로 분리하여 Bun.spawn에 전달
-    const parts = command.trim().split(/\s+/);
+    // WHY: 따옴표를 고려한 파싱으로 인자 내 공백을 올바르게 처리
+    const parts = parseCommandArgs(command.trim());
     const [cmd, ...args] = parts as [string, ...string[]];
 
     try {

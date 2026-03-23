@@ -133,13 +133,8 @@ export class VerificationEscalator {
           failureReason: `stepFn threw: ${errorMessage}`,
         });
 
-        return err(
-          new AdevError(
-            'verification_escalation_failed',
-            `에스컬레이션 단계 ${model}(${modelId})에서 예외 발생: ${errorMessage}`,
-            caught,
-          ),
-        );
+        // WHY: API 일시 오류(429 등)에서도 다음 모델로 에스컬레이션 시도 — 체인 중단 방지
+        continue;
       }
 
       const attempt: EscalationAttempt = {
