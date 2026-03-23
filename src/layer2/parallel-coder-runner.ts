@@ -192,6 +192,8 @@ export class ParallelCoderRunner {
         'CODE',
       );
 
+      let errorEvent: AgentError | undefined;
+
       for await (const event of this.deps.agentSpawner.spawn(config)) {
         // WHY: 스트림 모니터에 이벤트를 전달해 이상 패턴 감지 활성화
         this.deps.streamMonitor.onEvent({
@@ -203,6 +205,29 @@ export class ParallelCoderRunner {
         });
 
         events.push(event);
+
+        // WHY: AgentSpawner가 throw 대신 에러 이벤트를 yield하므로 감지
+        if (event.type === 'error') {
+          const meta = event.metadata?.error;
+          errorEvent = meta instanceof AgentError
+            ? meta
+            : new AgentError('agent_execution_error', event.content);
+        }
+      }
+
+      if (errorEvent) {
+        this.logger.error('Coder 실행 오류', {
+          coderId: allocation.coderId,
+          error: errorEvent.message,
+        });
+
+        return {
+          coderId: allocation.coderId,
+          branchName: allocation.branchName,
+          succeeded: false,
+          events,
+          error: errorEvent,
+        };
       }
 
       this.logger.info('Coder 실행 완료', {

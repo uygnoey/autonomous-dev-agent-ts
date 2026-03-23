@@ -135,14 +135,19 @@ export class McpManager {
       this.processes.set(name, proc);
 
       // WHY: JSON-RPC 핸드셰이크로 실제 도구 목록 검색
-      const tools = await performHandshake(proc, name, this.logger);
-      for (const tool of tools) {
+      const handshakeResult = await performHandshake(proc, name, this.logger);
+      if (!handshakeResult.ok) {
+        instance.status = 'error';
+        return err(new McpError('mcp_server_start_failed', `MCP 핸드셰이크 실패: ${name} — ${handshakeResult.error.message}`));
+      }
+
+      for (const tool of handshakeResult.value) {
         // WHY: readonly 프로퍼티지만 배열 내용 변경(push)은 허용됨
         (instance.tools as McpTool[]).push(tool);
       }
 
       instance.status = 'running';
-      this.logger.info('MCP 서버 시작 완료', { name, toolCount: tools.length });
+      this.logger.info('MCP 서버 시작 완료', { name, toolCount: handshakeResult.value.length });
       return ok(instance);
     } catch (error: unknown) {
       instance.status = 'error';

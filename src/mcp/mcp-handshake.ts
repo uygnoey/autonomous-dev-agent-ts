@@ -9,7 +9,10 @@
  */
 
 import type { Subprocess } from 'bun';
+import { McpError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { err, ok } from 'core/types.js';
+import type { Result } from 'core/types.js';
 import type { McpTool } from 'mcp/types.js';
 
 // ── 상수 / Constants ─────────────────────────────────────────────
@@ -43,7 +46,7 @@ export async function performHandshake(
   proc: PipedSubprocess,
   name: string,
   logger: Logger,
-): Promise<McpTool[]> {
+): Promise<Result<McpTool[]>> {
   // WHY: Bun의 ReadableStream<Uint8Array>에서 ArrayBuffer 특정 리더 취득
   const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>;
 
@@ -60,7 +63,8 @@ export async function performHandshake(
   });
 
   // 2. initialize 응답 수신
-  await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+  const initResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+  if (!initResult.ok) return initResult;
 
   // 3. initialized 알림 전송 (응답 없음)
   writeRpc(proc, { jsonrpc: '2.0', method: 'notifications/initialized' });
@@ -69,9 +73,12 @@ export async function performHandshake(
   writeRpc(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 
   // 5. tools/list 응답 수신 및 파싱
-  const toolsRaw = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+  const toolsResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+  if (!toolsResult.ok) return toolsResult;
+
+  const toolsRaw = toolsResult.value;
   logger.debug('MCP 도구 목록 수신', { name, preview: toolsRaw.slice(0, 200) });
-  return parseToolsResponse(toolsRaw, logger);
+  return ok(parseToolsResponse(toolsRaw, logger));
 }
 
 // ── 내부 헬퍼 / Internal helpers ─────────────────────────────────
@@ -91,24 +98,29 @@ function writeRpc(proc: PipedSubprocess, message: unknown): void {
 async function readRpcLine(
   reader: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>,
   timeoutMs: number,
-): Promise<string> {
+): Promise<Result<string>> {
   const decoder = new TextDecoder();
   let buffer = '';
 
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`MCP 응답 타임아웃: ${timeoutMs}ms 초과`)), timeoutMs),
+  const timeout = new Promise<Result<string>>((resolve) =>
+    setTimeout(
+      () => resolve(err(new McpError('mcp_handshake_timeout', `MCP 응답 타임아웃: ${timeoutMs}ms 초과`))),
+      timeoutMs,
+    ),
   );
 
-  const readLine = async (): Promise<string> => {
+  const readLine = async (): Promise<Result<string>> => {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) throw new Error('MCP 서버 스트림이 종료되었습니다 / Stream closed');
+      if (done) {
+        return err(new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다 / Stream closed'));
+      }
       buffer += decoder.decode(value, { stream: true });
       const newlineIdx = buffer.indexOf('\n');
       if (newlineIdx !== -1) {
         const line = buffer.slice(0, newlineIdx).trim();
         buffer = buffer.slice(newlineIdx + 1);
-        if (line) return line;
+        if (line) return ok(line);
       }
     }
   };

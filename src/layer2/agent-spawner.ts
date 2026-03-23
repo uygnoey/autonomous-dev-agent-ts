@@ -8,6 +8,7 @@
  *     Logs spawn and completion events.
  */
 
+import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 
@@ -66,12 +67,22 @@ export class AgentSpawner {
         featureId: config.featureId,
       });
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       this.logger.error('에이전트 실행 실패', {
         agent: config.name,
         phase: config.phase,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
-      throw error;
+      // WHY: async generator에서 throw 대신 에러 이벤트를 yield하여 Result 패턴 철학 준수
+      yield {
+        type: 'error' as const,
+        agentName: config.name,
+        content: message,
+        timestamp: new Date(),
+        metadata: {
+          error: error instanceof AgentError ? error : new AgentError('agent_execution_error', `에이전트 실행 실패: ${message}`, error),
+        },
+      };
     }
   }
 
@@ -91,11 +102,22 @@ export class AgentSpawner {
 
       this.logger.info('세션 재개 완료', { sessionId });
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       this.logger.error('세션 재개 실패', {
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       });
-      throw error;
+      // WHY: async generator에서 throw 대신 에러 이벤트를 yield하여 Result 패턴 철학 준수
+      yield {
+        type: 'error' as const,
+        agentName: 'coder' as const,
+        content: message,
+        timestamp: new Date(),
+        metadata: {
+          error: error instanceof AgentError ? error : new AgentError('agent_session_resume_error', `세션 재개 실패: ${message}`, error),
+          sessionId,
+        },
+      };
     }
   }
 }
