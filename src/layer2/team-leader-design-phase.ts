@@ -16,6 +16,13 @@ import type { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 import type { RagSearcher } from 'rag/search.js';
 import { createEvent, queryRagContext } from 'layer2/team-leader-helpers.js';
 
+/** TeamDelete 안정화 대기 횟수 / TeamDelete settle attempts */
+const TEAM_DELETE_SETTLE_ATTEMPTS = 3;
+/** TeamDelete 안정화 대기 간격 (ms) / TeamDelete settle interval */
+const TEAM_DELETE_SETTLE_INTERVAL_MS = 300;
+/** 파일 시스템 동기화 추가 대기 (ms) / FS sync delay */
+const FS_SYNC_DELAY_MS = 200;
+
 /** executeDesignPhaseWithMonitoring에 필요한 의존성 */
 export interface ExecuteDesignPhaseDeps {
   readonly sessionExecutor: V2SessionExecutor;
@@ -129,13 +136,16 @@ export async function* executeDesignPhaseWithMonitoring(
     } finally {
       deps.streamMonitor.stopMonitoring();
       deps.ipcPoller.stop();
-      // WHY: PI-008 — §16 TeamDelete race condition 완화 — 3회 대기로 멤버 상태 안정화
-      for (let i = 0; i < 3; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        deps.logger.debug('TeamDelete race condition 대기', { attempt: i + 1, maxAttempts: 3 });
+      // WHY: PI-008 — §16 TeamDelete race condition 완화 — N회 대기로 멤버 상태 안정화
+      for (let i = 0; i < TEAM_DELETE_SETTLE_ATTEMPTS; i++) {
+        await new Promise((resolve) => setTimeout(resolve, TEAM_DELETE_SETTLE_INTERVAL_MS));
+        deps.logger.debug('TeamDelete race condition 대기', {
+          attempt: i + 1,
+          maxAttempts: TEAM_DELETE_SETTLE_ATTEMPTS,
+        });
       }
-      // WHY: PI-006 — 파일시스템 변경이 반영될 시간 추가 (race condition 완화, 총 1100ms 확보)
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // WHY: PI-006 — 파일시스템 변경이 반영될 시간 추가 (race condition 완화)
+      await new Promise((resolve) => setTimeout(resolve, FS_SYNC_DELAY_MS));
     }
   }
 

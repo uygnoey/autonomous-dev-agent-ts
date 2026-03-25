@@ -14,7 +14,12 @@ import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import { readTemplateSourceFile } from 'layer3/doc-integrator-fragment.js';
 import type { IntegrateOptions } from 'layer3/doc-integrator-types.js';
-import type { DocumentTemplate, IntegratedDocument, ProjectDocumentType } from 'layer3/types.js';
+import type {
+  BusinessDeliverableType,
+  DocumentTemplate,
+  IntegratedDocument,
+  ProjectDocumentType,
+} from 'layer3/types.js';
 
 /** generateAll에서 유효한 프로젝트 문서 유형 / Valid project document types for generateAll */
 const VALID_PROJECT_TYPES = new Set<string>([
@@ -60,6 +65,26 @@ export function loadDefaultTemplates(
       custom: false,
     };
     registry.set(template.id ?? `default-${type}`, template);
+  }
+
+  // WHY: L-N1 — §9.1 비즈니스 산출물 기본 템플릿 4개 DocIntegrator 통합
+  const businessTypes: readonly BusinessDeliverableType[] = [
+    'portfolio',
+    'business-plan',
+    'investment-proposal',
+    'presentation',
+  ];
+  for (const bizType of businessTypes) {
+    const bizTemplate: DocumentTemplate = {
+      id: `business-${bizType}`,
+      name: bizType,
+      type: bizType,
+      format: bizType === 'presentation' ? 'pptx' : 'pdf',
+      templatePath: `templates/business/${bizType}.hbs`,
+      description: `Default ${bizType} business template`,
+      custom: false,
+    };
+    registry.set(bizTemplate.id ?? `business-${bizType}`, bizTemplate);
   }
 
   logger.debug('기본 템플릿 로드 완료', { count: registry.size });

@@ -337,6 +337,31 @@ export class GitBranchManager {
   }
 
   /**
+   * CODE Phase 이후 수정된 파일 목록을 반환한다 / Returns list of modified files after CODE phase
+   *
+   * @description
+   * KR: M-A2 — `git diff --name-only HEAD~1`로 직전 커밋 대비 변경 파일 목록을 수집한다.
+   *     계단식 차등 테스트에서 수정된 파일만 대상으로 테스트하기 위해 사용된다.
+   * EN: M-A2 — Collects changed file list via `git diff --name-only HEAD~1`.
+   *     Used for staircase differential testing targeting only modified files.
+   *
+   * @returns 수정된 파일 경로 배열 / Array of modified file paths
+   */
+  async getModifiedFiles(): Promise<Result<string[], AdevError>> {
+    const result = await this.git(['diff', '--name-only', 'HEAD~1']);
+    if (!result.ok) {
+      this.logger.warn('수정 파일 목록 조회 실패 — 빈 배열 반환', { error: result.error.message });
+      // WHY: diff 실패 시에도 빈 배열로 정상 반환 — 테스트 전체 실행으로 fallback
+      return { ok: true, value: [] };
+    }
+    const paths = result.value
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    return { ok: true, value: paths };
+  }
+
+  /**
    * git 명령을 실행한다 / Execute a git command
    *
    * @param args - git 인자 / git arguments

@@ -26,6 +26,7 @@ import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
+import type { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 import type { VerificationGate } from 'layer2/verification-gate.js';
 import type { RagSearcher } from 'rag/search.js';
 
@@ -72,4 +73,6 @@ export interface TeamLeaderDeps {
   readonly projectPath?: string;
   /** 수정된 파일 목록 (선택) — 통합 테스트에 사용 / Modified files (optional) for integration tests */
   readonly modifiedFiles?: ModifiedFiles;
+  /** V2 세션 실행기 (선택) — DESIGN Phase executeDesignPhaseWithMonitoring에 사용 / V2 session executor (optional) for DESIGN phase monitoring */
+  readonly sessionExecutor?: V2SessionExecutor;
 }

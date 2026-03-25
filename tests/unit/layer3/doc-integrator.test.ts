@@ -229,10 +229,10 @@ describe('DocIntegrator listTemplates', () => {
     integrator = new DocIntegrator(new ConsoleLogger('error'));
   });
 
-  it('기본 템플릿 8개를 반환한다', async () => {
+  it('기본 템플릿 12개를 반환한다', async () => {
     const result = await integrator.listTemplates(false);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.length).toBe(8);
+    if (result.ok) expect(result.value.length).toBe(12);
   });
 
   it('readme 템플릿이 포함된다', async () => {
@@ -299,9 +299,9 @@ describe('DocIntegrator listTemplates', () => {
     }
   });
 
-  it('커스텀 포함 옵션 → 8개 이상', async () => {
+  it('커스텀 포함 옵션 → 12개 이상', async () => {
     const result = await integrator.listTemplates(true);
-    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(8);
+    if (result.ok) expect(result.value.length).toBeGreaterThanOrEqual(12);
   });
 
   it('모든 템플릿이 id를 가진다', async () => {
@@ -1106,7 +1106,7 @@ describe('DocIntegrator listTemplates - 세부 검증', () => {
     }
   });
 
-  it('기본 8개 모두 description 필드가 있다', async () => {
+  it('기본 12개 모두 description 필드가 있다', async () => {
     const result = await integrator.listTemplates(false);
     if (result.ok) {
       for (const t of result.value) {
@@ -1115,7 +1115,7 @@ describe('DocIntegrator listTemplates - 세부 검증', () => {
     }
   });
 
-  it('기본 8개 모두 name 길이가 0보다 크다', async () => {
+  it('기본 12개 모두 name 길이가 0보다 크다', async () => {
     const result = await integrator.listTemplates(false);
     if (result.ok) {
       for (const t of result.value) {
@@ -1124,19 +1124,20 @@ describe('DocIntegrator listTemplates - 세부 검증', () => {
     }
   });
 
-  it('기본 8개 모두 id가 "default-"로 시작한다', async () => {
+  it('기본 12개 모두 id가 "default-" 또는 "business-"로 시작한다', async () => {
     const result = await integrator.listTemplates(false);
     if (result.ok) {
       for (const t of result.value) {
-        expect(t.id?.startsWith('default-')).toBe(true);
+        const hasValidPrefix = t.id?.startsWith('default-') || t.id?.startsWith('business-');
+        expect(hasValidPrefix).toBe(true);
       }
     }
   });
 
-  it('5번 반복 listTemplates(false) → 항상 8개', async () => {
+  it('5번 반복 listTemplates(false) → 항상 12개', async () => {
     for (let i = 0; i < 5; i++) {
       const result = await integrator.listTemplates(false);
-      if (result.ok) expect(result.value.length).toBe(8);
+      if (result.ok) expect(result.value.length).toBe(12);
     }
   });
 
@@ -1676,9 +1677,9 @@ describe('DocIntegrator listTemplates - 추가 엣지 케이스', () => {
     integrator = new DocIntegrator(new ConsoleLogger('error'));
   });
 
-  it('includeCustom=true → 기본 템플릿 8개 이상', async () => {
+  it('includeCustom=true → 기본 템플릿 12개 이상', async () => {
     const r = await integrator.listTemplates(true);
-    if (r.ok) expect(r.value.length).toBeGreaterThanOrEqual(8);
+    if (r.ok) expect(r.value.length).toBeGreaterThanOrEqual(12);
   });
 
   it('includeCustom=false → 기본 템플릿만 반환', async () => {

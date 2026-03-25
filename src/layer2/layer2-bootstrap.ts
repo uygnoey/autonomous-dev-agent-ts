@@ -191,12 +191,16 @@ export class Layer2Bootstrap {
       ],
     };
 
+    // WHY: L-R4 — 모델명 config 경유 (하드코딩 금지 컨벤션 준수)
+    const executorModel =
+      this.verificationConfig?.adevModel === 'sonnet' ? 'claude-sonnet-4-6' : 'claude-opus-4-6';
+
     // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle + PreToolUse/PostToolUse 훅 주입)
     const executor = new V2SessionExecutor({
       authProvider: this.authProvider,
       logger,
       defaultOptions: {
-        model: 'claude-opus-4-6',
+        model: executorModel,
         maxTurns: 50,
       },
       hooks: {
@@ -241,10 +245,15 @@ export class Layer2Bootstrap {
     }
 
     // 6. 세션 복원 오케스트레이터 (Batch 1 신규 컴포넌트)
+    // WHY: M-A4 — tokenMonitor/agentSpawner/ragSearcher 주입으로
+    //      RAG fallback + 새 세션 spawn + 토큰 한도 복원을 활성화한다
     const sessionRestoreOrchestrator = new SessionRestoreOrchestrator({
       sessionSnapshotStore,
       logger,
       authProvider: this.authProvider,
+      ragSearcher: this.ragSearcher,
+      agentSpawner,
+      tokenMonitor,
     });
 
     // 7. 디스크 IPC 폴러 (Batch 1 신규 컴포넌트)
@@ -314,6 +323,8 @@ export class Layer2Bootstrap {
       // WHY: H-004 — ragSearcher 미주입으로 LanceDB RAG 컨텍스트 비활성 상태
       //      외부에서 주입받은 RagSearcher를 전달하여 에이전트들이 과거 이력 참조 가능하게 함
       ragSearcher: this.ragSearcher,
+      // WHY: H-A1 — DESIGN Phase에서 executeDesignPhaseWithMonitoring()이 V2SessionExecutor를 직접 사용
+      sessionExecutor: executor,
     };
 
     return new TeamLeader(deps);

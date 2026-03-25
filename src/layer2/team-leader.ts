@@ -13,18 +13,13 @@ import type { HandoffPackage } from 'layer1/types.js';
 import type { IpcPoller } from 'layer2/ipc-poller.js';
 import type { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestrator.js';
 import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
-import {
-  createEvent,
-  executeCodePhase,
-  executePhase,
-  executeTestPhase,
-  executeVerifyPhase,
-} from 'layer2/team-leader-helpers.js';
+import { createEvent } from 'layer2/team-leader-helpers.js';
 import {
   advancePhase,
   handleVerifyResult,
   spawnDocumenterOnPhaseBoundary,
 } from 'layer2/team-leader-phase.js';
+import { executeCurrentPhase } from 'layer2/team-leader-phase-dispatch.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { runTokenWaitLoop } from 'layer2/token-wait-loop.js';
 import type { AgentEvent } from 'layer2/types.js';
@@ -107,6 +102,7 @@ export class TeamLeader implements ITeamLeader {
   private readonly userInputProvider: TeamLeaderDeps['userInputProvider'];
   private readonly projectPath: TeamLeaderDeps['projectPath'];
   private readonly modifiedFiles: TeamLeaderDeps['modifiedFiles'];
+  private readonly sessionExecutor: TeamLeaderDeps['sessionExecutor'];
   private currentFeatureId: string | null = null;
 
   /**
@@ -137,6 +133,7 @@ export class TeamLeader implements ITeamLeader {
     this.userInputProvider = deps.userInputProvider;
     this.projectPath = deps.projectPath;
     this.modifiedFiles = deps.modifiedFiles;
+    this.sessionExecutor = deps.sessionExecutor;
   }
 
   /**
@@ -206,78 +203,33 @@ export class TeamLeader implements ITeamLeader {
           }
         }
 
-        if (currentPhase === 'VERIFY') {
-          yield* executeVerifyPhase(
-            {
-              phaseEngine: this.phaseEngine,
-              tokenMonitor: this.tokenMonitor,
-              agentGenerator: this.agentGenerator,
-              sessionManager: this.sessionManager,
-              agentSpawner: this.agentSpawner,
-              streamMonitor: this.streamMonitor,
-              logger: this.logger,
-              ragSearcher: this.ragSearcher,
-              verificationGate: this.verificationGate,
-              integrationTester: this.integrationTester,
-              layer1Verifier: this.layer1Verifier,
-              projectPath: this.projectPath,
-              modifiedFiles: this.modifiedFiles,
-            },
-            featureId,
-            handoffPackage,
-          );
-        } else if (currentPhase === 'CODE') {
-          yield* executeCodePhase(
-            {
-              phaseEngine: this.phaseEngine,
-              tokenMonitor: this.tokenMonitor,
-              agentGenerator: this.agentGenerator,
-              sessionManager: this.sessionManager,
-              agentSpawner: this.agentSpawner,
-              streamMonitor: this.streamMonitor,
-              logger: this.logger,
-              ragSearcher: this.ragSearcher,
-              coderAllocator: this.coderAllocator,
-              parallelCoderRunner: this.parallelCoderRunner,
-              gitBranchManager: this.gitBranchManager,
-            },
-            featureId,
-            handoffPackage,
-          );
-        } else if (currentPhase === 'TEST') {
-          // WHY: PI-002 — TEST Phase는 Unit→Module→E2E 3단계 순차 실행으로 직접 제어한다
-          yield* executeTestPhase(
-            {
-              phaseEngine: this.phaseEngine,
-              tokenMonitor: this.tokenMonitor,
-              agentGenerator: this.agentGenerator,
-              sessionManager: this.sessionManager,
-              agentSpawner: this.agentSpawner,
-              streamMonitor: this.streamMonitor,
-              logger: this.logger,
-              ragSearcher: this.ragSearcher,
-              failureHandler: this.failureHandler,
-            },
-            featureId,
-            handoffPackage,
-          );
-        } else {
-          yield* executePhase(
-            {
-              phaseEngine: this.phaseEngine,
-              tokenMonitor: this.tokenMonitor,
-              agentGenerator: this.agentGenerator,
-              sessionManager: this.sessionManager,
-              agentSpawner: this.agentSpawner,
-              streamMonitor: this.streamMonitor,
-              logger: this.logger,
-              ragSearcher: this.ragSearcher,
-            },
-            currentPhase,
-            featureId,
-            handoffPackage,
-          );
-        }
+        // WHY: M-R1 — Phase 분기 로직을 team-leader-phase-dispatch.ts로 분리
+        yield* executeCurrentPhase(
+          {
+            phaseEngine: this.phaseEngine,
+            tokenMonitor: this.tokenMonitor,
+            agentGenerator: this.agentGenerator,
+            sessionManager: this.sessionManager,
+            agentSpawner: this.agentSpawner,
+            streamMonitor: this.streamMonitor,
+            logger: this.logger,
+            ragSearcher: this.ragSearcher,
+            verificationGate: this.verificationGate,
+            integrationTester: this.integrationTester,
+            layer1Verifier: this.layer1Verifier,
+            projectPath: this.projectPath,
+            modifiedFiles: this.modifiedFiles,
+            coderAllocator: this.coderAllocator,
+            parallelCoderRunner: this.parallelCoderRunner,
+            gitBranchManager: this.gitBranchManager,
+            failureHandler: this.failureHandler,
+            sessionExecutor: this.sessionExecutor,
+            ipcPoller: this.ipcPoller,
+          },
+          currentPhase,
+          featureId,
+          handoffPackage,
+        );
 
         // WHY: PI-001 — CODE/TEST/VERIFY Phase 실행 후 이상 패턴 감지 시 재spawn
         //      DESIGN Phase는 executePhase()에서 자체 처리하므로 제외

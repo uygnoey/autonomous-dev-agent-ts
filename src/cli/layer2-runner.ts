@@ -17,6 +17,7 @@ import { Layer2Bootstrap } from 'layer2/layer2-bootstrap.js';
 import { UserCheckpoint } from 'layer2/user-checkpoint.js';
 import type { UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
+import type { RagSearcher } from 'rag/search.js';
 
 /**
  * Layer2Bootstrap 생성에 필요한 설정 / Config needed for Layer2Bootstrap creation
@@ -28,6 +29,8 @@ export interface Layer2RunnerConfig {
   readonly userCheckpoint: UserCheckpoint;
   readonly userInputProvider: UserInputProvider;
   readonly verificationConfig?: VerificationConfig;
+  /** M-A3 — RAG 검색기 (에이전트 컨텍스트 주입용) / RAG searcher for agent context injection */
+  readonly ragSearcher?: RagSearcher;
 }
 
 /**
@@ -44,6 +47,8 @@ export function createLayer2Bootstrap(config: Layer2RunnerConfig): Layer2Bootstr
     userCheckpoint: config.userCheckpoint,
     userInputProvider: config.userInputProvider,
     verificationConfig: config.verificationConfig,
+    // WHY: M-A3 — RAG 컨텍스트 주입 활성화 (에이전트들이 과거 이력 참조)
+    ragSearcher: config.ragSearcher,
   });
 }
 

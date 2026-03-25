@@ -22,6 +22,18 @@ import type { AgentEvent } from 'layer2/types.js';
 import type { RagSearcher } from 'rag/search.js';
 import { createEvent, executePhase, spawnDocumenter } from 'layer2/team-leader-helpers.js';
 
+/**
+ * CODE Phase에서 갱신 가능한 수정 파일 목록 / Mutable modified files for CODE phase update
+ *
+ * @description
+ * KR: M-A2 — CODE Phase 완료 후 git diff로 수집한 파일 목록을 갱신한다.
+ *     readonly ModifiedFiles와 달리 paths를 재할당할 수 있다.
+ * EN: M-A2 — Updated with file list collected via git diff after CODE phase.
+ */
+export interface MutableModifiedFiles {
+  paths: string[];
+}
+
 /** executeCodePhase에 필요한 의존성 / Deps needed by executeCodePhase */
 export interface ExecuteCodePhaseDeps {
   readonly phaseEngine: PhaseEngine;
@@ -35,6 +47,8 @@ export interface ExecuteCodePhaseDeps {
   readonly coderAllocator: CoderAllocator;
   readonly parallelCoderRunner?: ParallelCoderRunner;
   readonly gitBranchManager?: GitBranchManager;
+  /** M-A2 — CODE Phase 완료 후 수정 파일 목록 갱신용 / Mutable modified files for post-CODE update */
+  readonly modifiedFiles?: MutableModifiedFiles;
 }
 
 /**
@@ -67,6 +81,14 @@ export async function* executeCodePhase(
       yield* deps.gitBranchManager.commitChanges(`feat(${featureId}): CODE phase 완료`);
     }
 
+    // WHY: M-A2 — CODE Phase 완료 후 modifiedFiles 갱신하여 계단식 차등 테스트 활성화
+    if (deps.gitBranchManager && deps.modifiedFiles) {
+      const diffPaths = await deps.gitBranchManager.getModifiedFiles();
+      if (diffPaths.ok) {
+        deps.modifiedFiles.paths = diffPaths.value;
+      }
+    }
+
     // WHY: NI-007 — coder 수정 완료 시 documenter spawn (CHANGELOG 갱신)
     yield* spawnDocumenter(
       deps.agentGenerator,
@@ -91,8 +113,10 @@ export async function* executeCodePhase(
         `feat(${featureId}): ${allocation.coderId} CODE phase 완료`,
       );
       // WHY: PI-003 — 병합 충돌 시 충돌 해결 프롬프트를 전달하고 architect spawn으로 해결 조율
+      let hasConflict = false;
       for await (const mergeEvent of deps.gitBranchManager.mergeBranch(allocation.branchName)) {
         if (mergeEvent.type === 'error' && mergeEvent.metadata?.conflictResolutionPrompt) {
+          hasConflict = true;
           yield createEvent(
             'message',
             `[충돌 감지] ${allocation.coderId}: ${String(mergeEvent.metadata.conflictResolutionPrompt)}`,
@@ -107,7 +131,26 @@ export async function* executeCodePhase(
         }
         yield mergeEvent;
       }
+
+      // WHY: M-Q2 — 충돌 해결 후 merge 재시도
+      if (hasConflict) {
+        for await (const retryEvent of deps.gitBranchManager.mergeBranch(allocation.branchName)) {
+          if (retryEvent.type === 'error') {
+            yield createEvent('error', `충돌 해결 후 merge 재시도 실패: ${retryEvent.content}`);
+          }
+          yield retryEvent;
+        }
+      }
+
       deps.coderAllocator.mergeAllocation(allocation.coderId);
+    }
+
+    // WHY: M-A2 — 병렬 CODE Phase 완료 후 modifiedFiles 갱신하여 계단식 차등 테스트 활성화
+    if (deps.modifiedFiles) {
+      const diffPaths = await deps.gitBranchManager.getModifiedFiles();
+      if (diffPaths.ok) {
+        deps.modifiedFiles.paths = diffPaths.value;
+      }
     }
   }
 

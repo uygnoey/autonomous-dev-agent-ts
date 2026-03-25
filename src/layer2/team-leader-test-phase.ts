@@ -67,19 +67,20 @@ export async function* executeTestPhase(
     { scope: 'e2e', dir: 'tests/e2e/' },
   ];
 
-  // WHY: PI-002 — 전체 통과할 때까지 재시도. 무한 루프 방지 안전장치로 전체 최대 10회.
-  const MAX_TEST_GLOBAL_RETRIES = 10;
-  let globalRetryCount = 0;
+  // WHY: H-Q1 — 단계별 독립 재시도 카운터
+  //      unit 단계 재시도가 e2e 단계 기회를 잠식하지 않도록 단계별 최대 3회로 제한
+  const MAX_STAGE_RETRIES = 3;
 
   for (const stage of TEST_STAGES) {
     let stageResolved = false;
+    let stageRetryCount = 0; // WHY: 단계별 독립 카운터
 
-    while (!stageResolved && globalRetryCount < MAX_TEST_GLOBAL_RETRIES) {
-      const isRetry = globalRetryCount > 0 && !stageResolved;
-      deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope, globalRetryCount });
+    while (!stageResolved && stageRetryCount < MAX_STAGE_RETRIES) {
+      const isRetry = stageRetryCount > 0;
+      deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope, stageRetryCount });
       yield createEvent(
         'message',
-        `[TEST] ${stage.scope} 테스트 실행 시작${isRetry ? ` (재시도 ${globalRetryCount}/${MAX_TEST_GLOBAL_RETRIES})` : ''}`,
+        `[TEST] ${stage.scope} 테스트 실행 시작${isRetry ? ` (재시도 ${stageRetryCount}/${MAX_STAGE_RETRIES})` : ''}`,
       );
 
       let stageFailed = false;
@@ -154,23 +155,36 @@ export async function* executeTestPhase(
         break;
       }
 
-      globalRetryCount++;
+      stageRetryCount++;
 
       deps.logger.warn('TEST Phase 단계 실패', {
         featureId,
         scope: stage.scope,
-        globalRetryCount,
-        maxRetries: MAX_TEST_GLOBAL_RETRIES,
+        stageRetryCount,
+        maxRetries: MAX_STAGE_RETRIES,
       });
 
       // WHY: PI-004 — 실패 시 qc 에이전트 spawn하여 원인 분석
       yield* spawnQcForTestFailure(deps, featureId, handoffPackage, stage.scope);
 
-      if (globalRetryCount < MAX_TEST_GLOBAL_RETRIES) {
-        // WHY: PI-002 — qc 분석 후 coder 에이전트에게 수정 요청, 전체 통과할 때까지 반복
+      // WHY: L-A4 — 테스트 실패 시 bug_detected documenter 트리거 (§7.3 스펙)
+      if (deps.agentGenerator && deps.agentSpawner) {
+        yield* spawnDocumenter(
+          deps.agentGenerator,
+          deps.agentSpawner,
+          deps.logger,
+          featureId,
+          handoffPackage,
+          { trigger: 'bug_detected', context: { phase: 'TEST', stage: stage.scope } },
+          deps.ragSearcher,
+        );
+      }
+
+      if (stageRetryCount < MAX_STAGE_RETRIES) {
+        // WHY: PI-002 — qc 분석 후 coder 에이전트에게 수정 요청, 단계별 통과할 때까지 반복
         yield createEvent(
           'message',
-          `[TEST] ${stage.scope} 실패 — qc 분석 후 coder 수정 재시도 (${globalRetryCount}/${MAX_TEST_GLOBAL_RETRIES})`,
+          `[TEST] ${stage.scope} 실패 — qc 분석 후 coder 수정 재시도 (${stageRetryCount}/${MAX_STAGE_RETRIES})`,
         );
         yield* spawnCoderForTestFix(deps, featureId, handoffPackage, stage.scope);
       }
@@ -179,7 +193,7 @@ export async function* executeTestPhase(
     if (!stageResolved) {
       yield createEvent(
         'error',
-        `[TEST] ${stage.scope} 테스트 실패 — 전체 재시도 ${MAX_TEST_GLOBAL_RETRIES}회 초과. CODE Phase로 롤백 필요`,
+        `[TEST] ${stage.scope} 테스트 ${MAX_STAGE_RETRIES}회 재시도 후 실패`,
       );
       return;
     }
