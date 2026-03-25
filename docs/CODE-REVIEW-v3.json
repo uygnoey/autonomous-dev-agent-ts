@@ -1,0 +1,22 @@
+{
+  "_meta": { "reviewedAt": "2026-03-25T16:00:00+09:00", "reviewers": ["architect","reviewer","qa","qc"] },
+  "HIGH": [
+    {"id":"H-A1","src":"architect","title":"DESIGN Phase executeDesignPhaseWithMonitoring 미연결","file":"src/layer2/team-leader.ts:264-279","detail":"DESIGN Phase가 executePhase()로 처리됨. Agent Teams 팀 토론/이상 감지/IpcPoller 비활성","fix":"currentPhase==='DESIGN' 분기 → executeDesignPhaseWithMonitoring() 호출"},
+    {"id":"H-Q1","src":"qc","title":"TEST Phase globalRetryCount 3단계 공유","file":"src/layer2/team-leader-test-phase.ts:71-77","detail":"unit에서 재시도를 많이 쓰면 e2e 재시도 기회 잠식","fix":"단계별 독립 retryCount 사용"}
+  ],
+  "MEDIUM": [
+    {"id":"M-A2","src":"architect","title":"modifiedFiles 업데이트 누락","file":"src/layer2/layer2-bootstrap.ts:313","detail":"항상 빈 paths[] — 계단식 차등 테스트 무의미","fix":"CODE Phase 완료 후 git diff로 수정 파일 수집"},
+    {"id":"M-A3","src":"architect","title":"CLI layer2-runner에서 ragSearcher 미전달","file":"src/cli/layer2-runner.ts:40-47","detail":"RAG 컨텍스트 주입 비활성","fix":"start-execution에서 RagSearcher 생성 후 전달"},
+    {"id":"M-A4","src":"architect","title":"SessionRestoreOrchestrator tokenMonitor/agentSpawner 미주입","file":"src/layer2/layer2-bootstrap.ts:244-248","detail":"토큰 복원 및 새 세션 spawn 비활성","fix":"bootstrap에서 tokenMonitor + agentSpawner 주입"},
+    {"id":"M-Q2","src":"qc","title":"충돌 해결 후 merge 재시도 없음","file":"src/layer2/team-leader-code-phase.ts:88-111","detail":"spawnConflictResolver 후 merge 재시도 로직 없음","fix":"충돌 해결 완료 후 mergeBranch 재시도"},
+    {"id":"M-R1","src":"reviewer","title":"team-leader.ts 419줄 초과","file":"src/layer2/team-leader.ts","detail":"300줄 규칙 119줄 초과","fix":"Phase 분기 로직을 team-leader-phase-dispatch.ts로 분리"},
+    {"id":"M-R2","src":"reviewer","title":"session-restore-orchestrator.ts 387줄 초과","file":"src/layer2/session-restore-orchestrator.ts","detail":"300줄 규칙 87줄 초과","fix":"fallback 로직 별도 파일로 분리"},
+    {"id":"M-R3","src":"reviewer","title":"design-phase 대기 시간 매직 넘버","file":"src/layer2/team-leader-design-phase.ts:133-138","detail":"1100ms 하드코딩","fix":"명명된 상수 추출"}
+  ],
+  "LOW": [
+    {"id":"L-A4","src":"architect","title":"TEST Phase 실패 시 bug_detected documenter 트리거 없음","file":"src/layer2/team-leader-test-phase.ts","fix":"qc/coder 재시도 시 bug_detected 이벤트 dispatch"},
+    {"id":"L-N1","src":"architect","title":"비즈니스 템플릿 4개 DocIntegrator 미통합","file":"src/layer3/doc-integrator-template.ts","fix":"BusinessDeliverableType 4개 loadDefaultTemplates에 추가"},
+    {"id":"L-Q1","src":"qc","title":"정상 완료 시에도 1100ms 대기","file":"src/layer2/team-leader-design-phase.ts:133","fix":"정상 완료 감지 시 대기 스킵"},
+    {"id":"L-R4","src":"reviewer","title":"layer2-bootstrap.ts 모델명 하드코딩","file":"src/layer2/layer2-bootstrap.ts:199","fix":"config.verification.layer1Model 경유"}
+  ]
+}
