@@ -106,6 +106,13 @@ export class StartCommand {
     try {
       chat.start();
 
+      // WHY: PI-001 — 현재 Phase를 유저에게 표시하여 대화 맥락 제공
+      if (session.conversationFsm) {
+        chat.system(
+          `[${session.conversationFsm.currentPhase}] 대화 시작. 아이디어를 말씀해주세요.`,
+        );
+      }
+
       const initialFeature = (options as StartOptions).feature;
       if (initialFeature) {
         const responseResult = await this.processUserInput(session, initialFeature, chat);
@@ -194,8 +201,26 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(userMessage);
 
+      // WHY: PI-002/003 — §6.3 유저 확정 감지 → Phase 전환
+      if (session.conversationFsm) {
+        const confirmed = session.conversationFsm.detectConfirmation(userInput);
+        if (confirmed) {
+          const advanced = session.conversationFsm.advancePhase();
+          if (advanced.ok) {
+            const newPhase = session.conversationFsm.currentPhase;
+            chat.system(`[Phase 전환] ${newPhase}`);
+            this.logger.info('ConversationFsm Phase 전환', { newPhase });
+          }
+        }
+      }
+
+      // WHY: PI-001 — §6.2 Phase별 시스템 프롬프트 동적 주입
+      const phaseSystemPrompt = session.conversationFsm
+        ? session.conversationFsm.getSystemPrompt()
+        : LAYER1_SYSTEM_PROMPT;
+
       const messages = [
-        { role: 'user' as const, content: LAYER1_SYSTEM_PROMPT },
+        { role: 'user' as const, content: phaseSystemPrompt },
         ...session.messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: userInput },
       ];

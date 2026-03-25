@@ -18,6 +18,8 @@ import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
 import type { AgentMdGeneratorConfig } from '../../layer1/agent-md-generator.js';
 import { AgentMdReviewer } from '../../layer1/agent-md-reviewer.js';
 import type { AgentMdReviewInput } from '../../layer1/agent-md-reviewer.js';
+import { SkillMdGenerator } from '../../layer1/skill-md-generator.js';
+import type { SkillMdGeneratorConfig } from '../../layer1/skill-md-generator.js';
 import type { HandoffPackage } from '../../layer1/types.js';
 import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
 import { IntegrationTester } from '../../layer2/integration-tester.js';
@@ -105,6 +107,70 @@ export async function generateAgentMds(
     return ok(undefined);
   } catch (error: unknown) {
     logger.warn('에이전트 .md 생성 예외 발생, 건너뜀', { error: String(error) });
+    return ok(undefined);
+  }
+}
+
+/**
+ * SKILL.md 초안 생성 / Generate SKILL.md drafts
+ *
+ * @description
+ * KR: PI-004 — §7.4 SKILL.md 자동 생성 파이프라인 통합.
+ *     HandoffPackage의 specDocument를 분석하여 프로젝트에 필요한 Skill을 추출하고,
+ *     각 Skill의 SKILL.md 초안을 .adev/skills/{skillName}/SKILL.md에 저장한다.
+ * EN: PI-004 — Integrates SKILL.md auto-generation pipeline.
+ *
+ * @param session - Layer1 세션 상태 / Layer1 session state
+ * @param handoff - HandoffPackage
+ * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @returns 항상 ok(void) — 실패 시 warn 로그만 / Always ok(void) — warns on failure
+ */
+export async function generateSkillMds(
+  session: Layer1SessionState,
+  handoff: HandoffPackage,
+  chat: ChatUi,
+  logger: Logger,
+): Promise<Result<void, AdevError>> {
+  try {
+    chat.startSpinner('SKILL.md 자동 생성 중...');
+
+    const config: SkillMdGeneratorConfig = {
+      projectPath: session.projectInfo.path,
+      projectName: session.projectInfo.name,
+      projectType: handoff.contract.projectType,
+      techStack: 'TypeScript, Bun',
+      conventions: 'ES Modules, strict TypeScript, Result<T,E> pattern, kebab-case files',
+      language: 'Korean',
+    };
+
+    const generator = new SkillMdGenerator(session.claudeApi, logger);
+    const skillsResult = await generator.generate(config, handoff.specDocument);
+
+    if (!skillsResult.ok) {
+      chat.failSpinner('SKILL.md 생성 실패 (건너뜀)');
+      logger.warn('SKILL.md 생성 실패, 건너뜀', { error: skillsResult.error.message });
+      return ok(undefined);
+    }
+
+    if (skillsResult.value.size === 0) {
+      chat.succeedSpinner('SKILL.md 생성 완료 (추출된 Skill 없음)');
+      return ok(undefined);
+    }
+
+    const saveResult = await generator.save(skillsResult.value, session.projectInfo.path);
+    if (!saveResult.ok) {
+      chat.failSpinner('SKILL.md 저장 실패 (건너뜀)');
+      logger.warn('SKILL.md 저장 실패, 건너뜀', { error: saveResult.error.message });
+      return ok(undefined);
+    }
+
+    chat.succeedSpinner(`SKILL.md ${skillsResult.value.size}개 생성 완료`);
+    logger.info('SKILL.md 생성 및 저장 완료', { count: skillsResult.value.size });
+
+    return ok(undefined);
+  } catch (error: unknown) {
+    logger.warn('SKILL.md 생성 중 예외, 건너뜀', { error: String(error) });
     return ok(undefined);
   }
 }
