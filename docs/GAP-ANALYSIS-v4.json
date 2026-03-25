@@ -1,0 +1,207 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-25T13:10:00+09:00",
+    "specVersion": "v2.4",
+    "specFile": "adev-spec-full-v2_4.md",
+    "analyst": "3-agent parallel (analyst-a: §1-§7, analyst-b: §8-§10, analyst-c: §11-§17+CLI+Core) + lead reconciliation",
+    "totalSpecItems": 113,
+    "overallComplianceScore": 93,
+    "note": "GAP-ANALYSIS-v3 PI 15개 구현 후 4차 재검증. 113개 항목 분석. FI 95개(84%), PI 14개(12%), NI 4개(4%). 가중 점수: (95*1.0 + 14*0.5) / 113 = 93점. 오분류 수정: S9-001/S9-002 FI(doc-integrator-template.ts 구현 확인), S6-015 NI(ConversationFsm start.ts 미통합 확인)"
+  },
+  "summary": {
+    "totalSpecItems": 113,
+    "fullyImplemented": 95,
+    "partiallyImplemented": 14,
+    "notImplemented": 4,
+    "byPriority": {
+      "HIGH": { "FI": 52, "PI": 4, "NI": 1 },
+      "MEDIUM": { "FI": 32, "PI": 8, "NI": 1 },
+      "LOW": { "FI": 11, "PI": 2, "NI": 2 }
+    }
+  },
+  "notImplemented": [
+    {
+      "id": "NI-001",
+      "specRef": "§6.2/6.3 CLI — adev start 대화 Phase FSM 통합",
+      "requirement": "adev start 실행 시 ConversationFsm(IDEA→PLANNING→DESIGN→...→CONTRACT)이 실제 대화 루프에 통합되어 Phase별 프롬프트 제공 및 전환 제어",
+      "reason": "start-session.ts에 ConversationManager는 주입되나 ConversationFsm이 연결되지 않음. 현재는 일반 채팅처럼 동작하며 Phase 순서 강제 없음. detectConfirmation/advancePhase가 CLI 루프에서 호출되지 않음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/start-session.ts", "src/cli/commands/start.ts", "src/layer1/conversation-fsm.ts"]
+    },
+    {
+      "id": "NI-002",
+      "specRef": "§7.4 SKILL.md 자동 생성",
+      "requirement": "프로젝트 스펙 기반 SKILL.md 파일 자동 생성 (agent.md와 동일 흐름)",
+      "reason": "skill-merger.ts는 기존 SKILL.md를 로드/병합만 함. AI 기반 SKILL.md 초안 생성 로직 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/core/skill-merger.ts", "src/layer1/agent-md-generator.ts"]
+    },
+    {
+      "id": "NI-003",
+      "specRef": "§4 설치 인프라",
+      "requirement": "curl one-liner, Homebrew, Bun 글로벌 설치, uninstall.sh",
+      "reason": "배포 인프라 필요. 코드 레벨 불가",
+      "priority": "LOW"
+    },
+    {
+      "id": "NI-004",
+      "specRef": "§11.1 Subscription — 7일 롤링 캡",
+      "requirement": "비공식 7일 롤링 캡 추적",
+      "reason": "SubscriptionAuth는 5시간 윈도우만 구현. 7일 캡 추적 로직 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/auth/subscription-auth.ts"]
+    }
+  ],
+  "partiallyImplemented": [
+    {
+      "id": "PI-001",
+      "specRef": "§8.4 CODE Phase — 충돌 시 5개 에이전트 전원 참여",
+      "requirement": "merge 충돌 발생 시 coder + qa + qc + reviewer + architect 모두 함께 논의하여 해결",
+      "implemented": "spawnConflictResolver()로 architect 에이전트 spawn하여 충돌 조율",
+      "missing": "architect만 spawn. qa/qc/reviewer 추가 spawn 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-002",
+      "specRef": "§8.4 TEST Phase — 무한 반복 루프",
+      "requirement": "TEST 단계 실패 시 qc 분석 → coder 수정 → 해당 단계 처음부터 '전체 통과할 때까지' 무한 반복",
+      "implemented": "spawnQcForTestFailure + spawnCoderForTestFix + 재실행 구현됨",
+      "missing": "MAX_TEST_RETRIES=1로 1회만 재시도. 스펙은 '전체 통과할 때까지' 무한 반복 요구",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-003",
+      "specRef": "§8.4 parallel_workers auto — 메모리 80% 초과 자동 축소",
+      "requirement": "메모리 사용량 80% 초과 시 worker 수 자동 축소",
+      "implemented": "availableParallelism 기반 자동 산출 구현됨",
+      "missing": "메모리 80% 초과 감지 + 실시간 worker 수 축소 안전장치 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/worker-resolver.ts"]
+    },
+    {
+      "id": "PI-004",
+      "specRef": "§6.2 대화 루프 — 무한 제안 + Phase 규칙 통합",
+      "requirement": "CLI adev start에서 ConversationFsm Phase 순서 강제 + 유저 확정 전 개발 시작 금지 규칙 실제 적용",
+      "implemented": "ConversationFsm.isSimpleAffirmative/getProposalPrompt/generateProbingQuestion 함수 존재",
+      "missing": "start-session.ts 대화 루프에서 Phase FSM을 호출하여 Phase별 프롬프트 강제하는 통합 코드 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/cli/commands/start-session.ts", "src/layer1/conversation-fsm.ts"]
+    },
+    {
+      "id": "PI-005",
+      "specRef": "§7.2/7.3 documenter — end-to-end 통합",
+      "requirement": "Phase 완료 이벤트 발생 시 documenter를 spawn하여 LanceDB 컨텍스트 복원 후 문서 생성 → 저장하는 완전한 흐름",
+      "implemented": "DocumenterEventDispatcher.dispatch() + spawnDocumenter(ragSearcher 주입) 구현됨",
+      "missing": "Phase 완료 후 실제 문서 파일이 .adev/docs/에 저장되는지, 특정 문서 유형(API정의서, 아키텍처변경이력 등)을 각각 생성하는 개별 로직이 documenter 에이전트 프롬프트에만 의존됨",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/documenter-event-dispatcher.ts", "src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-006",
+      "specRef": "§11.1 Subscription 모드 — 플랜 선택 설정",
+      "requirement": "유저가 Pro/Max5x/Max20x 플랜을 config에서 설정하여 추정 한도에 반영",
+      "implemented": "ESTIMATED_LIMITS에 pro/max5x/max20x 값 정의됨. estimatedLimit 생성자 주입 가능",
+      "missing": "CLI/config에서 플랜 선택하는 경로 없음. 항상 DEFAULT_ESTIMATED_LIMIT(Pro) 사용",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/auth/subscription-auth.ts", "src/core/config-schema.ts"]
+    },
+    {
+      "id": "PI-007",
+      "specRef": "§12 크리티컬 이슈 즉시 질문 vs 배치 전달",
+      "requirement": "크리티컬 이슈는 발생 즉시 유저 질문, 비크리티컬은 완성 후 배치 전달",
+      "implemented": "notifyCriticalIssue()/classifyIssueSeverity() 메서드 추가됨",
+      "missing": "비크리티컬 이슈를 배치 수집하여 나중에 전달하는 큐/배치 메커니즘 미구현. 현재는 즉시 질문만 가능",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/user-checkpoint.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "id": "PI-008",
+      "specRef": "§13 Agent Teams — TeamDelete race condition 우회 명시적 처리",
+      "requirement": "TeamDelete 후 config.json 멤버 자동 갱신 안 됨 → 명시적 우회 처리",
+      "implemented": "executeDesignPhaseWithMonitoring() finally 블록에 200ms 대기 추가",
+      "missing": "config.json 수동 편집 또는 팀 재생성 우회 로직 미구현. 단순 대기만으로는 race condition 완전 해결 불가",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-009",
+      "specRef": "§5.6 MCP builtin — 실제 구현 완전성",
+      "requirement": "os-control, browser, web-search, git builtin MCP 서버 라이프사이클 완전 구현",
+      "implemented": "src/mcp/builtin/ 4개 디렉토리 구조 존재. callTool() 구현됨",
+      "missing": "builtin MCP 서버 프로세스 실행(spawn)과 IPC 파이프 연결이 모든 builtin에서 검증되지 않음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/mcp/builtin/os-control/", "src/mcp/builtin/browser/", "src/mcp/builtin/web-search/", "src/mcp/builtin/git/"]
+    },
+    {
+      "id": "PI-010",
+      "specRef": "§14/§16 Agent Coordinator 전용 모듈",
+      "requirement": "TeamCreate + Agent + SendMessage + TeamDelete 라이프사이클을 담당하는 전용 AgentCoordinator 모듈",
+      "implemented": "layer2-bootstrap.ts에서 환경변수 설정, V2SessionExecutor에서 Agent Teams 활성화",
+      "missing": "Agent Teams 라이프사이클 관리(팀 생성→에이전트 spawn→통신→팀 해산) 전용 AgentCoordinator 클래스 없음. SDK 내부에 위임하는 형태",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/layer2-bootstrap.ts", "src/layer2/v2-session-executor.ts"]
+    },
+    {
+      "id": "PI-011",
+      "specRef": "§15 4중 검증 비용 최적화 설정 경로",
+      "requirement": "Opus 기본 + Sonnet 선택 시 실패→Opus 에스컬레이션 config 경로가 CLI/adev start에서 접근 가능",
+      "implemented": "VerificationConfig(layer1Model, adevModel, opusEscalationOnFailure) 타입 정의됨. verifier.ts에서 구현됨",
+      "missing": "adev start 시 이 설정값이 Layer2Bootstrap → TeamLeader → VerifyPhase에 전달되는 경로 미확인",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/cli/commands/start-execution.ts", "src/layer2/layer2-bootstrap.ts"]
+    },
+    {
+      "id": "PI-012",
+      "specRef": "§12 통합 검증 계단식 완전성",
+      "requirement": "4단계 계단식(10만+→1만→1천→100만회) Step4 100만회 최종 검증",
+      "implemented": "integration-tester.ts에 4단계 구현됨. config 기반 수량 설정 가능",
+      "missing": "TEST_STEPS 기본 설정에서 Step4 targetCount가 1,000,000으로 설정되어 있는지 확인 필요. 실제 100만회 실행 보장 여부 미검증",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/integration-tester-steps.ts", "src/layer2/integration-tester.ts"]
+    },
+    {
+      "id": "PI-013",
+      "specRef": "§12 LanceDB Skills progressive disclosure",
+      "requirement": "Skills + RAG에 LanceDB 적극 사용: progressive disclosure + 벡터 검색 병행",
+      "implemented": "벡터 검색 구현됨. queryRagContext() 에이전트 실행 시 호출",
+      "missing": "progressive disclosure(단계별 점진적 노출) 전략 미구현. 검색 결과를 한 번에 주입하는 방식만 사용",
+      "priority": "LOW",
+      "affectedFiles": ["src/rag/search.ts", "src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-014",
+      "specRef": "§11.1 Subscription 모드 — V2 Session API 토큰 사용량 추적",
+      "requirement": "V2 Session API 세션 내 token usage를 updateFromResponse()로 정확히 추적",
+      "implemented": "SubscriptionAuth.updateFromResponse()에서 response.usage 파싱",
+      "missing": "V2 Session API stream() 이벤트에서 토큰 사용량 응답이 Messages API와 다를 수 있음. V2 세션 기반 토큰 추적이 정확히 동작하는지 미검증",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/auth/subscription-auth.ts", "src/layer2/v2-session-executor.ts"]
+    }
+  ],
+  "keyFindings": {
+    "newlyIdentified": [
+      "NI-001: ConversationFsm이 adev start 루프에 미통합 (HIGH) — start-session.ts에서 직접 확인",
+      "NI-002: SKILL.md 자동 생성 미구현 (MEDIUM)",
+      "PI-002: TEST Phase MAX_TEST_RETRIES=1 하드코딩 — 스펙은 무한 반복 요구 (MEDIUM)",
+      "PI-006: Subscription 플랜 선택 config 경로 없음 (MEDIUM)"
+    ],
+    "correctedFromAnalysts": [
+      "S9-001/S9-002 (analyst-b): doc-integrator-template.ts + loadCustomTemplates() 구현 확인 → FI",
+      "S6-015 (analyst-a NI로 분류): ConversationFsm start.ts 미통합 → NI-001로 확인",
+      "S7-011/S7-012 (analyst-1 이전 오분류): layer2에서 이미 구현 → FI 유지"
+    ],
+    "confirmedAsResolved": [
+      "BiasDetector feedback_ignored 패턴 (PI-001 v3 → FI)",
+      "VERIFY Phase 확증편향 체크 (PI-002 v3 → FI)",
+      "Subscription 401 에러 분기 (PI-003 v3 → FI)",
+      "UserCheckpoint 크리티컬 이슈 즉시 질문 (PI-004 v3 → FI)",
+      "PreToolUse/PostToolUse Hook 자동 연결 (PI-006/015 v3 → FI)",
+      "setup-token CLI 서브커맨드 (PI-007 v3 → FI)",
+      "edge case 80% enforceEdgeCaseRatio (PI-011 v3 → FI)",
+      "5h 윈도우 정밀 대기 getWindowStartTime (PI-016 v3 → FI)",
+      "Layer1 V2 Session API useV2Session 옵션 (PI-010 v3 → FI)"
+    ]
+  }
+}
