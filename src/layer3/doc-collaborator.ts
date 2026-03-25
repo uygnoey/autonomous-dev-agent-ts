@@ -35,6 +35,18 @@ import type {
 } from 'layer3/doc-collaborator-types.js';
 import type { CollaborativeDocOptions, CollaborativeDocResult } from 'layer3/doc-types.js';
 
+/** 반복 검토 최대 사이클 수 / Maximum revision cycle count */
+const MAX_REVISION_CYCLES = 2;
+
+/** 수정 필요 판정 키워드 / Revision needed keywords */
+const REVISION_KEYWORDS = [
+  'REVISION_NEEDED',
+  'NEEDS_REVISION',
+  'REVISE',
+  '수정 필요',
+  '재작성 필요',
+] as const;
+
 export type {
   CollabDocState,
   CollabPhase,
@@ -274,7 +286,9 @@ export class DocCollaborator implements IDocCollaborator {
    */
   async generateCollaborativeDoc(
     projectId: string,
-    docType: import('layer3/doc-types.js').ProjectDocumentType | import('layer3/doc-types.js').BusinessDeliverableType,
+    docType:
+      | import('layer3/doc-types.js').ProjectDocumentType
+      | import('layer3/doc-types.js').BusinessDeliverableType,
     context: string,
     fragments: readonly import('layer3/doc-types.js').DocumentFragment[],
     outputPath: string,
@@ -284,10 +298,7 @@ export class DocCollaborator implements IDocCollaborator {
     // WHY: claudeApi와 documenterSpawner가 모두 있어야 3단계 협업이 가능
     if (!this.claudeApi) {
       return err(
-        new AgentError(
-          'agent_not_configured',
-          '3단계 협업 문서 생성에는 Claude API가 필요합니다',
-        ),
+        new AgentError('agent_not_configured', '3단계 협업 문서 생성에는 Claude API가 필요합니다'),
       );
     }
 
@@ -330,25 +341,65 @@ export class DocCollaborator implements IDocCollaborator {
       details = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
     }
 
-    // Step 3: Layer1에 최종 검토 요청 / Request L1 for final review
-    this.logger.info('Step 3: Layer1 최종 검토 요청', { docType });
-    const reviewResult = await callLayer1(this.claudeApi, {
-      type: 'review-and-refine',
-      docType,
-      context: structure,
-      layer2Details: details,
-    });
+    // Step 3: Layer1 최종 검토 + 수정 필요 시 반복 / L1 review + revision loop
+    let finalContent = details;
+    let cycleDetails = details;
 
-    let finalContent: string;
-    if (reviewResult.ok) {
-      finalContent = reviewResult.value.content;
-      this.logger.info('Step 3 완료: Layer1 최종 검토', { finalLength: finalContent.length });
-    } else {
-      // WHY: L1 review 실패 시 L2 상세 내용으로 fallback
-      this.logger.warn('Step 3 실패: L2 상세 내용으로 fallback', {
-        error: reviewResult.error.message,
+    for (let cycle = 0; cycle < MAX_REVISION_CYCLES; cycle++) {
+      this.logger.info(
+        `Step 3 (cycle ${cycle + 1}/${MAX_REVISION_CYCLES}): Layer1 최종 검토 요청`,
+        { docType },
+      );
+
+      const reviewResult = await callLayer1(this.claudeApi, {
+        type: 'review-and-refine',
+        docType,
+        context: structure,
+        layer2Details: cycleDetails,
       });
-      finalContent = details;
+
+      if (!reviewResult.ok) {
+        // WHY: L1 review 실패 시 현재 버전으로 fallback
+        this.logger.warn(`Step 3 cycle ${cycle + 1} 실패: 현재 버전으로 fallback`, {
+          error: reviewResult.error.message,
+        });
+        finalContent = cycleDetails;
+        break;
+      }
+
+      const reviewContent = reviewResult.value.content;
+      const upperContent = reviewContent.toUpperCase();
+      const needsRevision = REVISION_KEYWORDS.some((kw) => upperContent.includes(kw));
+
+      if (!needsRevision) {
+        // WHY: 수정 불필요 → 최종 완료
+        finalContent = reviewContent;
+        this.logger.info(`Step 3 cycle ${cycle + 1} 완료: 검토 통과`, {
+          finalLength: finalContent.length,
+        });
+        break;
+      }
+
+      // WHY: 수정 필요 판정 → 다음 사이클에서 Step2 재실행
+      this.logger.info(`Step 3 cycle ${cycle + 1}: 수정 필요 판정 — Step2 재실행`, {
+        cycle: cycle + 1,
+      });
+      finalContent = reviewContent;
+
+      if (cycle < MAX_REVISION_CYCLES - 1 && this.documenterSpawner) {
+        // WHY: 마지막 사이클이 아닌 경우에만 Step2 재실행
+        const redetailResult = await callLayer2(this.documenterSpawner, {
+          docType,
+          structure: reviewContent, // WHY: 검토 피드백을 구조로 전달하여 개선 방향 제시
+          fragments,
+        });
+        if (redetailResult.ok) {
+          cycleDetails = redetailResult.value.content;
+          this.logger.info(`Step2 재실행 완료 (cycle ${cycle + 1})`, {
+            detailsLength: cycleDetails.length,
+          });
+        }
+      }
     }
 
     this.logger.info('3단계 협업 문서 생성 완료', {

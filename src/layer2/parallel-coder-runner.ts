@@ -16,7 +16,10 @@ import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import { extractModulesFromSpec } from 'layer2/parallel-coder-runner-helpers.js';
-import { runSupervisionPhase } from 'layer2/parallel-coder-supervision.js';
+import {
+  runSupervisionPhase,
+  runSupervisionWithVerdict,
+} from 'layer2/parallel-coder-supervision.js';
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent, CoderAllocation } from 'layer2/types.js';
 
@@ -107,7 +110,47 @@ export class ParallelCoderRunner {
     }
 
     // WHY: coder 완료 후 architect(스펙 준수) → reviewer(코드 품질) 순서로 감독 세션 실행
-    yield* runSupervisionPhase(featureId, handoffPackage, this.deps, this.logger);
+    const supervisionResult = await runSupervisionWithVerdict(
+      featureId,
+      handoffPackage,
+      this.deps,
+      this.logger,
+    );
+
+    if (supervisionResult.passed) {
+      for (const verdict of supervisionResult.verdicts) {
+        for (const event of verdict.events) {
+          yield event;
+        }
+      }
+      return;
+    }
+
+    // WHY: 감독 불합격 시 coder 1회 재실행 후 재감독 — 무한 루프 방지를 위해 재시도는 1회로 제한
+    yield createEvent('message', 'CODE Phase 감독 불합격 — coder 재실행 1/1');
+
+    const retryResults = await this.runInBatches(allocations, handoffPackage);
+    for (const result of retryResults) {
+      for (const event of result.events) {
+        yield event;
+      }
+    }
+
+    const retrySupervision = await runSupervisionWithVerdict(
+      featureId,
+      handoffPackage,
+      this.deps,
+      this.logger,
+    );
+    for (const verdict of retrySupervision.verdicts) {
+      for (const event of verdict.events) {
+        yield event;
+      }
+    }
+
+    if (!retrySupervision.passed) {
+      this.logger.warn('CODE Phase 감독 재실행 후에도 불합격 — 1회 제한으로 종료', { featureId });
+    }
   }
 
   /**
@@ -209,9 +252,10 @@ export class ParallelCoderRunner {
         // WHY: AgentSpawner가 throw 대신 에러 이벤트를 yield하므로 감지
         if (event.type === 'error') {
           const meta = event.metadata?.error;
-          errorEvent = meta instanceof AgentError
-            ? meta
-            : new AgentError('agent_execution_error', event.content);
+          errorEvent =
+            meta instanceof AgentError
+              ? meta
+              : new AgentError('agent_execution_error', event.content);
         }
       }
 
