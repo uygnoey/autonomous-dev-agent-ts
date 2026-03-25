@@ -131,6 +131,10 @@ export class GitBranchManager {
       return;
     }
 
+    // WHY: M-003 — checkout 실패 메시지에서 dirty working tree 감지 시 경고 로그
+    //      별도 git status 호출 없이 기존 흐름을 변경하지 않는다
+    this.warnIfDirtyWorkingTree(createResult.error.message, branchName);
+
     // WHY: 이미 존재하는 브랜치이므로 checkout 재시도
     this.logger.debug('브랜치 이미 존재 — checkout 재시도', {
       branchName,
@@ -144,6 +148,9 @@ export class GitBranchManager {
       yield createEvent('message', `브랜치 체크아웃 완료: ${branchName}`);
       return;
     }
+
+    // WHY: M-003 — 두 번째 checkout도 dirty tree일 수 있으므로 재확인
+    this.warnIfDirtyWorkingTree(checkoutResult.error.message, branchName);
 
     // WHY: 재시도도 실패 → error event yield 후 종료
     this.logger.error('브랜치 셋업 실패', {
@@ -297,6 +304,36 @@ export class GitBranchManager {
 
     this.logger.info('커밋 완료', { message });
     yield createEvent('message', `커밋 완료: ${message}`);
+  }
+
+  /**
+   * checkout 실패 메시지에서 dirty working tree를 감지하여 경고 로그를 남긴다
+   * Warns if checkout failure message indicates dirty working tree
+   *
+   * @description
+   * KR: M-003 — 별도 git status 호출 없이 에러 메시지 분석으로 uncommitted changes를 감지한다.
+   *     git checkout은 dirty tree일 때 "Your local changes to the following files would be overwritten"
+   *     또는 "Please commit your changes or stash them" 메시지를 반환한다.
+   * EN: M-003 — Detects uncommitted changes from error message without extra git status call.
+   *
+   * @param errorMessage - checkout 실패 에러 메시지 / Checkout failure error message
+   * @param branchName - 브랜치 이름 / Branch name
+   */
+  private warnIfDirtyWorkingTree(errorMessage: string, branchName: string): void {
+    const dirtyIndicators = [
+      'local changes',
+      'would be overwritten',
+      'please commit your changes',
+      'stash them',
+      'uncommitted changes',
+    ];
+    const lowerMsg = errorMessage.toLowerCase();
+    if (dirtyIndicators.some((indicator) => lowerMsg.includes(indicator))) {
+      this.logger.warn('브랜치 전환 실패 — uncommitted changes 감지', {
+        branch: branchName,
+        hint: errorMessage.slice(0, 200),
+      });
+    }
   }
 
   /**

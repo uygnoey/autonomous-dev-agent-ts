@@ -94,7 +94,8 @@ export async function extractModulesWithDependencyOrder(
       if (event.type !== 'message') continue;
 
       // WHY: 에이전트 응답에서 JSON 배열 패턴을 탐지하여 파싱 시도
-      const jsonMatch = event.content.match(/\[[\s\S]*\]/);
+      // WHY: M-004 — 탐욕적 매칭(greedy)을 non-greedy로 변경하여 첫 번째 JSON 배열만 캡처
+      const jsonMatch = event.content.match(/\[[\s\S]*?\]/);
       if (!jsonMatch) continue;
 
       try {

@@ -23,6 +23,7 @@ import type { Logger } from 'core/logger.js';
 import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
 import type { AgentName } from 'core/types.js';
+import type { RagSearcher } from 'rag/search.js';
 import { ClaudeApi } from 'layer1/claude-api.js';
 import { Layer1Verifier } from 'layer1/verifier.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
@@ -74,6 +75,8 @@ export interface Layer2BootstrapOptions {
   readonly userInputProvider?: UserInputProvider;
   /** 4중 검증 설정 (PI-011 — §15 비용 최적화) / Verification config for cost optimization */
   readonly verificationConfig?: VerificationConfig;
+  /** RAG 검색기 (선택) — 에이전트 컨텍스트 주입에 사용 / RAG searcher (optional) for agent context injection */
+  readonly ragSearcher?: RagSearcher;
 }
 
 // ── Layer2Bootstrap ─────────────────────────────────────────────
@@ -102,6 +105,7 @@ export class Layer2Bootstrap {
   private readonly userCheckpoint: UserCheckpoint | undefined;
   private readonly userInputProvider: UserInputProvider | undefined;
   private readonly verificationConfig: VerificationConfig | undefined;
+  private readonly ragSearcher: RagSearcher | undefined;
 
   /**
    * @param options - 부트스트랩 옵션 / Bootstrap options
@@ -114,6 +118,7 @@ export class Layer2Bootstrap {
     this.userCheckpoint = options.userCheckpoint;
     this.userInputProvider = options.userInputProvider;
     this.verificationConfig = options.verificationConfig;
+    this.ragSearcher = options.ragSearcher;
   }
 
   /**
@@ -301,6 +306,14 @@ export class Layer2Bootstrap {
       layer1Verifier,
       userCheckpoint: this.userCheckpoint,
       userInputProvider: this.userInputProvider,
+      // WHY: CR-001 — projectPath 미주입으로 통합 테스트가 항상 스킵됨
+      //      projectCwd를 projectPath로 주입하여 실제 통합 테스트 실행 가능하게 함
+      projectPath: this.projectCwd,
+      // WHY: CR-001 — 초기값 빈 배열, CODE Phase 완료 후 업데이트
+      modifiedFiles: { paths: [] },
+      // WHY: H-004 — ragSearcher 미주입으로 LanceDB RAG 컨텍스트 비활성 상태
+      //      외부에서 주입받은 RagSearcher를 전달하여 에이전트들이 과거 이력 참조 가능하게 함
+      ragSearcher: this.ragSearcher,
     };
 
     return new TeamLeader(deps);

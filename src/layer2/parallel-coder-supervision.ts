@@ -58,6 +58,61 @@ const FAIL_KEYWORDS = ['FAIL', 'REJECT', '불합격', '거부', '재작업', 'RE
 /** 합격 키워드 / Pass keywords */
 const PASS_KEYWORDS = ['PASS', 'APPROVE', '합격', '승인', 'LGTM'] as const;
 
+/**
+ * 부정어/해결 완료 문맥 패턴 / Negation and resolution context patterns
+ *
+ * @description
+ * KR: H-003 — FAIL 키워드 앞에 부정어 또는 해결 완료 표현이 있으면 오탐으로 간주한다.
+ * EN: H-003 — Considers a FAIL keyword as false positive when preceded by negation or resolution context.
+ */
+const NEGATION_PATTERNS = [
+  'not',
+  'no ',
+  '아님',
+  '아니',
+  '없음',
+  'already fixed',
+  '이미 수정',
+  '해결됨',
+  '해결 완료',
+  'resolved',
+  'fixed',
+] as const;
+
+/**
+ * 키워드가 부정어/해결 문맥이 아닌 실제 판정인지 확인한다
+ * Checks whether a keyword occurrence is a genuine verdict (not negated/resolved)
+ *
+ * @description
+ * KR: H-003 — 키워드 앞 40자를 검사하여 부정어/해결 표현이 있으면 false를 반환한다.
+ * EN: H-003 — Inspects 40 chars before keyword; returns false if negation/resolution found.
+ *
+ * @param text - 검색 대상 텍스트 (대문자 변환 전 원본) / Source text (original, before uppercasing)
+ * @param keyword - 검색할 키워드 (대문자) / Keyword to search (uppercased)
+ * @returns 실제 판정이면 true, 오탐이면 false / true if genuine, false if false positive
+ */
+function hasGenuineKeyword(text: string, keyword: string): boolean {
+  const upperText = text.toUpperCase();
+  let searchFrom = 0;
+
+  while (searchFrom < upperText.length) {
+    const idx = upperText.indexOf(keyword, searchFrom);
+    if (idx === -1) return false;
+
+    // WHY: 키워드 앞 40자 범위에서 부정어/해결 문맥을 탐색
+    const contextStart = Math.max(0, idx - 40);
+    const context = text.slice(contextStart, idx).toLowerCase();
+    const isNegated = NEGATION_PATTERNS.some((neg) => context.includes(neg));
+
+    if (!isNegated) return true;
+
+    // WHY: 이 위치의 키워드는 오탐 — 다음 위치에서 재탐색
+    searchFrom = idx + keyword.length;
+  }
+
+  return false;
+}
+
 // ── 공개 함수 / Public Functions ────────────────────────────────
 
 /**
@@ -237,11 +292,10 @@ export function analyzeSupervisionOutput(
 ): SupervisionVerdict {
   const messageEvents = events.filter((e) => e.type === 'message' || e.type === 'done');
   const allText = messageEvents.map((e) => e.content).join('\n');
-  const upperText = allText.toUpperCase();
 
-  // WHY: 불합격 키워드를 먼저 확인 — 명시적 거부가 합격보다 우선
-  const hasFailKeyword = FAIL_KEYWORDS.some((kw) => upperText.includes(kw));
-  const hasPassKeyword = PASS_KEYWORDS.some((kw) => upperText.includes(kw));
+  // WHY: H-003 — 부정어/해결 문맥을 제외한 실제 판정 키워드만 탐지
+  const hasFailKeyword = FAIL_KEYWORDS.some((kw) => hasGenuineKeyword(allText, kw));
+  const hasPassKeyword = PASS_KEYWORDS.some((kw) => hasGenuineKeyword(allText, kw));
 
   if (hasFailKeyword) {
     // WHY: 불합격 시 마지막 message 이벤트를 피드백으로 사용

@@ -144,7 +144,8 @@ export function fromFlatSnapshot(f: FlatSessionSnapshot): PersistableSessionSnap
     lastActivity: new Date(f.lastActivity),
     conversationHistory: JSON.parse(f.conversationHistory) as readonly unknown[],
     metadata: JSON.parse(f.metadata) as Readonly<Record<string, unknown>>,
-    progressPercent: f.progressPercent || undefined,
+    // WHY: H-002 — 0이 falsy이므로 || 대신 ?? 사용하여 progressPercent 0% 손실 방지
+    progressPercent: f.progressPercent ?? undefined,
     pendingItems:
       f.pendingItems && f.pendingItems !== '[]'
         ? (JSON.parse(f.pendingItems) as readonly string[])

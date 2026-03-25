@@ -316,6 +316,8 @@ export class V2SessionExecutor implements AgentExecutor {
         );
         this.activeSessions.set(sessionId, { session, options: sessionOptions });
 
+        // WHY: H-001 — finally에서 세션 정리 여부를 판별하기 위한 플래그
+        let sessionCleaned = false;
         try {
           // WHY: 재토론 시 이전 실패 사유를 프롬프트에 포함하여 에이전트가 부족한 조건을 인지하도록 한다
           const basePrompt = config.systemPrompt
@@ -344,6 +346,7 @@ export class V2SessionExecutor implements AgentExecutor {
               });
               session.close();
               this.activeSessions.delete(sessionId);
+              sessionCleaned = true;
               yield createErrorEvent(config.name, 'DESIGN Phase 세션이 이상 감지로 중단됨');
               return;
             }
@@ -396,6 +399,7 @@ export class V2SessionExecutor implements AgentExecutor {
 
               session.close();
               this.activeSessions.delete(sessionId);
+              sessionCleaned = true;
             }
           }
         } catch (streamError) {
@@ -412,6 +416,17 @@ export class V2SessionExecutor implements AgentExecutor {
           this.activeSessions.delete(sessionId);
           // WHY: 스트림 에러는 재토론이 아닌 실패이므로 즉시 종료
           return;
+        } finally {
+          // WHY: H-001 — done 이벤트 없이 스트림 종료 시 세션 누수 방지
+          //      재토론 루프에서 세션이 정리되지 않은 경우 finally에서 보장
+          if (!sessionCleaned) {
+            try {
+              session.close();
+            } catch {
+              /* ignore close errors */
+            }
+            this.activeSessions.delete(sessionId);
+          }
         }
       } catch (error) {
         this.logger.error('DESIGN Phase 실행 실패', { agentName: config.name, error, attempt });

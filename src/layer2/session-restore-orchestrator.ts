@@ -248,6 +248,9 @@ export class SessionRestoreOrchestrator {
           sessionId,
           featureId,
           ragContextAvailable: ragContext.length > 0,
+          // WHY: M-005 — 상위 계층에 재시작 필요 신호를 metadata로 전달
+          needsNewSession: true,
+          ragContext: ragContext || '',
         },
       };
     } catch (ragError: unknown) {
@@ -261,7 +264,13 @@ export class SessionRestoreOrchestrator {
         agentName,
         content: '[Fallback] 세션 재개 실패 + RAG 검색도 실패 — 새 세션으로 재시작 필요',
         timestamp: new Date(),
-        metadata: { restoreFallback: true, sessionId, ragSearchFailed: true },
+        // WHY: M-005 — RAG 검색 실패 시에도 needsNewSession 신호 전달
+        metadata: {
+          restoreFallback: true,
+          sessionId,
+          ragSearchFailed: true,
+          needsNewSession: true,
+        },
       };
     }
   }

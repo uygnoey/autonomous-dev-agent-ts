@@ -20,7 +20,11 @@ import {
   executeTestPhase,
   executeVerifyPhase,
 } from 'layer2/team-leader-helpers.js';
-import { advancePhase, handleVerifyResult } from 'layer2/team-leader-phase.js';
+import {
+  advancePhase,
+  handleVerifyResult,
+  spawnDocumenterOnPhaseBoundary,
+} from 'layer2/team-leader-phase.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { runTokenWaitLoop } from 'layer2/token-wait-loop.js';
 import type { AgentEvent } from 'layer2/types.js';
@@ -313,6 +317,24 @@ export class TeamLeader implements ITeamLeader {
             // WHY: Phase를 재실행하기 위해 advancePhase 건너뜀
             continue;
           }
+
+          // WHY: L-001 — biasDetector가 주입됐으나 미사용 상태였음. streamMonitor 이상 미감지 시에도
+          //      편향(확인 편향, 무한 루프, 교착, 범위 이탈) 분석을 별도로 수행
+          const biasEvents = this.streamMonitor.getEventHistory();
+          const agentNames = [...new Set(biasEvents.map((e) => e.agentName))];
+          for (const agent of agentNames) {
+            const biasResult = this.biasDetector.analyze(biasEvents, agent);
+            if (biasResult.ok) {
+              const highBiasAlerts = biasResult.value.filter((a) => a.severity === 'high');
+              if (highBiasAlerts.length > 0) {
+                this.logger.warn('BiasDetector HIGH 이상 감지', {
+                  agentName: agent,
+                  featureId,
+                  alerts: highBiasAlerts.map((a) => ({ type: a.type, description: a.description })),
+                });
+              }
+            }
+          }
         }
 
         if (currentPhase === 'VERIFY') {
@@ -345,11 +367,32 @@ export class TeamLeader implements ITeamLeader {
             return;
           }
         } else {
-          advancePhase(
+          const advanceResult = advancePhase(
             { phaseEngine: this.phaseEngine, progressTracker: this.progressTracker },
             featureId,
             currentPhase,
           );
+
+          // WHY: M-001 — Phase 경계 전환 시 documenter spawn (§7.3 스펙 요구사항)
+          if (advanceResult.advanced && advanceResult.toPhase !== null) {
+            yield* spawnDocumenterOnPhaseBoundary(
+              {
+                phaseEngine: this.phaseEngine,
+                progressTracker: this.progressTracker,
+                failureHandler: this.failureHandler,
+                verificationGate: this.verificationGate,
+                agentGenerator: this.agentGenerator,
+                agentSpawner: this.agentSpawner,
+                logger: this.logger,
+                userCheckpoint: this.userCheckpoint,
+                userInputProvider: this.userInputProvider,
+              },
+              featureId,
+              handoffPackage,
+              advanceResult.fromPhase,
+              advanceResult.toPhase,
+            );
+          }
         }
       }
 
