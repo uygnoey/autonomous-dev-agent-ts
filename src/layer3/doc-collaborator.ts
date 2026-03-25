@@ -47,6 +47,39 @@ const REVISION_KEYWORDS = [
   '재작성 필요',
 ] as const;
 
+/** 최소 문서 길이 (자) / Minimum document quality length (chars) */
+const MIN_QUALITY_LENGTH = 500;
+
+/** 최소 섹션 헤더 수 / Minimum section header count */
+const MIN_SECTION_COUNT = 1;
+
+/**
+ * 문서 품질을 검사한다 / Checks document quality
+ *
+ * @description
+ * KR: 최소 길이와 섹션 헤더 존재 여부를 검사한다.
+ * EN: Checks minimum length and presence of section headers.
+ *
+ * @param content - 검사할 문서 내용 / Document content to check
+ * @returns 품질 통과 여부와 실패 사유 / Quality pass and optional failure reason
+ */
+function checkDocumentQuality(content: string): { passed: boolean; reason?: string } {
+  if (content.length < MIN_QUALITY_LENGTH) {
+    return {
+      passed: false,
+      reason: `문서 길이 부족: ${content.length}자 < 최소 ${MIN_QUALITY_LENGTH}자`,
+    };
+  }
+  const sectionCount = (content.match(/^#{1,6}\s/gm) ?? []).length;
+  if (sectionCount < MIN_SECTION_COUNT) {
+    return {
+      passed: false,
+      reason: `섹션 헤더 부족: ${sectionCount}개 < 최소 ${MIN_SECTION_COUNT}개`,
+    };
+  }
+  return { passed: true };
+}
+
 export type {
   CollabDocState,
   CollabPhase,
@@ -341,6 +374,16 @@ export class DocCollaborator implements IDocCollaborator {
       details = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
     }
 
+    // WHY: 품질 게이트 — 최소 길이와 섹션 구조를 충족해야 Step3 진행
+    const qualityCheck = checkDocumentQuality(details);
+    if (!qualityCheck.passed) {
+      this.logger.warn('Step 2 품질 게이트 미달 — revision 강제', {
+        reason: qualityCheck.reason,
+        detailsLength: details.length,
+      });
+    }
+    let forceRevision = !qualityCheck.passed;
+
     // Step 3: Layer1 최종 검토 + 수정 필요 시 반복 / L1 review + revision loop
     let finalContent = details;
     let cycleDetails = details;
@@ -369,7 +412,9 @@ export class DocCollaborator implements IDocCollaborator {
 
       const reviewContent = reviewResult.value.content;
       const upperContent = reviewContent.toUpperCase();
-      const needsRevision = REVISION_KEYWORDS.some((kw) => upperContent.includes(kw));
+      const needsRevision =
+        forceRevision || REVISION_KEYWORDS.some((kw) => upperContent.includes(kw));
+      forceRevision = false;
 
       if (!needsRevision) {
         // WHY: 수정 불필요 → 최종 완료

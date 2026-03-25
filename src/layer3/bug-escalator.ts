@@ -46,10 +46,32 @@ export type {
  */
 export type OnLayer2RerunRequired = (report: BugReport) => Promise<void>;
 
+/**
+ * 산출물 스냅샷 / Artifact snapshot
+ *
+ * @description
+ * KR: 2계층 재실행 전 산출물 경로 목록을 저장한다.
+ *     재실행 실패 시 이전 산출물로 복원할 수 있도록 참조 정보를 보관한다.
+ * EN: Stores artifact path list before Layer 2 re-execution.
+ *     Keeps reference info for restoring previous artifacts if re-run fails.
+ */
+export interface ArtifactSnapshot {
+  /** 프로젝트 ID / Project ID */
+  readonly projectId: string;
+  /** 기능 ID / Feature ID */
+  readonly featureId: string;
+  /** 산출물 파일 경로 목록 / Artifact file paths */
+  readonly artifactPaths: readonly string[];
+  /** 스냅샷 저장 시각 / Snapshot saved at */
+  readonly savedAt: Date;
+}
+
 /** BugEscalator 구현 클래스 / BugEscalator implementation */
 export class BugEscalator implements IBugEscalator {
   private reportCounter = 0;
   private readonly activeReports: Map<string, BugReport> = new Map();
+  /** 산출물 스냅샷 (projectId → ArtifactSnapshot) / Artifact snapshots by projectId */
+  private readonly artifactSnapshots: Map<string, ArtifactSnapshot> = new Map();
   private readonly logger: Logger;
   private readonly teamLeader: TeamLeader | null;
   private readonly failureHandler: FailureHandler | null;
@@ -124,6 +146,10 @@ export class BugEscalator implements IBugEscalator {
     const bugReport = bugReportResult.value;
     this.logger.info('근본 원인 분석 완료', { bugId: bugReport.id, severity: bugReport.severity });
 
+    // WHY: 2계층 재실행 전 현재 산출물 경로를 스냅샷으로 보관 — 실패 시 복원 참조용
+    const featureIdForSnapshot = featureId || bugReport.featureId || 'unknown';
+    this.saveArtifactSnapshot(projectId, featureIdForSnapshot, options.artifactPaths ?? []);
+
     const triggerResult = await this.triggerLayer2({ projectId, bugReport, startPhase: 'DESIGN' });
     if (!triggerResult.ok) return err(triggerResult.error as AdevError);
     this.logger.info('2계층 재실행 완료', { bugId: bugReport.id });
@@ -142,7 +168,11 @@ export class BugEscalator implements IBugEscalator {
     if (!confirmationResult.ok) return err(confirmationResult.error as AdevError);
     const userApproved = confirmationResult.value;
     this.logger.info('유저 재확인 완료', { approved: userApproved });
-    if (userApproved) this.activeReports.delete(bugReport.id);
+    // WHY: 유저 승인 시 새 산출물 채택 → 이전 스냅샷 불필요
+    if (userApproved) {
+      this.clearArtifactSnapshot(projectId);
+      this.activeReports.delete(bugReport.id);
+    }
 
     const escalationResult: BugEscalationResult = {
       id: bugReport.id,
@@ -326,5 +356,57 @@ export class BugEscalator implements IBugEscalator {
     this.activeReports.delete(reportId);
     this.logger.info('버그 리포트 해결', { reportId });
     return ok(undefined);
+  }
+
+  /**
+   * 산출물 스냅샷을 저장한다 / Saves an artifact snapshot
+   *
+   * @description
+   * KR: 2계층 재실행 전 현재 산출물 경로 목록을 저장한다.
+   *     이미 저장된 스냅샷이 있으면 덮어쓴다.
+   * EN: Saves current artifact paths before Layer 2 re-execution.
+   *     Overwrites existing snapshot if present.
+   *
+   * @param projectId - 프로젝트 ID / Project ID
+   * @param featureId - 기능 ID / Feature ID
+   * @param artifactPaths - 산출물 파일 경로 목록 / Artifact file paths
+   */
+  saveArtifactSnapshot(
+    projectId: string,
+    featureId: string,
+    artifactPaths: readonly string[],
+  ): void {
+    const snapshot: ArtifactSnapshot = {
+      projectId,
+      featureId,
+      artifactPaths: [...artifactPaths],
+      savedAt: new Date(),
+    };
+    this.artifactSnapshots.set(projectId, snapshot);
+    this.logger.info('산출물 스냅샷 저장', {
+      projectId,
+      featureId,
+      pathCount: artifactPaths.length,
+    });
+  }
+
+  /**
+   * 산출물 스냅샷을 조회한다 / Gets an artifact snapshot
+   *
+   * @param projectId - 프로젝트 ID / Project ID
+   * @returns 스냅샷 또는 null / Snapshot or null
+   */
+  getArtifactSnapshot(projectId: string): ArtifactSnapshot | null {
+    return this.artifactSnapshots.get(projectId) ?? null;
+  }
+
+  /**
+   * 산출물 스냅샷을 삭제한다 / Clears an artifact snapshot
+   *
+   * @param projectId - 프로젝트 ID / Project ID
+   */
+  clearArtifactSnapshot(projectId: string): void {
+    this.artifactSnapshots.delete(projectId);
+    this.logger.debug('산출물 스냅샷 삭제', { projectId });
   }
 }

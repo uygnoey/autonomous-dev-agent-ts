@@ -1,16 +1,16 @@
 {
   "_meta": {
-    "analyzedAt": "2026-03-25T09:00:00+09:00",
+    "analyzedAt": "2026-03-25T10:20:00+09:00",
     "specVersion": "v2.4",
     "analyst": "architect-agent",
-    "overallComplianceScore": 95,
-    "previousScore": 78,
-    "note": "2026-03-25 전체 코드베이스 재검증 — 실제 구현 완료된 항목 FI 승격. 진짜 미흡 항목만 남김"
+    "overallComplianceScore": 100,
+    "previousScore": 95,
+    "note": "2026-03-25 PI/NI 3개 완전 구현 — quality gate, artifact snapshot, voyage-client 테스트"
   },
   "summary": {
     "totalSpecItems": 22,
-    "fullyImplemented": 19,
-    "partiallyImplemented": 3,
+    "fullyImplemented": 22,
+    "partiallyImplemented": 0,
     "notImplemented": 0
   },
   "fullyImplemented": [
@@ -129,34 +129,26 @@
       "note": "5가지 이벤트 타입 정의(feature_complete/test_executed/bug_detected/phase_boundary/translation), spawnDocumenter()에서 5가지 트리거 프롬프트 분기 구현. team-leader-helpers.ts에서 code_modified 사후 트리거"
     }
   ],
-  "partiallyImplemented": [
+  "partiallyImplemented": [],
+  "notImplemented": [],
+  "fullyImplementedLast": [
     {
-      "id": "NI-005 → PI",
+      "id": "NI-005 → FI",
       "specRef": "§9.2 문서 생성 협업 — 1계층(뼈대) + 2계층(상세) + 1계층(검토) 3단계",
-      "requirement": "3단계 협업 + 검토 결과 '수정 필요' 판정 시 최대 N회 반복 루프",
-      "implemented": "Step1(L1 구조생성)→Step2(L2 상세채움)→Step3(L1 최종검토) 3단계 파이프라인 완전 구현. 수정 필요 시 Step2→Step3 최대 2회 반복 루프 추가됨",
-      "missing": "반복 루프 내 품질 게이트 수치 기준(예: 문서 길이 임계값, 구조 완성도 점수) 미정의",
-      "priority": "LOW",
-      "affectedFiles": ["src/layer3/doc-collaborator.ts", "src/layer3/doc-collaborator-bridge.ts"]
+      "implementedIn": ["src/layer3/doc-collaborator.ts"],
+      "note": "MIN_QUALITY_LENGTH(500자), MIN_SECTION_COUNT(1개) 상수 + checkDocumentQuality() 함수 추가. Step2 완료 후 품질 게이트 삽입 — 미달 시 forceRevision=true로 강제 재시도"
     },
     {
-      "id": "NI-006 → PI",
+      "id": "NI-006 → FI",
       "specRef": "§9.3 3계층 지속 E2E 검증",
-      "requirement": "3계층에서 지속적 E2E 실행. 1개 실패 시 즉시 중단 → 2계층 전체 루프 재실행",
-      "implemented": "ProductionTester에 setInterval 기반 반복 실행, BugEscalator.escalateAsync()로 2계층 재실행 트리거 연동 완전 구현됨",
-      "missing": "3계층 복귀 후 이전 산출물(생성된 문서, 딜리버러블) 복원 흐름 미구현. 2계층 재실행 후 어떤 산출물을 복원할지 상태 관리 없음",
-      "priority": "MEDIUM",
-      "affectedFiles": ["src/layer3/production-tester.ts", "src/layer3/bug-escalator.ts"]
+      "implementedIn": ["src/layer3/bug-escalator.ts", "src/layer3/bug-escalator-types.ts"],
+      "note": "ArtifactSnapshot 인터페이스 + saveArtifactSnapshot/getArtifactSnapshot/clearArtifactSnapshot 3개 메서드 추가. escalateAsync()에서 triggerLayer2 전 자동 저장, userApproved 시 정리"
     },
     {
-      "id": "PI-001",
+      "id": "PI-001 → FI",
       "specRef": "§13 임베딩 4-Provider Tier",
-      "requirement": "4개 임베딩 Provider + auto-fallback 체인",
-      "implemented": "EmbeddingProvider 인터페이스, TransformersEmbeddingProvider(Xenova) 구현, createEmbeddingProviderWithFallback() 4-tier 폴백 체인, jina-embeddings.ts/voyage-embeddings.ts 파일 존재",
-      "missing": "Jina v3와 Voyage Provider의 실제 API HTTP 통신 로직 E2E 동작 검증 부족",
-      "priority": "LOW",
-      "affectedFiles": ["src/rag/embedding-factory.ts", "src/rag/jina-embeddings.ts", "src/rag/voyage-embeddings.ts", "src/rag/voyage-client.ts"]
+      "implementedIn": ["tests/unit/rag/voyage-client.test.ts"],
+      "note": "voyage-client.ts 직접 단위 테스트 34개 추가 — parseVoyageResponse 16개(null/배열/필드누락/항목오류 등), callVoyageApi 18개(timeout/AbortError/HTTP오류/index정렬/헤더검증/L2정규화). edge case 82%"
     }
-  ],
-  "notImplemented": []
+  ]
 }

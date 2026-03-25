@@ -40,6 +40,8 @@ export interface EscalateBugOptions {
   readonly failedTest: ContinuousE2EResult;
   /** 추가 컨텍스트 / Additional context */
   readonly context?: string;
+  /** 산출물 파일 경로 목록 (스냅샷용) / Artifact file paths (for snapshot) */
+  readonly artifactPaths?: readonly string[];
 }
 
 /**
