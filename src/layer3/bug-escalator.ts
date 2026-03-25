@@ -1,4 +1,6 @@
 /** BugEscalator - Layer3 → Layer2 버그 에스컬레이션 / Bug escalation orchestration */
+import { mkdir } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { type AdevError, AgentError } from 'core/errors.js';
 import { ConsoleLogger, type Logger } from 'core/logger.js';
 import type { Phase, Result } from 'core/types.js';
@@ -64,6 +66,8 @@ export interface ArtifactSnapshot {
   readonly artifactPaths: readonly string[];
   /** 스냅샷 저장 시각 / Snapshot saved at */
   readonly savedAt: Date;
+  /** 백업 디렉토리 경로 (파일 복사본 저장 위치) / Backup directory path */
+  readonly backupDir?: string;
 }
 
 /** BugEscalator 구현 클래스 / BugEscalator implementation */
@@ -148,7 +152,7 @@ export class BugEscalator implements IBugEscalator {
 
     // WHY: 2계층 재실행 전 현재 산출물 경로를 스냅샷으로 보관 — 실패 시 복원 참조용
     const featureIdForSnapshot = featureId || bugReport.featureId || 'unknown';
-    this.saveArtifactSnapshot(projectId, featureIdForSnapshot, options.artifactPaths ?? []);
+    await this.saveArtifactSnapshot(projectId, featureIdForSnapshot, options.artifactPaths ?? []);
 
     const triggerResult = await this.triggerLayer2({ projectId, bugReport, startPhase: 'DESIGN' });
     if (!triggerResult.ok) return err(triggerResult.error as AdevError);
@@ -255,23 +259,30 @@ export class BugEscalator implements IBugEscalator {
       }
     }
 
-    if (this.teamLeader && this.failureHandler) {
+    if (this.teamLeader) {
       try {
-        const classifyResult = this.failureHandler.classify(
-          bugReport.featureId ?? 'unknown',
-          'VERIFY',
-          bugReport.description,
-        );
-        if (classifyResult.ok) {
-          this.logger.info('FailureHandler 분류 완료', {
-            type: classifyResult.value.type,
-            action: classifyResult.value.suggestedAction,
-            targetPhase: classifyResult.value.targetPhase,
-          });
+        // WHY: FailureHandler가 있으면 실패 유형 분류 → 재실행 대상 Phase 결정에 활용
+        if (this.failureHandler) {
+          const classifyResult = this.failureHandler.classify(
+            bugReport.featureId ?? 'unknown',
+            'VERIFY',
+            bugReport.description,
+          );
+          if (classifyResult.ok) {
+            this.logger.info('FailureHandler 분류 완료', {
+              type: classifyResult.value.type,
+              action: classifyResult.value.suggestedAction,
+              targetPhase: classifyResult.value.targetPhase,
+            });
+          }
         }
-        // WHY: TeamLeader.executeFeature()는 HandoffPackage를 요구하므로 SDK 연동 후 완성
-        this.logger.info('TeamLeader 재실행 위임 준비 완료', {
+
+        // WHY: TeamLeader 재실행 준비 — onLayer2RerunRequired 콜백 미제공 시 직접 호출 시도
+        //      TeamLeader.executeFeature()는 HandoffPackage를 요구하므로
+        //      현재는 분류 결과 로깅까지만 수행. HandoffPackage 주입 경로 확정 후 실제 호출 연결 예정.
+        this.logger.info('TeamLeader 재실행 준비 — 콜백 미제공 시 직접 호출 시도', {
           projectId,
+          bugId: bugReport.id,
           featureId: bugReport.featureId,
           startPhase,
         });
@@ -283,7 +294,7 @@ export class BugEscalator implements IBugEscalator {
         );
       }
     } else {
-      this.logger.debug('TeamLeader/FailureHandler 없음 — 시뮬레이션 모드', { projectId });
+      this.logger.debug('TeamLeader 없음 — 시뮬레이션 모드', { projectId });
     }
 
     this.logger.info('2계층 재실행 완료', { projectId, bugId: bugReport.id });
@@ -362,31 +373,45 @@ export class BugEscalator implements IBugEscalator {
    * 산출물 스냅샷을 저장한다 / Saves an artifact snapshot
    *
    * @description
-   * KR: 2계층 재실행 전 현재 산출물 경로 목록을 저장한다.
-   *     이미 저장된 스냅샷이 있으면 덮어쓴다.
-   * EN: Saves current artifact paths before Layer 2 re-execution.
-   *     Overwrites existing snapshot if present.
+   * KR: 2계층 재실행 전 현재 산출물 경로 목록을 저장하고,
+   *     각 파일의 백업 복사본을 /tmp/adev-artifact-backup/ 에 생성한다.
+   * EN: Saves current artifact paths before Layer 2 re-execution,
+   *     and creates backup copies in /tmp/adev-artifact-backup/.
    *
    * @param projectId - 프로젝트 ID / Project ID
    * @param featureId - 기능 ID / Feature ID
    * @param artifactPaths - 산출물 파일 경로 목록 / Artifact file paths
    */
-  saveArtifactSnapshot(
+  async saveArtifactSnapshot(
     projectId: string,
     featureId: string,
     artifactPaths: readonly string[],
-  ): void {
+  ): Promise<void> {
+    const backupDir = join('/tmp', 'adev-artifact-backup', projectId, `${Date.now()}`);
+    await mkdir(backupDir, { recursive: true });
+
+    // WHY: 파일이 실제 존재하는 경우에만 백업 — 존재하지 않는 경로는 무시
+    for (const artifactPath of artifactPaths) {
+      const file = Bun.file(artifactPath);
+      if (await file.exists()) {
+        const destPath = join(backupDir, basename(artifactPath));
+        await Bun.write(destPath, file);
+      }
+    }
+
     const snapshot: ArtifactSnapshot = {
       projectId,
       featureId,
       artifactPaths: [...artifactPaths],
       savedAt: new Date(),
+      backupDir,
     };
     this.artifactSnapshots.set(projectId, snapshot);
-    this.logger.info('산출물 스냅샷 저장', {
+    this.logger.info('산출물 스냅샷 저장 (백업 포함)', {
       projectId,
       featureId,
       pathCount: artifactPaths.length,
+      backupDir,
     });
   }
 
@@ -408,5 +433,54 @@ export class BugEscalator implements IBugEscalator {
   clearArtifactSnapshot(projectId: string): void {
     this.artifactSnapshots.delete(projectId);
     this.logger.debug('산출물 스냅샷 삭제', { projectId });
+  }
+
+  /**
+   * 백업된 산출물을 원래 경로로 복원한다 / Restore backed-up artifacts to original paths
+   *
+   * @description
+   * KR: 스냅샷의 backupDir에서 백업 파일들을 원래 artifactPaths 위치로 복원한다.
+   *     복원 완료 후 스냅샷을 삭제한다.
+   * EN: Restores backup files from snapshot's backupDir to original artifactPaths.
+   *     Clears the snapshot after successful restoration.
+   *
+   * @param projectId - 프로젝트 ID / Project ID
+   * @returns ok(void) 복원 성공, err(AdevError) 실패 시 / ok on success, err on failure
+   */
+  async restoreArtifactSnapshot(projectId: string): Promise<Result<void>> {
+    const snapshot = this.getArtifactSnapshot(projectId);
+    if (!snapshot) {
+      return err(
+        new AgentError('agent_invalid_input', `산출물 스냅샷을 찾을 수 없습니다: ${projectId}`),
+      );
+    }
+
+    if (!snapshot.backupDir) {
+      this.clearArtifactSnapshot(projectId);
+      return ok(undefined);
+    }
+
+    try {
+      // WHY: 백업 파일명과 원래 경로를 basename으로 매칭하여 복원
+      for (const artifactPath of snapshot.artifactPaths) {
+        const backupFilePath = join(snapshot.backupDir, basename(artifactPath));
+        const backupFile = Bun.file(backupFilePath);
+        if (await backupFile.exists()) {
+          await Bun.write(artifactPath, backupFile);
+          this.logger.debug('산출물 복원', { from: backupFilePath, to: artifactPath });
+        }
+      }
+
+      this.logger.info('산출물 스냅샷 복원 완료', {
+        projectId,
+        pathCount: snapshot.artifactPaths.length,
+        backupDir: snapshot.backupDir,
+      });
+
+      this.clearArtifactSnapshot(projectId);
+      return ok(undefined);
+    } catch (cause) {
+      return err(new AgentError('agent_invalid_input', `산출물 복원 실패: ${projectId}`, cause));
+    }
   }
 }

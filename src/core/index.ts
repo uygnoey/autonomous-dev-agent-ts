@@ -96,3 +96,13 @@ export type {
   TemplateFormat,
   TemplateLoadOptions,
 } from 'core/template-loader-types.js';
+
+// ── 파일 크기 가드 ─────────────────────────────────────────────
+
+export {
+  checkFileSize,
+  guardAndSplitIfNeeded,
+  MAX_FILE_SIZE_BYTES,
+  SPLIT_CHUNK_SIZE_BYTES,
+  splitLargeFile,
+} from 'core/file-size-guard.js';

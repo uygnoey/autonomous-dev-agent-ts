@@ -215,7 +215,46 @@ export class GitBranchManager {
       this.logger.debug('MERGE_HEAD 없음 — abort 생략');
     }
 
-    yield createEvent('error', `병합 충돌: ${branchName} — 충돌 파일: [${fileList}]`);
+    // WHY: PI-004 — 충돌 해결을 위한 팀 논의 프롬프트를 함께 반환한다.
+    //      상위 계층(ParallelCoderRunner/executeCodePhase)에서 이 프롬프트를 에이전트에 전달할 수 있다.
+    const conflictPrompt = this.buildConflictResolutionPrompt(branchName, conflictedFiles, '');
+    yield {
+      type: 'error',
+      agentName: 'architect',
+      content: `병합 충돌: ${branchName} — 충돌 파일: [${fileList}]`,
+      timestamp: new Date(),
+      metadata: {
+        conflictedFiles,
+        conflictResolutionPrompt: conflictPrompt,
+      },
+    };
+  }
+
+  /**
+   * 병합 충돌 해결을 위한 팀 논의 프롬프트를 생성한다 / Builds conflict resolution prompt for team discussion
+   *
+   * @description
+   * KR: 충돌 파일 목록과 참여 에이전트 역할을 포함한 프롬프트를 생성한다.
+   *     실제 에이전트 spawn은 상위 계층(ParallelCoderRunner/executeCodePhase)에서 수행한다.
+   * EN: Generates a prompt containing conflicted files and participating agent roles.
+   *     Actual agent spawning is handled by the upper layer (ParallelCoderRunner/executeCodePhase).
+   *
+   * @param branchName - 충돌이 발생한 브랜치 이름 / Branch name with conflicts
+   * @param conflictedFiles - 충돌 파일 목록 / List of conflicted files
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 충돌 해결 프롬프트 / Conflict resolution prompt
+   */
+  buildConflictResolutionPrompt(
+    branchName: string,
+    conflictedFiles: readonly string[],
+    featureId: string,
+  ): string {
+    return [
+      `[충돌 해결 요청] featureId=${featureId}, branch=${branchName}`,
+      `충돌 파일: ${conflictedFiles.join(', ')}`,
+      '참여 에이전트: architect(설계 준수), coder(구현), qa(품질), qc(원인분석), reviewer(최종확인)',
+      '각 충돌 파일에 대해 어느 변경사항을 채택할지 합의하여 해결 방안을 제시하라.',
+    ].join('\n');
   }
 
   /**

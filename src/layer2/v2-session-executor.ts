@@ -312,6 +312,12 @@ export class V2SessionExecutor implements AgentExecutor {
         });
         await session.send(fullPrompt);
 
+        // WHY: PI-003 — DESIGN Phase 종료 조건 = qa Gate 통과 + 전원 합의
+        //      done 이벤트의 content를 분석하여 종료 조건 충족 여부를 판별한다.
+        const DESIGN_COMPLETE_KEYWORDS = ['합의', '동의', 'AGREED', 'APPROVED', '완료', 'LGTM'];
+        const DESIGN_GATE_KEYWORDS = ['qa 통과', 'qa gate', 'gate passed', '품질 통과'];
+        let lastContent = '';
+
         for await (const sdkEvent of session.stream()) {
           // WHY: AbortSignal이 발생하면 세션을 즉시 종료
           if (options.signal?.aborted) {
@@ -329,11 +335,45 @@ export class V2SessionExecutor implements AgentExecutor {
             this.logger.debug('Unhandled SDK event type', { eventType });
           });
           if (mappedEvent) {
+            // WHY: 마지막 메시지/done 이벤트의 content를 수집하여 종료 조건 판별에 사용
+            if (mappedEvent.type === 'message' || mappedEvent.type === 'done') {
+              lastContent = mappedEvent.content;
+            }
             yield mappedEvent;
           }
 
           if (mappedEvent?.type === 'done') {
-            this.logger.info('DESIGN Phase 완료', { agentName: config.name });
+            // WHY: PI-003 — 종료 조건 판별: qa Gate 키워드와 합의 키워드를 모두 포함해야 완료
+            const contentLower = lastContent.toLowerCase();
+            const hasConsensus = DESIGN_COMPLETE_KEYWORDS.some((kw) =>
+              contentLower.includes(kw.toLowerCase()),
+            );
+            const hasGatePass = DESIGN_GATE_KEYWORDS.some((kw) =>
+              contentLower.includes(kw.toLowerCase()),
+            );
+
+            if (!hasConsensus || !hasGatePass) {
+              this.logger.warn('DESIGN Phase 종료 조건 미충족', {
+                agentName: config.name,
+                featureId: options.featureId,
+                hasConsensus,
+                hasGatePass,
+              });
+              yield {
+                type: 'message',
+                agentName: config.name,
+                content: `[경고] DESIGN Phase 종료 조건 미충족 — 합의: ${hasConsensus}, qa Gate: ${hasGatePass}`,
+                timestamp: new Date(),
+                metadata: { designCompletionCheck: { hasConsensus, hasGatePass } },
+              };
+            } else {
+              this.logger.info('DESIGN Phase 종료 조건 충족', {
+                agentName: config.name,
+                hasConsensus,
+                hasGatePass,
+              });
+            }
+
             session.close();
             this.activeSessions.delete(sessionId);
           }
@@ -343,7 +383,10 @@ export class V2SessionExecutor implements AgentExecutor {
           streamError instanceof Error
             ? `${streamError.message}\n${streamError.stack ?? ''}`
             : String(streamError);
-        this.logger.error('DESIGN Phase stream error', { agentName: config.name, errorMsg: errMsg });
+        this.logger.error('DESIGN Phase stream error', {
+          agentName: config.name,
+          errorMsg: errMsg,
+        });
         yield createErrorEvent(config.name, errMsg || 'Unknown DESIGN stream error');
         this.activeSessions.delete(sessionId);
       }

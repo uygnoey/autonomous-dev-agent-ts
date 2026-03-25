@@ -17,6 +17,7 @@ import {
   createEvent,
   executeCodePhase,
   executePhase,
+  executeTestPhase,
   executeVerifyPhase,
 } from 'layer2/team-leader-helpers.js';
 import { advancePhase, handleVerifyResult } from 'layer2/team-leader-phase.js';
@@ -221,6 +222,23 @@ export class TeamLeader implements ITeamLeader {
               coderAllocator: this.coderAllocator,
               parallelCoderRunner: this.parallelCoderRunner,
               gitBranchManager: this.gitBranchManager,
+            },
+            featureId,
+            handoffPackage,
+          );
+        } else if (currentPhase === 'TEST') {
+          // WHY: PI-002 — TEST Phase는 Unit→Module→E2E 3단계 순차 실행으로 직접 제어한다
+          yield* executeTestPhase(
+            {
+              phaseEngine: this.phaseEngine,
+              tokenMonitor: this.tokenMonitor,
+              agentGenerator: this.agentGenerator,
+              sessionManager: this.sessionManager,
+              agentSpawner: this.agentSpawner,
+              streamMonitor: this.streamMonitor,
+              logger: this.logger,
+              ragSearcher: this.ragSearcher,
+              failureHandler: this.failureHandler,
             },
             featureId,
             handoffPackage,

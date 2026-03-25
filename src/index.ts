@@ -22,6 +22,7 @@ import { ConfigCommand } from 'cli/commands/config.js';
 import { InitCommand } from 'cli/commands/init.js';
 import { ProjectCommand } from 'cli/commands/project.js';
 import { StartCommand } from 'cli/commands/start.js';
+import { StatusCommand } from 'cli/commands/status.js';
 import { CliApp } from 'cli/index.js';
 import type { CliCommandHandler, CliResult } from 'cli/types.js';
 import { ConsoleLogger } from 'core/logger.js';
@@ -214,6 +215,19 @@ async function main(): Promise<void> {
       return { success: false, message: result.error.message, exitCode: 1 };
     },
     help: () => 'adev project <sub> - Manage projects (add/remove/list/switch/update)',
+  } satisfies CliCommandHandler);
+
+  const statusCmd = new StatusCommand(logger);
+  app.registerCommand('status', {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const result = await statusCmd.execute([], parsed);
+      if (result.ok) {
+        return { success: true, message: '', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => statusCmd.help(),
   } satisfies CliCommandHandler);
 
   const authCmd = new AuthCommand(logger);

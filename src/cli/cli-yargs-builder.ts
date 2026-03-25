@@ -44,6 +44,12 @@ export async function buildYargsParser(
         .option('status', { type: 'boolean', describe: 'Show current auth status' })
         .option('clear', { type: 'boolean', describe: 'Clear saved credentials' }),
     )
+    .command('status', 'Show current development status', (y) =>
+      y.option('project-path', {
+        type: 'string',
+        describe: 'Project path / 프로젝트 경로',
+      }),
+    )
     .command('config <sub> [args..]', 'Manage configuration', (y) =>
       y
         .positional('sub', { type: 'string', describe: 'Subcommand (get/set/list/reset)' })

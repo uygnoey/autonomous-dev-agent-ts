@@ -147,9 +147,7 @@ export async function* executeCodePhase(
     // WHY: 단일 순차 실행에서도 coder 작업 완료 후 커밋이 필요하다.
     //       이 커밋이 없으면 merge 시 변경사항이 누락되거나 git 이력이 init 1개뿐이 된다.
     if (deps.gitBranchManager) {
-      yield* deps.gitBranchManager.commitChanges(
-        `feat(${featureId}): CODE phase 완료`,
-      );
+      yield* deps.gitBranchManager.commitChanges(`feat(${featureId}): CODE phase 완료`);
     }
 
     // WHY: NI-007 — coder 수정 완료 시 documenter spawn (CHANGELOG 갱신)
@@ -175,7 +173,16 @@ export async function* executeCodePhase(
       yield* deps.gitBranchManager.commitChanges(
         `feat(${featureId}): ${allocation.coderId} CODE phase 완료`,
       );
-      yield* deps.gitBranchManager.mergeBranch(allocation.branchName);
+      // WHY: PI-004 — 병합 충돌 시 충돌 해결 프롬프트를 메시지 이벤트로 전달한다
+      for await (const mergeEvent of deps.gitBranchManager.mergeBranch(allocation.branchName)) {
+        if (mergeEvent.type === 'error' && mergeEvent.metadata?.conflictResolutionPrompt) {
+          yield createEvent(
+            'message',
+            `[충돌 감지] ${allocation.coderId}: ${String(mergeEvent.metadata.conflictResolutionPrompt)}`,
+          );
+        }
+        yield mergeEvent;
+      }
       deps.coderAllocator.mergeAllocation(allocation.coderId);
     }
   }
@@ -188,6 +195,151 @@ export async function* executeCodePhase(
     featureId,
     handoffPackage,
     { trigger: 'phase_boundary', context: { fromPhase: 'CODE', event: 'code_modified' } },
+  );
+}
+
+/** executeTestPhase에 필요한 의존성 / Deps needed by executeTestPhase */
+export interface ExecuteTestPhaseDeps extends ExecutePhaseDeps {
+  readonly failureHandler?: {
+    classify(
+      featureId: string,
+      phase: string,
+      reason: string,
+    ): { ok: true; value: { type: string } } | { ok: false };
+    getRecoveryPhase(report: { type: string }): Phase;
+  };
+}
+
+/**
+ * TEST Phase 3단계 실행 (Unit → Module → E2E) / Executes TEST phase in 3 stages
+ *
+ * @description
+ * KR: PI-002 — adev가 Unit → Module → E2E 3단계를 순차 실행한다.
+ *     각 단계의 tester 에이전트 프롬프트에 테스트 범위를 명시적으로 주입한다.
+ *     1개 단계라도 실패하면 즉시 중단하고 qc 분석 + error 이벤트를 yield한다.
+ * EN: PI-002 — adev runs Unit → Module → E2E in sequence.
+ *     Each stage injects explicit test scope into tester agent prompt.
+ *     On any stage failure, immediately stops and yields qc analysis + error event.
+ *
+ * @param deps - TEST Phase 의존성 / TEST phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @returns 에이전트 이벤트 스트림 / Agent event stream
+ */
+export async function* executeTestPhase(
+  deps: ExecuteTestPhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+): AsyncIterable<AgentEvent> {
+  // WHY: PI-002 — 3단계 순차 실행. 각 단계가 독립 tester spawn이므로 실패 감지가 즉각적이다.
+  const TEST_STAGES: readonly { readonly scope: string; readonly dir: string }[] = [
+    { scope: 'unit', dir: 'tests/unit/' },
+    { scope: 'module', dir: 'tests/module/' },
+    { scope: 'e2e', dir: 'tests/e2e/' },
+  ];
+
+  for (const stage of TEST_STAGES) {
+    deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope });
+    yield createEvent('message', `[TEST] ${stage.scope} 테스트 실행 시작`);
+
+    let stageFailed = false;
+
+    // WHY: tester 에이전트에게 테스트 범위를 명시적으로 지정하여 spawn
+    const ragContext = await queryRagContext(deps.ragSearcher, featureId, 'tester');
+    const scopePrompt = [
+      `[TEST 범위 지정] scope=${stage.scope}, dir=${stage.dir}`,
+      `featureId=${featureId}`,
+      `이 단계에서는 ${stage.dir} 경로의 ${stage.scope} 테스트만 실행하라.`,
+      '1개라도 실패 시 즉시 중단하고 실패 내역을 보고하라.',
+    ].join('\n');
+
+    const configResult = deps.agentGenerator.generateAgentConfig(
+      'tester',
+      `${handoffPackage.specDocument}\n\n${scopePrompt}`,
+      featureId,
+      ragContext,
+    );
+
+    if (!configResult.ok) {
+      deps.logger.error('tester 에이전트 설정 생성 실패', {
+        scope: stage.scope,
+        error: configResult.error.message,
+      });
+      yield createEvent(
+        'error',
+        `tester(${stage.scope}) 설정 생성 실패: ${configResult.error.message}`,
+      );
+      return;
+    }
+
+    const config = {
+      ...configResult.value,
+      projectId: handoffPackage.projectId,
+      phase: 'TEST' as const,
+    };
+
+    deps.sessionManager.createSession('tester', config.projectId, featureId, 'TEST');
+
+    for await (const event of deps.agentSpawner.spawn(config)) {
+      deps.streamMonitor.onEvent({
+        type: event.type === 'tool_use' ? 'PreToolUse' : 'PostToolUse',
+        agentName: event.agentName,
+        toolName: event.type === 'tool_use' ? event.content : undefined,
+        data: event.metadata ?? {},
+        timestamp: event.timestamp,
+      });
+
+      yield event;
+
+      // WHY: PI-002 — tester에서 error 이벤트 발생 시 해당 단계 실패로 판정
+      if (event.type === 'error') {
+        stageFailed = true;
+      }
+    }
+
+    if (stageFailed) {
+      deps.logger.warn('TEST Phase 단계 실패 — 즉시 중단', {
+        featureId,
+        scope: stage.scope,
+      });
+
+      // WHY: PI-002 — 실패 시 qc 에이전트 spawn하여 원인 분석
+      const qcRagContext = await queryRagContext(deps.ragSearcher, featureId, 'qc');
+      const qcConfigResult = deps.agentGenerator.generateAgentConfig(
+        'qc',
+        `${handoffPackage.specDocument}\n\n[QC 분석 요청] ${stage.scope} 테스트 실패. 근본 원인을 분석하라.`,
+        featureId,
+        qcRagContext,
+      );
+
+      if (qcConfigResult.ok) {
+        const qcConfig = {
+          ...qcConfigResult.value,
+          projectId: handoffPackage.projectId,
+          phase: 'TEST' as const,
+        };
+        deps.sessionManager.createSession('qc', qcConfig.projectId, featureId, 'TEST');
+        for await (const qcEvent of deps.agentSpawner.spawn(qcConfig)) {
+          yield qcEvent;
+        }
+      }
+
+      yield createEvent('error', `[TEST] ${stage.scope} 테스트 실패 — CODE Phase로 롤백 필요`);
+      return;
+    }
+
+    deps.logger.info('TEST Phase 단계 완료', { featureId, scope: stage.scope });
+    yield createEvent('message', `[TEST] ${stage.scope} 테스트 통과`);
+  }
+
+  // WHY: 3단계 모두 통과 시 documenter에게 테스트 결과 문서화 요청
+  yield* spawnDocumenter(
+    deps.agentGenerator,
+    deps.agentSpawner,
+    deps.logger,
+    featureId,
+    handoffPackage,
+    { trigger: 'test_executed', context: { stages: 'unit,module,e2e', result: 'all_passed' } },
   );
 }
 
@@ -241,11 +393,7 @@ export async function* spawnDocumenter(
   const triggerPrompt = buildTriggerPrompt(trigger, featureId, triggerContext?.context);
   const specWithTrigger = `${handoffPackage.specDocument}\n\n${triggerPrompt}`;
 
-  const configResult = agentGenerator.generateAgentConfig(
-    'documenter',
-    specWithTrigger,
-    featureId,
-  );
+  const configResult = agentGenerator.generateAgentConfig('documenter', specWithTrigger, featureId);
 
   if (!configResult.ok) {
     logger.warn('documenter 설정 생성 실패 — 문서화 생략', {
@@ -283,7 +431,9 @@ function buildTriggerPrompt(
   context?: Record<string, unknown>,
 ): string {
   const contextStr = context
-    ? Object.entries(context).map(([k, v]) => `- ${k}: ${String(v)}`).join('\n')
+    ? Object.entries(context)
+        .map(([k, v]) => `- ${k}: ${String(v)}`)
+        .join('\n')
     : '';
 
   switch (trigger) {
@@ -526,7 +676,37 @@ export async function* executeDesignPhaseWithMonitoring(
     }
   }
 
-  // WHY: 재시도 횟수 초과 시 에러 이벤트
+  // WHY: Agent Teams 비활성화 fallback — 재spawn 반복 실패 시 독립 세션으로 전환
+  deps.logger.warn(
+    'DESIGN Phase 재시도 횟수 초과 — Agent Teams 비활성화 후 독립 세션으로 fallback',
+    {
+      featureId,
+      maxRetries,
+    },
+  );
+
+  // WHY: Agent Teams 환경변수를 제거하여 독립 실행 전환
+  const fallbackConfig = {
+    ...config,
+    phase: 'DESIGN' as const,
+    environment: {},
+  };
+
+  try {
+    for await (const event of deps.sessionExecutor.executeDesignPhase(fallbackConfig, {
+      featureId,
+      handoff: handoffPackage,
+    })) {
+      yield event;
+    }
+    // WHY: fallback 성공 시 에러 없이 종료
+    return;
+  } catch {
+    // WHY: fallback도 실패하면 최종 에러 yield
+    deps.logger.error('DESIGN Phase 독립 세션 fallback도 실패', { featureId, maxRetries });
+  }
+
+  // WHY: 모든 재시도 + fallback 실패 시 에러 이벤트
   deps.logger.error('DESIGN Phase 재시도 횟수 초과', { featureId, maxRetries });
   yield createEvent('error', `DESIGN Phase ${maxRetries}회 재시도 후에도 실패`);
 }

@@ -152,7 +152,8 @@ describe('V2SessionExecutor.executeDesignPhase', () => {
     expect(capturedOptions!.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBe('1');
 
     // WHY: 이벤트 스트림이 정상적으로 yield 되었는지 확인
-    expect(events.length).toBe(2);
+    // PI-003: DESIGN Phase 종료 조건 미충족 경고 메시지가 추가될 수 있으므로 >= 2로 체크
+    expect(events.length).toBeGreaterThanOrEqual(2);
     expect(events[0]?.type).toBe('message');
     expect(events[1]?.type).toBe('done');
   });
