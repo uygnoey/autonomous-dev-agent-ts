@@ -15,7 +15,7 @@
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { HandoffPackage } from 'layer1/types.js';
-import { extractModulesFromSpec } from 'layer2/parallel-coder-runner-helpers.js';
+import { extractModulesWithDependencyOrder } from 'layer2/parallel-coder-runner-helpers.js';
 import {
   runSupervisionPhase,
   runSupervisionWithVerdict,
@@ -70,7 +70,14 @@ export class ParallelCoderRunner {
    * @returns 에이전트 이벤트 스트림 / Agent event stream
    */
   async *runParallel(featureId: string, handoffPackage: HandoffPackage): AsyncIterable<AgentEvent> {
-    const modules = extractModulesFromSpec(handoffPackage.specDocument);
+    // WHY: PI-011 — architect 에이전트 기반 의존성 순서 분석 시도, 실패 시 정적 파싱 폴백
+    const modules = await extractModulesWithDependencyOrder(
+      handoffPackage.specDocument,
+      this.deps.agentGenerator,
+      this.deps.agentSpawner,
+      featureId,
+      this.logger,
+    );
     const allocResult = this.deps.coderAllocator.allocate(featureId, modules);
 
     if (!allocResult.ok) {

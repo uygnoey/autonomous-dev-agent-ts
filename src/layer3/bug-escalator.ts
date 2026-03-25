@@ -154,7 +154,12 @@ export class BugEscalator implements IBugEscalator {
     const featureIdForSnapshot = featureId || bugReport.featureId || 'unknown';
     await this.saveArtifactSnapshot(projectId, featureIdForSnapshot, options.artifactPaths ?? []);
 
-    const triggerResult = await this.triggerLayer2({ projectId, bugReport, startPhase: 'DESIGN' });
+    const triggerResult = await this.triggerLayer2({
+      projectId,
+      bugReport,
+      startPhase: 'DESIGN',
+      handoffPackage: options.handoffPackage,
+    });
     if (!triggerResult.ok) return err(triggerResult.error as AdevError);
     this.logger.info('2계층 재실행 완료', { bugId: bugReport.id });
 
@@ -260,38 +265,38 @@ export class BugEscalator implements IBugEscalator {
     }
 
     if (this.teamLeader) {
-      try {
-        // WHY: FailureHandler가 있으면 실패 유형 분류 → 재실행 대상 Phase 결정에 활용
-        if (this.failureHandler) {
-          const classifyResult = this.failureHandler.classify(
-            bugReport.featureId ?? 'unknown',
-            'VERIFY',
-            bugReport.description,
-          );
-          if (classifyResult.ok) {
-            this.logger.info('FailureHandler 분류 완료', {
-              type: classifyResult.value.type,
-              action: classifyResult.value.suggestedAction,
-              targetPhase: classifyResult.value.targetPhase,
-            });
-          }
-        }
-
-        // WHY: TeamLeader 재실행 준비 — onLayer2RerunRequired 콜백 미제공 시 직접 호출 시도
-        //      TeamLeader.executeFeature()는 HandoffPackage를 요구하므로
-        //      현재는 분류 결과 로깅까지만 수행. HandoffPackage 주입 경로 확정 후 실제 호출 연결 예정.
-        this.logger.info('TeamLeader 재실행 준비 — 콜백 미제공 시 직접 호출 시도', {
+      // WHY: PI-008 — handoffPackage가 있으면 TeamLeader.executeFeature() 직접 호출
+      //      없으면 onLayer2RerunRequired 콜백에 위임 (위에서 이미 처리됨)
+      if (options.handoffPackage) {
+        const featureId = bugReport.featureId ?? projectId;
+        this.logger.info('TeamLeader.executeFeature() 직접 호출 — 2계층 전체 재실행', {
           projectId,
           bugId: bugReport.id,
-          featureId: bugReport.featureId,
+          featureId,
           startPhase,
         });
-      } catch (executeError) {
-        return err(
-          new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 실패', {
-            error: String(executeError),
-          }),
-        );
+        try {
+          // WHY: TeamLeader를 DESIGN Phase부터 전체 재실행
+          //      executeFeature는 AsyncIterable — 모든 이벤트를 소비하여 완료 대기
+          for await (const _event of this.teamLeader.executeFeature(
+            featureId,
+            options.handoffPackage,
+          )) {
+            // WHY: 이벤트 소비만 — 결과 처리는 BugEscalator 상위에서 수행
+          }
+          this.logger.info('TeamLeader 2계층 재실행 완료', { bugId: bugReport.id, featureId });
+        } catch (executeError) {
+          return err(
+            new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 실패', {
+              error: String(executeError),
+            }),
+          );
+        }
+      } else {
+        this.logger.info('HandoffPackage 미제공 — TeamLeader 직접 호출 생략 (콜백 경로 사용)', {
+          projectId,
+          bugId: bugReport.id,
+        });
       }
     } else {
       this.logger.debug('TeamLeader 없음 — 시뮬레이션 모드', { projectId });
