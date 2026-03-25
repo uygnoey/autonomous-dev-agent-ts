@@ -126,6 +126,45 @@ export class McpManager {
     };
     this.instances.set(name, instance);
 
+    // WHY: PI-009 — builtin MCP 서버 프로세스 시작 검증. 실패 시 1회 재시도
+    const MAX_START_ATTEMPTS = 2;
+    for (let attempt = 1; attempt <= MAX_START_ATTEMPTS; attempt++) {
+      const spawnResult = await this.attemptSpawnAndHandshake(name, config, instance);
+      if (spawnResult.ok) {
+        return spawnResult;
+      }
+
+      if (attempt < MAX_START_ATTEMPTS) {
+        this.logger.warn('MCP 서버 시작 실패, 재시도', {
+          server: name,
+          attempt,
+          error: spawnResult.error.message,
+        });
+        // WHY: 프로세스 정리 후 재시도
+        this.killProcess(name);
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        return spawnResult;
+      }
+    }
+
+    // WHY: 타입 안전을 위한 unreachable 반환
+    return err(new McpError('mcp_server_start_failed', `MCP 서버 시작 실패: ${name}`));
+  }
+
+  /**
+   * 서버 프로세스 스폰 + 핸드셰이크 시도 / Attempts to spawn server process and perform handshake
+   *
+   * @param name - 서버 이름 / Server name
+   * @param config - 서버 설정 / Server config
+   * @param instance - 서버 인스턴스 / Server instance
+   * @returns 성공 시 ok(instance) / ok(instance) on success
+   */
+  private async attemptSpawnAndHandshake(
+    name: string,
+    config: ReturnType<McpRegistry['getServer']> & object,
+    instance: McpServerInstance,
+  ): Promise<Result<McpServerInstance>> {
     try {
       const proc = Bun.spawn([config.command, ...config.args], {
         stdin: 'pipe',

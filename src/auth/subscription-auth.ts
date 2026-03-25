@@ -32,11 +32,14 @@ const ROLLING_WINDOW_MS = 5 * 60 * 60 * 1_000;
  * WHY: Anthropic은 구독 플랜별 정확한 한도를 API로 제공하지 않으므로
  *      공개된 추정치를 사용한다.
  */
-const ESTIMATED_LIMITS = {
+export const ESTIMATED_LIMITS = {
   pro: 45,
   max5x: 225,
   max20x: 900,
 } as const;
+
+/** 구독 플랜 타입 / Subscription plan type */
+export type SubscriptionPlan = keyof typeof ESTIMATED_LIMITS;
 
 /** 기본 추정 한도 (Pro 플랜 기준) / Default estimated limit (Pro plan) */
 const DEFAULT_ESTIMATED_LIMIT = ESTIMATED_LIMITS.pro;
@@ -154,6 +157,10 @@ export class SubscriptionAuth implements AuthProvider {
     responseBody?: unknown,
   ): Result<void> {
     if (!isUsageResponseBody(responseBody)) {
+      // WHY: PI-014 — V2 Session API 이벤트에서 usage 필드가 다른 위치에 있을 수 있음
+      if (isV2SessionUsage(responseBody)) {
+        this.addUsage(responseBody.usage.input_tokens, responseBody.usage.output_tokens);
+      }
       return ok(undefined);
     }
 
@@ -163,22 +170,7 @@ export class SubscriptionAuth implements AuthProvider {
     const outputTokens =
       typeof usage.output_tokens === 'number' && usage.output_tokens >= 0 ? usage.output_tokens : 0;
 
-    this.usageHistory.push({
-      timestamp: this.nowFn(),
-      inputTokens,
-      outputTokens,
-    });
-
-    this.pruneExpiredEntries();
-
-    const messageCount = this.usageHistory.length;
-    if (messageCount >= this.estimatedLimit * LIMIT_APPROACHING_THRESHOLD) {
-      this.logger.warn('구독 사용량 한도 접근 중 / Subscription usage limit approaching', {
-        messageCount,
-        estimatedLimit: this.estimatedLimit,
-        usagePercent: Math.round((messageCount / this.estimatedLimit) * 100),
-      });
-    }
+    this.addUsage(inputTokens, outputTokens);
 
     return ok(undefined);
   }
@@ -281,6 +273,35 @@ export class SubscriptionAuth implements AuthProvider {
   }
 
   /**
+   * 사용량을 기록한다 / Records usage
+   *
+   * @description
+   * KR: PI-014 — V2 Session API와 Messages API 양쪽에서 호출 가능한 공통 사용량 기록 메서드.
+   * EN: PI-014 — Common usage recording method callable from both V2 Session and Messages API paths.
+   *
+   * @param inputTokens - 입력 토큰 수 / Input token count
+   * @param outputTokens - 출력 토큰 수 / Output token count
+   */
+  private addUsage(inputTokens: number, outputTokens: number): void {
+    this.usageHistory.push({
+      timestamp: this.nowFn(),
+      inputTokens,
+      outputTokens,
+    });
+
+    this.pruneExpiredEntries();
+
+    const messageCount = this.usageHistory.length;
+    if (messageCount >= this.estimatedLimit * LIMIT_APPROACHING_THRESHOLD) {
+      this.logger.warn('구독 사용량 한도 접근 중 / Subscription usage limit approaching', {
+        messageCount,
+        estimatedLimit: this.estimatedLimit,
+        usagePercent: Math.round((messageCount / this.estimatedLimit) * 100),
+      });
+    }
+  }
+
+  /**
    * 5시간 윈도우를 초과한 사용량 기록을 제거한다 / Prunes usage entries older than 5-hour window
    *
    * WHY: 롤링 윈도우 방식이므로 오래된 기록을 제거해야 정확한 잔여량 산출 가능.
@@ -320,4 +341,26 @@ function isUsageResponseBody(
     return false;
   }
   return true;
+}
+
+/**
+ * V2 Session API 이벤트의 usage 구조를 확인하는 타입 가드 / Type guard for V2 Session API usage structure
+ *
+ * @description
+ * KR: PI-014 — V2 Session API stream() 이벤트는 Messages API와 다른 구조로 usage를 제공할 수 있다.
+ *     input_tokens와 output_tokens가 모두 숫자인 경우에만 true를 반환한다.
+ * EN: PI-014 — V2 Session API stream events may provide usage in a different structure.
+ *     Returns true only when both input_tokens and output_tokens are numbers.
+ *
+ * @param body - 검사할 응답 본문 / Response body to check
+ * @returns V2 usage 구조가 맞으면 true / true if V2 usage structure matches
+ */
+function isV2SessionUsage(
+  body: unknown,
+): body is { usage: { input_tokens: number; output_tokens: number } } {
+  if (typeof body !== 'object' || body === null) return false;
+  const obj = body as Record<string, unknown>;
+  if (typeof obj.usage !== 'object' || obj.usage === null) return false;
+  const usage = obj.usage as Record<string, unknown>;
+  return typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number';
 }

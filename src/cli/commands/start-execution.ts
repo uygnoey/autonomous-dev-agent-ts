@@ -8,6 +8,7 @@
 
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import type { VerificationConfig } from '../../core/config-schema.js';
 import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
 import { ProcessExecutor } from '../../core/process-executor.js';
@@ -127,6 +128,7 @@ export async function runLayer2(
   handoff: HandoffPackage,
   chat: ChatUi,
   logger: Logger,
+  verificationConfig?: VerificationConfig,
 ): Promise<Result<void, AdevError>> {
   try {
     chat.system('Layer2 자율 개발 시작 중...');
@@ -148,6 +150,8 @@ export async function runLayer2(
       projectCwd: session.projectInfo.path,
       userCheckpoint,
       userInputProvider,
+      // WHY: PI-011 — §15 4중 검증 비용 최적화 설정을 TeamLeader까지 전달
+      verificationConfig,
     });
 
     const teamLeader = await bootstrap.createTeamLeader();

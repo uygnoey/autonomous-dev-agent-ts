@@ -18,7 +18,7 @@ import type {
   TeammateIdleHookInput,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
-import type { TestingConfig } from 'core/config-schema.js';
+import type { TestingConfig, VerificationConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
 import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
@@ -72,6 +72,8 @@ export interface Layer2BootstrapOptions {
   readonly userCheckpoint?: UserCheckpoint;
   /** 사용자 입력 제공자 (선택) — PI-014 CLI 인터랙션에 사용 / User input provider (optional) for PI-014 CLI interaction */
   readonly userInputProvider?: UserInputProvider;
+  /** 4중 검증 설정 (PI-011 — §15 비용 최적화) / Verification config for cost optimization */
+  readonly verificationConfig?: VerificationConfig;
 }
 
 // ── Layer2Bootstrap ─────────────────────────────────────────────
@@ -99,6 +101,7 @@ export class Layer2Bootstrap {
   private readonly testing: TestingConfig | undefined;
   private readonly userCheckpoint: UserCheckpoint | undefined;
   private readonly userInputProvider: UserInputProvider | undefined;
+  private readonly verificationConfig: VerificationConfig | undefined;
 
   /**
    * @param options - 부트스트랩 옵션 / Bootstrap options
@@ -110,6 +113,7 @@ export class Layer2Bootstrap {
     this.testing = options.testing;
     this.userCheckpoint = options.userCheckpoint;
     this.userInputProvider = options.userInputProvider;
+    this.verificationConfig = options.verificationConfig;
   }
 
   /**
@@ -271,7 +275,8 @@ export class Layer2Bootstrap {
     // 10. Layer1 검증기 — VERIFY Phase에서 스펙 의도 검증에 사용
     // WHY: layer1Verifier 미주입 시 auto-pass로 검증이 skip되므로 반드시 주입한다
     const claudeApi = new ClaudeApi(this.authProvider, logger);
-    const layer1Verifier = new Layer1Verifier(logger, claudeApi);
+    // WHY: PI-011 — verificationConfig 주입으로 §15 4중 검증 비용 최적화
+    const layer1Verifier = new Layer1Verifier(logger, claudeApi, this.verificationConfig);
 
     // 11. 의존성 묶음 구성
     const deps: TeamLeaderDeps = {

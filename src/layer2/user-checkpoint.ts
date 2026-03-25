@@ -149,6 +149,8 @@ export class UserCheckpoint {
   private readonly checkpoints: Map<string, CheckpointData> = new Map();
   private counter = 0;
   private readonly logger: Logger;
+  // WHY: PI-007 — 비크리티컬 이슈를 배치로 수집하여 체크포인트 시 일괄 출력
+  private readonly pendingNormalIssues: string[] = [];
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
@@ -293,6 +295,55 @@ export class UserCheckpoint {
 
       inputProvider.system('잘못된 입력입니다. "continue" 또는 "abort"를 입력하세요.');
     }
+  }
+
+  /**
+   * 비크리티컬 이슈를 배치 큐에 추가한다 / Queues a non-critical issue for batch output
+   *
+   * @description
+   * KR: PI-007 — 비크리티컬 이슈는 발생 즉시 유저에게 알리지 않고 큐에 모아둔다.
+   *     체크포인트 시 flushQueuedIssues()로 일괄 출력한다.
+   * EN: PI-007 — Non-critical issues are batched instead of immediately shown.
+   *     Flushed at checkpoint via flushQueuedIssues().
+   *
+   * @param issue - 이슈 설명 / Issue description
+   */
+  queueNormalIssue(issue: string): void {
+    this.pendingNormalIssues.push(issue);
+    this.logger.debug('비크리티컬 이슈 큐 추가', {
+      issue,
+      queueSize: this.pendingNormalIssues.length,
+    });
+  }
+
+  /**
+   * 큐에 쌓인 비크리티컬 이슈를 일괄 출력한다 / Flushes all queued non-critical issues
+   *
+   * @description
+   * KR: PI-007 — 큐에 쌓인 비크리티컬 이슈를 사용자에게 일괄 표시하고 큐를 비운다.
+   * EN: PI-007 — Displays all queued non-critical issues and clears the queue.
+   *
+   * @param inputProvider - 사용자 입력 제공자 / User input provider
+   */
+  flushQueuedIssues(inputProvider: UserInputProvider): void {
+    if (this.pendingNormalIssues.length === 0) return;
+
+    inputProvider.system(`\n⚠️ 비크리티컬 이슈 ${this.pendingNormalIssues.length}건:`);
+    for (const issue of this.pendingNormalIssues) {
+      inputProvider.system(`  - ${issue}`);
+    }
+
+    this.logger.info('비크리티컬 이슈 일괄 출력', { count: this.pendingNormalIssues.length });
+    this.pendingNormalIssues.length = 0;
+  }
+
+  /**
+   * 큐에 쌓인 비크리티컬 이슈 수를 반환한다 / Returns the number of queued non-critical issues
+   *
+   * @returns 큐 크기 / Queue size
+   */
+  get pendingIssueCount(): number {
+    return this.pendingNormalIssues.length;
   }
 
   /**

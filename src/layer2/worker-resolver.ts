@@ -49,6 +49,42 @@ export function resolveParallelWorkers(workers: number | 'auto', logger: Logger)
   return calculateAutoWorkers(logger);
 }
 
+/**
+ * 런타임 메모리 사용률을 확인하여 워커 수를 축소해야 하는지 판단한다 / Checks runtime RSS memory and reduces workers if needed
+ *
+ * @description
+ * KR: PI-003 — §8.4 process.memoryUsage().rss 기반 런타임 메모리 80% 초과 시 워커 수 자동 축소.
+ *     OS freemem과 별도로, 현재 프로세스의 RSS가 설정 한도를 초과하면 즉시 축소한다.
+ * EN: PI-003 — §8.4 Reduces worker count when process RSS exceeds 80% of configured memory limit.
+ *
+ * @param currentWorkers - 현재 워커 수 / Current worker count
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @param totalMemoryMb - 총 메모리 한도 MB (기본: ADEV_TOTAL_MEMORY_MB 환경변수 또는 4096) / Total memory limit in MB
+ * @returns 축소된 워커 수 또는 원래 워커 수 / Reduced or original worker count
+ */
+export function adjustWorkersForMemoryPressure(
+  currentWorkers: number,
+  logger: Logger,
+  totalMemoryMb?: number,
+): number {
+  // WHY: PI-003 — 환경변수에서 총 메모리 한도 읽기 (config.ts 경유 권장이나 worker-resolver는 core 독립 모듈)
+  const limitMb = totalMemoryMb ?? Number(process.env.ADEV_TOTAL_MEMORY_MB || '4096');
+  const rssMb = process.memoryUsage().rss / 1024 / 1024;
+
+  if (rssMb > limitMb * MEMORY_SAFE_CEILING) {
+    const reduced = Math.max(MIN_WORKERS, Math.floor(currentWorkers / 2));
+    logger.warn('RSS 메모리 80% 초과 — worker 수 자동 축소', {
+      rssMb: Math.round(rssMb),
+      limitMb,
+      before: currentWorkers,
+      after: reduced,
+    });
+    return reduced;
+  }
+
+  return currentWorkers;
+}
+
 // ── 내부 함수 / Internal Functions ────────────────────────────────
 
 /**

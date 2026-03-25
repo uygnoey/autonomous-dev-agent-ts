@@ -8,6 +8,7 @@
  *     Event → prompt generation → documenter spawn → document generation → terminate.
  */
 
+import { join } from 'node:path';
 import type { Logger } from 'core/logger.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
@@ -114,13 +115,16 @@ export function buildDocumenterPrompt(event: DocumenterEvent): string {
  */
 export class DocumenterEventDispatcher {
   private readonly logger: Logger;
+  private readonly projectPath: string | undefined;
 
   constructor(
     private readonly agentGenerator: AgentGenerator,
     private readonly agentSpawner: AgentSpawner,
     logger: Logger,
+    projectPath?: string,
   ) {
     this.logger = logger.child({ module: 'documenter-event-dispatcher' });
+    this.projectPath = projectPath;
   }
 
   /**
@@ -159,14 +163,49 @@ export class DocumenterEventDispatcher {
       featureId,
     });
 
+    // WHY: PI-005 — documenter 출력 메시지를 수집하여 파일로 저장
+    const collectedMessages: string[] = [];
+
     for await (const agentEvent of this.agentSpawner.spawn(config)) {
+      if (agentEvent.type === 'message' && agentEvent.content) {
+        collectedMessages.push(agentEvent.content);
+      }
       yield agentEvent;
     }
+
+    // WHY: PI-005 — documenter 출력을 .adev/docs/{eventType}-{timestamp}.md에 저장
+    await this.saveDocumenterOutput(event.type, collectedMessages);
 
     this.logger.info('documenter 완료', {
       type: event.type,
       featureId,
     });
+  }
+
+  /**
+   * documenter 출력을 파일로 저장한다 / Saves documenter output to file
+   *
+   * @param eventType - 이벤트 유형 / Event type
+   * @param messages - 수집된 메시지 / Collected messages
+   */
+  private async saveDocumenterOutput(
+    eventType: DocumenterEventType,
+    messages: string[],
+  ): Promise<void> {
+    const docContent = messages.join('\n');
+    if (!docContent.trim() || !this.projectPath) return;
+
+    try {
+      const docsDir = join(this.projectPath, '.adev', 'docs');
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(docsDir, { recursive: true });
+
+      const docPath = join(docsDir, `${eventType}-${Date.now()}.md`);
+      await Bun.write(docPath, docContent);
+      this.logger.info('documenter 문서 저장 완료', { path: docPath });
+    } catch (error: unknown) {
+      this.logger.warn('documenter 문서 저장 실패', { error: String(error) });
+    }
   }
 
   /**

@@ -52,12 +52,19 @@ export interface LogConfig {
   readonly level: 'debug' | 'info' | 'warn' | 'error';
 }
 
+/** 인증 설정 / Authentication configuration */
+export interface AuthConfig {
+  /** 구독 플랜 (PI-006 — §11.1 플랜별 추정 한도) / Subscription plan */
+  readonly subscriptionPlan?: 'pro' | 'max5x' | 'max20x';
+}
+
 /** 전체 설정 스키마 / Full configuration schema */
 export interface ConfigSchema {
   readonly embedding: EmbeddingConfig;
   readonly testing: TestingConfig;
   readonly verification: VerificationConfig;
   readonly log: LogConfig;
+  readonly auth?: AuthConfig;
 }
 
 /** 깊은 Partial 타입 / Deep partial type */

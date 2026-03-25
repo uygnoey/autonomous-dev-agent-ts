@@ -9,7 +9,7 @@
  */
 
 import type { Logger } from 'core/logger.js';
-import type { Phase } from 'core/types.js';
+import type { AgentName, Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
@@ -245,17 +245,19 @@ export async function* executeTestPhase(
     { scope: 'e2e', dir: 'tests/e2e/' },
   ];
 
-  // WHY: PI-004 — 단계별 최대 1회 재시도 (qc 분석 → coder 수정 → 재실행)
-  const MAX_TEST_RETRIES = 1;
+  // WHY: PI-002 — 전체 통과할 때까지 재시도. 무한 루프 방지 안전장치로 전체 최대 10회.
+  const MAX_TEST_GLOBAL_RETRIES = 10;
+  let globalRetryCount = 0;
 
   for (const stage of TEST_STAGES) {
     let stageResolved = false;
 
-    for (let retry = 0; retry <= MAX_TEST_RETRIES; retry++) {
-      deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope, retry });
+    while (!stageResolved && globalRetryCount < MAX_TEST_GLOBAL_RETRIES) {
+      const isRetry = globalRetryCount > 0 && !stageResolved;
+      deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope, globalRetryCount });
       yield createEvent(
         'message',
-        `[TEST] ${stage.scope} 테스트 실행 시작${retry > 0 ? ` (재시도 ${retry}/${MAX_TEST_RETRIES})` : ''}`,
+        `[TEST] ${stage.scope} 테스트 실행 시작${isRetry ? ` (재시도 ${globalRetryCount}/${MAX_TEST_GLOBAL_RETRIES})` : ''}`,
       );
 
       let stageFailed = false;
@@ -319,28 +321,33 @@ export async function* executeTestPhase(
         break;
       }
 
+      globalRetryCount++;
+
       deps.logger.warn('TEST Phase 단계 실패', {
         featureId,
         scope: stage.scope,
-        retry,
-        maxRetries: MAX_TEST_RETRIES,
+        globalRetryCount,
+        maxRetries: MAX_TEST_GLOBAL_RETRIES,
       });
 
       // WHY: PI-004 — 실패 시 qc 에이전트 spawn하여 원인 분석
       yield* spawnQcForTestFailure(deps, featureId, handoffPackage, stage.scope);
 
-      if (retry < MAX_TEST_RETRIES) {
-        // WHY: PI-004 — qc 분석 후 coder 에이전트에게 수정 요청
+      if (globalRetryCount < MAX_TEST_GLOBAL_RETRIES) {
+        // WHY: PI-002 — qc 분석 후 coder 에이전트에게 수정 요청, 전체 통과할 때까지 반복
         yield createEvent(
           'message',
-          `[TEST] ${stage.scope} 실패 — qc 분석 후 coder 수정 재시도 (${retry + 1}/${MAX_TEST_RETRIES})`,
+          `[TEST] ${stage.scope} 실패 — qc 분석 후 coder 수정 재시도 (${globalRetryCount}/${MAX_TEST_GLOBAL_RETRIES})`,
         );
         yield* spawnCoderForTestFix(deps, featureId, handoffPackage, stage.scope);
       }
     }
 
     if (!stageResolved) {
-      yield createEvent('error', `[TEST] ${stage.scope} 테스트 실패 — CODE Phase로 롤백 필요`);
+      yield createEvent(
+        'error',
+        `[TEST] ${stage.scope} 테스트 실패 — 전체 재시도 ${MAX_TEST_GLOBAL_RETRIES}회 초과. CODE Phase로 롤백 필요`,
+      );
       return;
     }
 
@@ -699,9 +706,11 @@ export async function* executeDesignPhaseWithMonitoring(
     } finally {
       deps.streamMonitor.stopMonitoring();
       deps.ipcPoller.stop();
-      // WHY: PI-016 — §16 알려진 SDK 버그: TeamDelete 시 config.json 멤버 자동 갱신 안 됨
-      //      200ms 대기로 race condition 완화
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // WHY: PI-008 — §16 TeamDelete race condition 완화 — 3회 대기로 멤버 상태 안정화
+      for (let i = 0; i < 3; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        deps.logger.debug('TeamDelete race condition 대기', { attempt: i + 1, maxAttempts: 3 });
+      }
     }
   }
 
@@ -758,28 +767,36 @@ async function* spawnConflictResolver(
   conflictPrompt: string,
 ): AsyncIterable<AgentEvent> {
   const specWithConflict = `${handoffPackage.specDocument}\n\n[Git 충돌 해결 요청]\n${conflictPrompt}`;
-  const configResult = deps.agentGenerator.generateAgentConfig(
-    'architect',
-    specWithConflict,
-    featureId,
-  );
 
-  if (!configResult.ok) {
-    deps.logger.warn('architect 충돌 해결 설정 생성 실패', {
+  // WHY: PI-001 — 스펙 §8.4: 충돌 시 5개 에이전트 전원 참여하여 다각적 해결
+  const resolvers: AgentName[] = ['architect', 'qa', 'qc', 'reviewer', 'coder'];
+
+  for (const agentName of resolvers) {
+    const configResult = deps.agentGenerator.generateAgentConfig(
+      agentName,
+      specWithConflict,
       featureId,
-      error: configResult.error.message,
-    });
-    return;
-  }
+    );
 
-  const config = {
-    ...configResult.value,
-    projectId: handoffPackage.projectId,
-    phase: 'CODE' as const,
-  };
+    if (!configResult.ok) {
+      deps.logger.warn(`${agentName} 충돌 해결 설정 생성 실패`, {
+        featureId,
+        error: configResult.error.message,
+      });
+      continue;
+    }
 
-  for await (const event of deps.agentSpawner.spawn(config)) {
-    yield event;
+    const config = {
+      ...configResult.value,
+      projectId: handoffPackage.projectId,
+      phase: 'CODE' as const,
+    };
+
+    deps.sessionManager.createSession(agentName, config.projectId, featureId, 'CODE');
+
+    for await (const event of deps.agentSpawner.spawn(config)) {
+      yield event;
+    }
   }
 }
 

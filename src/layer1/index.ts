@@ -89,6 +89,11 @@ export type {
   ReviewDecision,
 } from 'layer1/agent-md-reviewer.js';
 
+// ── Skill .md 생성 ──────────────────────────────────────────────
+
+export { SkillMdGenerator } from 'layer1/skill-md-generator.js';
+export type { SkillMdGeneratorConfig } from 'layer1/skill-md-generator.js';
+
 // ── Claude API ──────────────────────────────────────────────────
 
 export {
