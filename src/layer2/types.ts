@@ -62,6 +62,4 @@ export type {
   TranslationContext,
 } from 'layer2/documenter-event-types.js';
 
-export {
-  DOCUMENTER_OUTPUT_MAP,
-} from 'layer2/documenter-event-types.js';
+export { DOCUMENTER_OUTPUT_MAP } from 'layer2/documenter-event-types.js';

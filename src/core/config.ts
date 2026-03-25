@@ -19,6 +19,7 @@ import type { Result } from 'core/types.js';
 export { DEFAULT_CONFIG } from 'core/config-schema.js';
 export type {
   AuthMode,
+  CleanEnvType,
   ConfigSchema,
   DeepPartial,
   EmbeddingConfig,

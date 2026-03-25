@@ -49,7 +49,17 @@ export interface PhaseHandlerDeps {
   };
   readonly verificationGate: {
     isAllPassed(featureId: string): boolean;
-    summarize(featureId: string): { ok: true; value: { passed: boolean; summary: string } } | { ok: false };
+    summarize(
+      featureId: string,
+    ): { ok: true; value: { passed: boolean; summary: string } } | { ok: false };
+    /** PI-005 — 통합 검증 실패 판단을 위해 결과 조회 / Get results for integration failure check */
+    getResults(
+      featureId: string,
+    ): ReadonlyArray<{
+      readonly phase: string;
+      readonly passed: boolean;
+      readonly feedback: string;
+    }>;
   };
   readonly agentGenerator: Parameters<typeof spawnDocumenter>[0];
   readonly agentSpawner: Parameters<typeof spawnDocumenter>[1];
@@ -91,7 +101,10 @@ export async function* handleVerifyResult(
         const transition = deps.phaseEngine.transition('CODE', '유저 수정 요청', 'user');
         if (transition.ok) {
           deps.progressTracker.updateStatus(featureId, 'coding');
-          yield createEvent('message', `유저 수정 요청. CODE Phase로 롤백합니다.${userResult.feedback ? ` 사유: ${userResult.feedback}` : ''}`);
+          yield createEvent(
+            'message',
+            `유저 수정 요청. CODE Phase로 롤백합니다.${userResult.feedback ? ` 사유: ${userResult.feedback}` : ''}`,
+          );
         }
         return;
       }
@@ -128,7 +141,22 @@ export async function* handleVerifyResult(
   const report = deps.failureHandler.classify(featureId, 'VERIFY', '4중 검증 실패');
 
   if (report.ok) {
-    const recoveryPhase = deps.failureHandler.getRecoveryPhase(report.value);
+    let recoveryPhase = deps.failureHandler.getRecoveryPhase(report.value);
+
+    // WHY: PI-005 — 통합 검증 실패 시 반드시 DESIGN부터 재실행
+    //      §8.5: "통합 검증 실패 → 2계층-A 전체 루프 재실행 (architect부터)"
+    const adevResults = deps.verificationGate.getResults(featureId);
+    const integrationFailed = adevResults.some(
+      (r) => r.phase === 'adev' && !r.passed && r.feedback.includes('통합 테스트 실패'),
+    );
+    if (integrationFailed && recoveryPhase !== 'DESIGN') {
+      deps.logger.info('통합 검증 실패 → DESIGN Phase 강제 재시작 (§8.5)', {
+        featureId,
+        originalRecoveryPhase: recoveryPhase,
+      });
+      recoveryPhase = 'DESIGN';
+    }
+
     const transition = deps.phaseEngine.transition(
       recoveryPhase,
       `검증 실패 롤백: ${report.value.type}`,
@@ -194,10 +222,7 @@ async function requestUserConfirmation(
   };
 
   // WHY: userCheckpoint와 userInputProvider는 호출 전에 존재 확인 완료
-  return deps.userCheckpoint!.requestConfirmation(
-    testReport,
-    deps.userInputProvider!,
-  );
+  return deps.userCheckpoint!.requestConfirmation(testReport, deps.userInputProvider!);
 }
 
 // ── Phase 전환 / Phase Transition ───────────────────────────────

@@ -116,9 +116,12 @@ export class ContractVerifier {
     pkg: HandoffPackage,
     modelName?: string,
   ): Promise<Result<ContractVerificationResult, AdevError>> {
-    this.logger.debug('에이전트 기반 정합성 검증 시작 / Starting agent-based consistency verification', {
-      packageId: pkg.id,
-    });
+    this.logger.debug(
+      '에이전트 기반 정합성 검증 시작 / Starting agent-based consistency verification',
+      {
+        packageId: pkg.id,
+      },
+    );
 
     const consistencyVerifier = new ContractAiConsistencyVerifier({
       claudeApi: this.claudeApi,

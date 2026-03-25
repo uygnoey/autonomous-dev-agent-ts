@@ -15,6 +15,7 @@ import type { HookCallbackMatcher, TeammateIdleHookInput } from '@anthropic-ai/c
 import type { AuthProvider } from 'auth/types.js';
 import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
+import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
 import type { AgentName } from 'core/types.js';
 import { ClaudeApi } from 'layer1/claude-api.js';
@@ -62,6 +63,10 @@ export interface Layer2BootstrapOptions {
    * EN: If omitted, IntegrationTester defaults apply; parallelWorkers resolved as 'auto'.
    */
   readonly testing?: TestingConfig;
+  /** 사용자 체크포인트 (선택) — PI-014 유저 확인에 사용 / User checkpoint (optional) for PI-014 user confirmation */
+  readonly userCheckpoint?: UserCheckpoint;
+  /** 사용자 입력 제공자 (선택) — PI-014 CLI 인터랙션에 사용 / User input provider (optional) for PI-014 CLI interaction */
+  readonly userInputProvider?: UserInputProvider;
 }
 
 // ── Layer2Bootstrap ─────────────────────────────────────────────
@@ -87,6 +92,8 @@ export class Layer2Bootstrap {
   private readonly logger: Logger;
   private readonly projectCwd: string;
   private readonly testing: TestingConfig | undefined;
+  private readonly userCheckpoint: UserCheckpoint | undefined;
+  private readonly userInputProvider: UserInputProvider | undefined;
 
   /**
    * @param options - 부트스트랩 옵션 / Bootstrap options
@@ -96,6 +103,8 @@ export class Layer2Bootstrap {
     this.logger = options.logger;
     this.projectCwd = options.projectCwd;
     this.testing = options.testing;
+    this.userCheckpoint = options.userCheckpoint;
+    this.userInputProvider = options.userInputProvider;
   }
 
   /**
@@ -242,6 +251,8 @@ export class Layer2Bootstrap {
       parallelCoderRunner,
       gitBranchManager,
       layer1Verifier,
+      userCheckpoint: this.userCheckpoint,
+      userInputProvider: this.userInputProvider,
     };
 
     return new TeamLeader(deps);

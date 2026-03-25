@@ -252,5 +252,4 @@ export class ProcessExecutor {
 
     return combined;
   }
-
 }

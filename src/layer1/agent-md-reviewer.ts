@@ -114,8 +114,13 @@ export class AgentMdReviewer {
         // WHY: approve_all 단축 명령 — 현재 + 나머지 모두 승인
         confirmed[agentName] = draft;
         approveAllRemaining = true;
-        input.success(`[${i + 1}/${ALL_AGENT_NAMES.length}] ${agentName} — 승인 (나머지 일괄 승인)`);
-        this.logger.info('일괄 승인 시작', { agentName, remaining: ALL_AGENT_NAMES.length - i - 1 });
+        input.success(
+          `[${i + 1}/${ALL_AGENT_NAMES.length}] ${agentName} — 승인 (나머지 일괄 승인)`,
+        );
+        this.logger.info('일괄 승인 시작', {
+          agentName,
+          remaining: ALL_AGENT_NAMES.length - i - 1,
+        });
         continue;
       }
 

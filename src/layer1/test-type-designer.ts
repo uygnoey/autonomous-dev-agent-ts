@@ -249,24 +249,28 @@ function getSampleTestTemplates(featureName: string, categoryName: string): Samp
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 기본 정상 동작 / Normal behavior of ${categoryName} in ${featureName}`,
-      expectedBehavior: '유효한 입력에 대해 정상 결과를 반환한다 / Returns correct result for valid input',
+      expectedBehavior:
+        '유효한 입력에 대해 정상 결과를 반환한다 / Returns correct result for valid input',
     },
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 일반 사용 시나리오 / Common usage scenario of ${categoryName} in ${featureName}`,
-      expectedBehavior: '일반적인 사용 패턴에서 기대한 동작을 수행한다 / Performs as expected in common usage patterns',
+      expectedBehavior:
+        '일반적인 사용 패턴에서 기대한 동작을 수행한다 / Performs as expected in common usage patterns',
     },
     // ── Edge cases — 빈 입력 / Empty input (80%) ────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 빈 입력 처리 / Empty input handling in ${categoryName}`,
-      expectedBehavior: '빈 입력에 대해 적절한 에러 또는 기본값을 반환한다 / Returns appropriate error or default for empty input',
+      expectedBehavior:
+        '빈 입력에 대해 적절한 에러 또는 기본값을 반환한다 / Returns appropriate error or default for empty input',
     },
     // ── Edge cases — null/undefined ──────────────────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} null/undefined 입력 / Null/undefined input in ${categoryName}`,
-      expectedBehavior: 'null/undefined 입력을 안전하게 처리한다 / Safely handles null/undefined input',
+      expectedBehavior:
+        'null/undefined 입력을 안전하게 처리한다 / Safely handles null/undefined input',
     },
     // ── Edge cases — 경계값 최솟값 / Boundary min ────
     {
@@ -284,37 +288,43 @@ function getSampleTestTemplates(featureName: string, categoryName: string): Samp
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 대량 데이터 처리 / Large data handling in ${categoryName}`,
-      expectedBehavior: '대량 데이터에서도 성능 저하 없이 처리한다 / Processes large data without performance degradation',
+      expectedBehavior:
+        '대량 데이터에서도 성능 저하 없이 처리한다 / Processes large data without performance degradation',
     },
     // ── Edge cases — 중복 입력 / Duplicate input ─────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 중복 입력 처리 / Duplicate input handling in ${categoryName}`,
-      expectedBehavior: '중복 입력을 적절히 처리한다 (무시/병합/에러) / Handles duplicate input appropriately',
+      expectedBehavior:
+        '중복 입력을 적절히 처리한다 (무시/병합/에러) / Handles duplicate input appropriately',
     },
     // ── Edge cases — 잘못된 타입 / Invalid type ──────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 잘못된 타입 입력 / Invalid type input in ${categoryName}`,
-      expectedBehavior: '타입이 맞지 않는 입력에 대해 명확한 에러를 반환한다 / Returns clear error for type-mismatched input',
+      expectedBehavior:
+        '타입이 맞지 않는 입력에 대해 명확한 에러를 반환한다 / Returns clear error for type-mismatched input',
     },
     // ── Edge cases — 동시 호출 / Concurrent calls ────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 동시 호출 처리 / Concurrent call handling in ${categoryName}`,
-      expectedBehavior: '동시 호출 시 데이터 정합성을 유지한다 / Maintains data integrity under concurrent calls',
+      expectedBehavior:
+        '동시 호출 시 데이터 정합성을 유지한다 / Maintains data integrity under concurrent calls',
     },
     // ── Edge cases — 타임아웃 / Timeout ──────────────
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 타임아웃 처리 / Timeout handling in ${categoryName}`,
-      expectedBehavior: '타임아웃 시 적절한 에러를 반환하고 리소스를 정리한다 / Returns appropriate error and cleans up resources on timeout',
+      expectedBehavior:
+        '타임아웃 시 적절한 에러를 반환하고 리소스를 정리한다 / Returns appropriate error and cleans up resources on timeout',
     },
     // ── Edge cases — 특수 문자 / Special characters ──
     {
       category: categoryName,
       description: `${featureName}의 ${categoryName} 특수 문자 입력 / Special character input in ${categoryName}`,
-      expectedBehavior: '특수 문자, 유니코드, 이모지를 올바르게 처리한다 / Correctly handles special characters, unicode, and emojis',
+      expectedBehavior:
+        '특수 문자, 유니코드, 이모지를 올바르게 처리한다 / Correctly handles special characters, unicode, and emojis',
     },
   ];
 }

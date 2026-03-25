@@ -69,6 +69,4 @@ export type {
   TranslationContext,
 } from 'layer2/types.js';
 
-export {
-  DOCUMENTER_OUTPUT_MAP,
-} from 'layer2/types.js';
+export { DOCUMENTER_OUTPUT_MAP } from 'layer2/types.js';

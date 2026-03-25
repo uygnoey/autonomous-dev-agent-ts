@@ -167,16 +167,15 @@ export async function* executeVerifyPhase(
   const integrationResult = await runIntegrationTests(deps, featureId, handoffPackage);
 
   // WHY: PI-003 — adev 종합 판단 — qa_qc, reviewer, layer1, 통합 테스트 결과를 종합하여 최종 판정
-  const adevPassed = qaQcPassed && reviewerPassed && layer1Result.passed && integrationResult.allPassed;
+  const adevPassed =
+    qaQcPassed && reviewerPassed && layer1Result.passed && integrationResult.allPassed;
   const adevFeedbackParts: string[] = [];
 
   if (!qaQcPassed) adevFeedbackParts.push('qa_qc 검증 실패');
   if (!reviewerPassed) adevFeedbackParts.push('reviewer 검증 실패');
   if (!layer1Result.passed) adevFeedbackParts.push('layer1 검증 실패');
   if (!integrationResult.allPassed) {
-    adevFeedbackParts.push(
-      `통합 테스트 실패 (Step ${integrationResult.failedAtStep ?? '?'})`,
-    );
+    adevFeedbackParts.push(`통합 테스트 실패 (Step ${integrationResult.failedAtStep ?? '?'})`);
   }
 
   const adevFeedback = adevPassed

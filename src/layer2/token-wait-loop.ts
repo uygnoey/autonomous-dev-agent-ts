@@ -156,7 +156,9 @@ export async function* runTokenWaitLoop(
       break;
     }
 
-    yield makeMessageEvent(`토큰 대기 중 (${Math.floor(waited / 1000)}초 경과, ${isSubscription ? 'Subscription' : 'API Key'} 모드)`);
+    yield makeMessageEvent(
+      `토큰 대기 중 (${Math.floor(waited / 1000)}초 경과, ${isSubscription ? 'Subscription' : 'API Key'} 모드)`,
+    );
   }
 
   // 6. 최대 대기 시간 초과 확인 / Check max wait exceeded
@@ -166,7 +168,9 @@ export async function* runTokenWaitLoop(
       maxDurationMs: maxDuration,
       authMode: deps.tokenMonitor.authMode,
     });
-    yield makeErrorEvent(`토큰 한도 대기 시간 초과 (${isSubscription ? '5시간 윈도우' : '1시간'} 초과)`);
+    yield makeErrorEvent(
+      `토큰 한도 대기 시간 초과 (${isSubscription ? '5시간 윈도우' : '1시간'} 초과)`,
+    );
     return;
   }
 

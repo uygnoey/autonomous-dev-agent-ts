@@ -34,6 +34,9 @@ import {
   sdkSessionFactory,
 } from 'layer2/v2-session-factory.js';
 
+/** DESIGN Phase 재토론 최대 횟수 / Max DESIGN phase re-discussion cycles */
+const MAX_DESIGN_RETRIES = 2;
+
 /**
  * V2 Session 기반 에이전트 실행기 / V2 Session-based agent executor
  *
@@ -284,118 +287,171 @@ export class V2SessionExecutor implements AgentExecutor {
       },
     };
 
-    try {
-      const sessionEnv = buildSessionEnvironment(designConfig, this.authProvider);
-      const sessionResult = await this.createSession(designConfig, sessionEnv);
-      if (!sessionResult.ok) {
-        yield createErrorEvent(config.name, sessionResult.error.message);
+    // WHY: PI-003 — DESIGN Phase 종료 조건 = qa Gate 통과 + 전원 합의
+    //      done 이벤트의 content를 분석하여 종료 조건 충족 여부를 판별한다.
+    const DESIGN_COMPLETE_KEYWORDS = ['합의', '동의', 'AGREED', 'APPROVED', '완료', 'LGTM'];
+    const DESIGN_GATE_KEYWORDS = ['qa 통과', 'qa gate', 'gate passed', '품질 통과'];
+
+    // WHY: PI-002 — 종료 조건 미충족 시 재토론 루프. 최대 MAX_DESIGN_RETRIES회 재시도.
+    for (let attempt = 0; attempt <= MAX_DESIGN_RETRIES; attempt++) {
+      let designComplete = false;
+
+      try {
+        const sessionEnv = buildSessionEnvironment(designConfig, this.authProvider);
+        const sessionResult = await this.createSession(designConfig, sessionEnv);
+        if (!sessionResult.ok) {
+          yield createErrorEvent(config.name, sessionResult.error.message);
+          return;
+        }
+
+        const { session, options: sessionOptions } = sessionResult.value;
+        const sessionId = generateSessionId(
+          config.projectId,
+          options.featureId,
+          config.name,
+          'DESIGN',
+        );
+        this.activeSessions.set(sessionId, { session, options: sessionOptions });
+
+        try {
+          // WHY: 재토론 시 이전 실패 사유를 프롬프트에 포함하여 에이전트가 부족한 조건을 인지하도록 한다
+          const basePrompt = config.systemPrompt
+            ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
+            : config.prompt;
+          const fullPrompt =
+            attempt > 0
+              ? `${basePrompt}\n\n[재토론 ${attempt}/${MAX_DESIGN_RETRIES}] 이전 DESIGN Phase에서 종료 조건(qa Gate 통과 + 전원 합의)이 충족되지 않았습니다. 반드시 qa Gate 통과 키워드와 합의 키워드를 포함하여 종료해주세요.`
+              : basePrompt;
+
+          this.logger.info('DESIGN Phase session send 시작', {
+            agentName: config.name,
+            promptLen: fullPrompt.length,
+            attempt,
+          });
+          await session.send(fullPrompt);
+
+          let lastContent = '';
+
+          for await (const sdkEvent of session.stream()) {
+            // WHY: AbortSignal이 발생하면 세션을 즉시 종료
+            if (options.signal?.aborted) {
+              this.logger.warn('DESIGN Phase 세션 abort 신호 수신 — 세션 종료', {
+                agentName: config.name,
+                featureId: options.featureId,
+              });
+              session.close();
+              this.activeSessions.delete(sessionId);
+              yield createErrorEvent(config.name, 'DESIGN Phase 세션이 이상 감지로 중단됨');
+              return;
+            }
+
+            const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
+              this.logger.debug('Unhandled SDK event type', { eventType });
+            });
+            if (mappedEvent) {
+              // WHY: 마지막 메시지/done 이벤트의 content를 수집하여 종료 조건 판별에 사용
+              if (mappedEvent.type === 'message' || mappedEvent.type === 'done') {
+                lastContent = mappedEvent.content;
+              }
+              yield mappedEvent;
+            }
+
+            if (mappedEvent?.type === 'done') {
+              // WHY: PI-003 — 종료 조건 판별: qa Gate 키워드와 합의 키워드를 모두 포함해야 완료
+              const contentLower = lastContent.toLowerCase();
+              const hasConsensus = DESIGN_COMPLETE_KEYWORDS.some((kw) =>
+                contentLower.includes(kw.toLowerCase()),
+              );
+              const hasGatePass = DESIGN_GATE_KEYWORDS.some((kw) =>
+                contentLower.includes(kw.toLowerCase()),
+              );
+
+              if (hasConsensus && hasGatePass) {
+                this.logger.info('DESIGN Phase 종료 조건 충족', {
+                  agentName: config.name,
+                  hasConsensus,
+                  hasGatePass,
+                  attempt,
+                });
+                designComplete = true;
+              } else {
+                this.logger.warn('DESIGN Phase 종료 조건 미충족', {
+                  agentName: config.name,
+                  featureId: options.featureId,
+                  hasConsensus,
+                  hasGatePass,
+                  attempt,
+                });
+                yield {
+                  type: 'message',
+                  agentName: config.name,
+                  content: `[경고] DESIGN Phase 종료 조건 미충족 — 합의: ${hasConsensus}, qa Gate: ${hasGatePass}`,
+                  timestamp: new Date(),
+                  metadata: { designCompletionCheck: { hasConsensus, hasGatePass } },
+                };
+              }
+
+              session.close();
+              this.activeSessions.delete(sessionId);
+            }
+          }
+        } catch (streamError) {
+          const errMsg =
+            streamError instanceof Error
+              ? `${streamError.message}\n${streamError.stack ?? ''}`
+              : String(streamError);
+          this.logger.error('DESIGN Phase stream error', {
+            agentName: config.name,
+            errorMsg: errMsg,
+            attempt,
+          });
+          yield createErrorEvent(config.name, errMsg || 'Unknown DESIGN stream error');
+          this.activeSessions.delete(sessionId);
+          // WHY: 스트림 에러는 재토론이 아닌 실패이므로 즉시 종료
+          return;
+        }
+      } catch (error) {
+        this.logger.error('DESIGN Phase 실행 실패', { agentName: config.name, error, attempt });
+        yield createErrorEvent(
+          config.name,
+          error instanceof Error ? error.message : 'Unknown DESIGN execution error',
+        );
+        // WHY: 세션 생성 실패는 재시도해도 동일 결과이므로 즉시 종료
         return;
       }
 
-      const { session, options: sessionOptions } = sessionResult.value;
-      const sessionId = generateSessionId(
-        config.projectId,
-        options.featureId,
-        config.name,
-        'DESIGN',
-      );
-      this.activeSessions.set(sessionId, { session, options: sessionOptions });
-
-      try {
-        const fullPrompt = config.systemPrompt
-          ? `${config.systemPrompt}\n\n---\n\n${config.prompt}`
-          : config.prompt;
-
-        this.logger.info('DESIGN Phase session send 시작', {
-          agentName: config.name,
-          promptLen: fullPrompt.length,
-        });
-        await session.send(fullPrompt);
-
-        // WHY: PI-003 — DESIGN Phase 종료 조건 = qa Gate 통과 + 전원 합의
-        //      done 이벤트의 content를 분석하여 종료 조건 충족 여부를 판별한다.
-        const DESIGN_COMPLETE_KEYWORDS = ['합의', '동의', 'AGREED', 'APPROVED', '완료', 'LGTM'];
-        const DESIGN_GATE_KEYWORDS = ['qa 통과', 'qa gate', 'gate passed', '품질 통과'];
-        let lastContent = '';
-
-        for await (const sdkEvent of session.stream()) {
-          // WHY: AbortSignal이 발생하면 세션을 즉시 종료
-          if (options.signal?.aborted) {
-            this.logger.warn('DESIGN Phase 세션 abort 신호 수신 — 세션 종료', {
-              agentName: config.name,
-              featureId: options.featureId,
-            });
-            session.close();
-            this.activeSessions.delete(sessionId);
-            yield createErrorEvent(config.name, 'DESIGN Phase 세션이 이상 감지로 중단됨');
-            return;
-          }
-
-          const mappedEvent = mapSdkEvent(sdkEvent, config.name, (eventType) => {
-            this.logger.debug('Unhandled SDK event type', { eventType });
-          });
-          if (mappedEvent) {
-            // WHY: 마지막 메시지/done 이벤트의 content를 수집하여 종료 조건 판별에 사용
-            if (mappedEvent.type === 'message' || mappedEvent.type === 'done') {
-              lastContent = mappedEvent.content;
-            }
-            yield mappedEvent;
-          }
-
-          if (mappedEvent?.type === 'done') {
-            // WHY: PI-003 — 종료 조건 판별: qa Gate 키워드와 합의 키워드를 모두 포함해야 완료
-            const contentLower = lastContent.toLowerCase();
-            const hasConsensus = DESIGN_COMPLETE_KEYWORDS.some((kw) =>
-              contentLower.includes(kw.toLowerCase()),
-            );
-            const hasGatePass = DESIGN_GATE_KEYWORDS.some((kw) =>
-              contentLower.includes(kw.toLowerCase()),
-            );
-
-            if (!hasConsensus || !hasGatePass) {
-              this.logger.warn('DESIGN Phase 종료 조건 미충족', {
-                agentName: config.name,
-                featureId: options.featureId,
-                hasConsensus,
-                hasGatePass,
-              });
-              yield {
-                type: 'message',
-                agentName: config.name,
-                content: `[경고] DESIGN Phase 종료 조건 미충족 — 합의: ${hasConsensus}, qa Gate: ${hasGatePass}`,
-                timestamp: new Date(),
-                metadata: { designCompletionCheck: { hasConsensus, hasGatePass } },
-              };
-            } else {
-              this.logger.info('DESIGN Phase 종료 조건 충족', {
-                agentName: config.name,
-                hasConsensus,
-                hasGatePass,
-              });
-            }
-
-            session.close();
-            this.activeSessions.delete(sessionId);
-          }
-        }
-      } catch (streamError) {
-        const errMsg =
-          streamError instanceof Error
-            ? `${streamError.message}\n${streamError.stack ?? ''}`
-            : String(streamError);
-        this.logger.error('DESIGN Phase stream error', {
-          agentName: config.name,
-          errorMsg: errMsg,
-        });
-        yield createErrorEvent(config.name, errMsg || 'Unknown DESIGN stream error');
-        this.activeSessions.delete(sessionId);
+      // WHY: 종료 조건 충족 시 루프 탈출
+      if (designComplete) {
+        return;
       }
-    } catch (error) {
-      this.logger.error('DESIGN Phase 실행 실패', { agentName: config.name, error });
-      yield createErrorEvent(
-        config.name,
-        error instanceof Error ? error.message : 'Unknown DESIGN execution error',
-      );
+
+      // WHY: 재토론 횟수 소진 시 경고 후 진행
+      if (attempt < MAX_DESIGN_RETRIES) {
+        this.logger.info('DESIGN Phase 재토론 시작', {
+          attempt: attempt + 1,
+          maxRetries: MAX_DESIGN_RETRIES,
+          featureId: options.featureId,
+        });
+        yield {
+          type: 'message',
+          agentName: config.name,
+          content: `[재토론] DESIGN Phase 종료 조건 미충족 — 재토론 시작 (${attempt + 1}/${MAX_DESIGN_RETRIES})`,
+          timestamp: new Date(),
+          metadata: { designRetry: { attempt: attempt + 1, maxRetries: MAX_DESIGN_RETRIES } },
+        };
+      } else {
+        this.logger.warn('DESIGN Phase 재토론 횟수 소진 — 조건 미충족 상태로 진행', {
+          featureId: options.featureId,
+          maxRetries: MAX_DESIGN_RETRIES,
+        });
+        yield {
+          type: 'message',
+          agentName: config.name,
+          content: `[경고] DESIGN Phase ${MAX_DESIGN_RETRIES}회 재토론 후에도 종료 조건 미충족 — 진행`,
+          timestamp: new Date(),
+          metadata: { designRetryExhausted: true, maxRetries: MAX_DESIGN_RETRIES },
+        };
+      }
     }
   }
 

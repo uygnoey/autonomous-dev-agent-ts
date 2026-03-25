@@ -83,7 +83,11 @@ export type { ContractAiConsistencyDeps } from 'layer1/contract-ai-consistency-v
 export { AgentMdGenerator } from 'layer1/agent-md-generator.js';
 export type { AgentMdGeneratorConfig } from 'layer1/agent-md-generator.js';
 export { AgentMdReviewer } from 'layer1/agent-md-reviewer.js';
-export type { AgentMdReviewInput, AgentReviewResult, ReviewDecision } from 'layer1/agent-md-reviewer.js';
+export type {
+  AgentMdReviewInput,
+  AgentReviewResult,
+  ReviewDecision,
+} from 'layer1/agent-md-reviewer.js';
 
 // ── Claude API ──────────────────────────────────────────────────
 

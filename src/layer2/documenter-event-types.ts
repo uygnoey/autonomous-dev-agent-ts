@@ -19,11 +19,11 @@ import type { Phase } from 'core/types.js';
  * documenter를 트리거하는 이벤트 유형 / Event types that trigger the documenter
  */
 export type DocumenterEventType =
-  | 'feature_complete'  // 기능 완료 / Feature completed
-  | 'test_executed'     // 테스트 실행 (완료/실패) / Test executed (pass/fail)
-  | 'bug_detected'      // 버그 발생 / Bug detected
-  | 'phase_boundary'    // Phase 경계 전환 / Phase boundary transition
-  | 'translation';      // 다국어 번역 요청 / Translation request
+  | 'feature_complete' // 기능 완료 / Feature completed
+  | 'test_executed' // 테스트 실행 (완료/실패) / Test executed (pass/fail)
+  | 'bug_detected' // 버그 발생 / Bug detected
+  | 'phase_boundary' // Phase 경계 전환 / Phase boundary transition
+  | 'translation'; // 다국어 번역 요청 / Translation request
 
 // ── 이벤트별 컨텍스트 / Event-specific contexts ──────────────────
 
@@ -174,28 +174,14 @@ export type DocumenterEvent =
  * EN: Defines documents the documenter must generate for each event type.
  */
 export const DOCUMENTER_OUTPUT_MAP: Readonly<Record<DocumenterEventType, readonly string[]>> = {
-  feature_complete: [
-    '기능 설명서 (자연어)',
-    'API 연동 정의서',
-    '아키텍처 변경 이력',
-  ],
-  test_executed: [
-    'Unit/Module/E2E 테스트 결과서',
-    '커버리지 리포트',
-    '성능 벤치마크 리포트',
-  ],
-  bug_detected: [
-    '버그 리포트 (재현 경로, 원인, 영향 범위)',
-    '수정 내역서',
-    '회귀 테스트 결과',
-  ],
+  feature_complete: ['기능 설명서 (자연어)', 'API 연동 정의서', '아키텍처 변경 이력'],
+  test_executed: ['Unit/Module/E2E 테스트 결과서', '커버리지 리포트', '성능 벤치마크 리포트'],
+  bug_detected: ['버그 리포트 (재현 경로, 원인, 영향 범위)', '수정 내역서', '회귀 테스트 결과'],
   phase_boundary: [
     'CHANGELOG (git diff → 일반 언어 번역)',
     '에이전트 간 의사결정 기록',
     '설계 변경 사유서',
     '코드 리뷰 결과 요약',
   ],
-  translation: [
-    '번역된 문서 (대상 언어별)',
-  ],
+  translation: ['번역된 문서 (대상 언어별)'],
 };

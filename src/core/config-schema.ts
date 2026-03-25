@@ -25,6 +25,9 @@ export interface EmbeddingConfig {
   readonly voyageApiKey: string | null;
 }
 
+/** 클린 환경 유형 / Clean environment type */
+export type CleanEnvType = 'local' | 'cloud';
+
 /** 테스트 수량 설정 / Testing configuration */
 export interface TestingConfig {
   readonly unitCount: number;
@@ -33,6 +36,8 @@ export interface TestingConfig {
   readonly integrationE2eCount: number;
   readonly parallelWorkers: number | 'auto';
   readonly e2eTimeoutSeconds: number;
+  // WHY: PI-006 — §8.5 클라우드 환경 선택 지원. 현재는 로컬만 구현
+  readonly cleanEnvType: CleanEnvType;
 }
 
 /** 4중 검증 모델 설정 / Verification model configuration */
@@ -76,6 +81,7 @@ export const DEFAULT_CONFIG: ConfigSchema = {
     integrationE2eCount: 1_000_000,
     parallelWorkers: 'auto',
     e2eTimeoutSeconds: 300,
+    cleanEnvType: 'local',
   },
   verification: {
     layer1Model: 'opus',

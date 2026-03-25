@@ -21,6 +21,8 @@ import type { HandoffPackage } from '../../layer1/types.js';
 import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
 import { IntegrationTester } from '../../layer2/integration-tester.js';
 import { Layer2Bootstrap } from '../../layer2/layer2-bootstrap.js';
+import { UserCheckpoint } from '../../layer2/user-checkpoint.js';
+import type { UserInputProvider } from '../../layer2/user-checkpoint.js';
 import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
@@ -129,10 +131,23 @@ export async function runLayer2(
   try {
     chat.system('Layer2 자율 개발 시작 중...');
 
+    // WHY: PI-014 — ChatUi를 UserInputProvider로 래핑하여 유저 체크포인트 CLI 연결
+    const userInputProvider: UserInputProvider = {
+      system: (msg: string) => chat.system(msg),
+      success: (msg: string) => chat.success(msg),
+      waitForInput: async () => {
+        const event = await chat.waitForInput();
+        return { type: event.type, text: 'text' in event ? event.text : undefined };
+      },
+    };
+    const userCheckpoint = new UserCheckpoint(logger);
+
     const bootstrap = new Layer2Bootstrap({
       authProvider: session.authProvider,
       logger,
       projectCwd: session.projectInfo.path,
+      userCheckpoint,
+      userInputProvider,
     });
 
     const teamLeader = await bootstrap.createTeamLeader();

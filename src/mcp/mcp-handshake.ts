@@ -104,7 +104,10 @@ async function readRpcLine(
 
   const timeout = new Promise<Result<string>>((resolve) =>
     setTimeout(
-      () => resolve(err(new McpError('mcp_handshake_timeout', `MCP 응답 타임아웃: ${timeoutMs}ms 초과`))),
+      () =>
+        resolve(
+          err(new McpError('mcp_handshake_timeout', `MCP 응답 타임아웃: ${timeoutMs}ms 초과`)),
+        ),
       timeoutMs,
     ),
   );
@@ -113,7 +116,9 @@ async function readRpcLine(
     while (true) {
       const { value, done } = await reader.read();
       if (done) {
-        return err(new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다 / Stream closed'));
+        return err(
+          new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다 / Stream closed'),
+        );
       }
       buffer += decoder.decode(value, { stream: true });
       const newlineIdx = buffer.indexOf('\n');

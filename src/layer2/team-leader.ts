@@ -48,10 +48,7 @@ export interface ITeamLeader {
    * @param handoffPackage - layer1 인수 패키지 / Handoff package from layer1
    * @returns 에이전트 이벤트 스트림 / Agent event stream
    */
-  executeFeature(
-    featureId: string,
-    handoffPackage: HandoffPackage,
-  ): AsyncIterable<AgentEvent>;
+  executeFeature(featureId: string, handoffPackage: HandoffPackage): AsyncIterable<AgentEvent>;
 
   /**
    * 현재 상태를 반환한다 / Returns current status
@@ -261,6 +258,26 @@ export class TeamLeader implements ITeamLeader {
           );
         }
 
+        // WHY: PI-001 — CODE/TEST/VERIFY Phase 실행 후 이상 패턴 감지 시 재spawn
+        //      DESIGN Phase는 executePhase()에서 자체 처리하므로 제외
+        if (currentPhase !== 'DESIGN') {
+          const anomalyAlerts = this.streamMonitor.detectAnomalies();
+          const highAlerts = anomalyAlerts.filter((a) => a.severity === 'high');
+          if (highAlerts.length > 0) {
+            this.logger.warn('이상 패턴 감지 — 현재 Phase 재실행', {
+              phase: currentPhase,
+              featureId,
+              alertCount: highAlerts.length,
+            });
+            yield createEvent(
+              'message',
+              `[경고] 이상 패턴 감지 (${highAlerts.map((a) => a.type).join(', ')}) — ${currentPhase} Phase 재실행`,
+            );
+            // WHY: Phase를 재실행하기 위해 advancePhase 건너뜀
+            continue;
+          }
+        }
+
         if (currentPhase === 'VERIFY') {
           yield* handleVerifyResult(
             {
@@ -280,7 +297,11 @@ export class TeamLeader implements ITeamLeader {
           );
           // WHY: handleVerifyResult에서 유저 revise/revise_integration 시 Phase 전환 후 return
           //      approve 시 isAllPassed는 여전히 true이고 done 이벤트가 yield된다
-          if (this.verificationGate.isAllPassed(featureId) && this.phaseEngine.currentPhase === 'VERIFY') return;
+          if (
+            this.verificationGate.isAllPassed(featureId) &&
+            this.phaseEngine.currentPhase === 'VERIFY'
+          )
+            return;
         } else {
           advancePhase(
             { phaseEngine: this.phaseEngine, progressTracker: this.progressTracker },

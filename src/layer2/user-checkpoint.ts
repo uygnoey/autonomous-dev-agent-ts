@@ -241,14 +241,8 @@ export class UserCheckpoint {
 
     // WHY: 통합 테스트 단계별 결과 출력
     const { integrationResults } = testReport;
-    const totalTests = integrationResults.stepResults.reduce(
-      (sum, s) => sum + s.executedCount,
-      0,
-    );
-    const totalFails = integrationResults.stepResults.reduce(
-      (sum, s) => sum + s.failCount,
-      0,
-    );
+    const totalTests = integrationResults.stepResults.reduce((sum, s) => sum + s.executedCount, 0);
+    const totalFails = integrationResults.stepResults.reduce((sum, s) => sum + s.failCount, 0);
     inputProvider.system(`통합 테스트: ${totalTests} 실행 / ${totalFails} 실패`);
 
     for (const step of integrationResults.stepResults) {
@@ -305,15 +299,14 @@ export class UserCheckpoint {
         return { decision: 'revise', feedback };
       }
 
-      if (
-        input === 'revise_integration' ||
-        input === '재검증'
-      ) {
+      if (input === 'revise_integration' || input === '재검증') {
         this.logger.info('유저 통합 재검증 요청');
         return { decision: 'revise_integration' };
       }
 
-      inputProvider.system('잘못된 입력입니다. approve / revise / revise_integration 중 하나를 입력하세요.');
+      inputProvider.system(
+        '잘못된 입력입니다. approve / revise / revise_integration 중 하나를 입력하세요.',
+      );
     }
   }
 }

@@ -254,13 +254,20 @@ export class ContractChangeManager {
     }
 
     // WHY: 변경/추가된 기능에 의존하는 기능을 의존 체인으로 추적
-    const directlyAffected = new Set([...changedFeatureIds, ...addedFeatureIds, ...removedFeatureIds]);
+    const directlyAffected = new Set([
+      ...changedFeatureIds,
+      ...addedFeatureIds,
+      ...removedFeatureIds,
+    ]);
     const dependencyAffectedIds = traceDependencyChain(next.features, directlyAffected);
 
     // WHY: 변경된 기능 + 간접 영향 기능 모두 테스트 재실행 대상
-    const testRerunFeatureIds = [...new Set([...changedFeatureIds, ...addedFeatureIds, ...dependencyAffectedIds])];
+    const testRerunFeatureIds = [
+      ...new Set([...changedFeatureIds, ...addedFeatureIds, ...dependencyAffectedIds]),
+    ];
 
-    const hasAnyChange = changedFeatureIds.length > 0 || addedFeatureIds.length > 0 || removedFeatureIds.length > 0;
+    const hasAnyChange =
+      changedFeatureIds.length > 0 || addedFeatureIds.length > 0 || removedFeatureIds.length > 0;
 
     const analysis: ContractImpactAnalysis = {
       changedFeatureIds,

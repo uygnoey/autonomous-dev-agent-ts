@@ -211,10 +211,7 @@ export async function readTemplateSource(
 }
 
 /** 커스텀 템플릿 검색 디렉토리 / Custom template search directories */
-const CUSTOM_TEMPLATE_DIRS = [
-  '.adev/templates',
-  join(homedir(), '.adev', 'templates'),
-] as const;
+const CUSTOM_TEMPLATE_DIRS = ['.adev/templates', join(homedir(), '.adev', 'templates')] as const;
 
 /**
  * 커스텀 템플릿을 디스크에서 스캔하여 레지스트리에 로드한다 / Scan and load custom templates from disk

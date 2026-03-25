@@ -173,12 +173,19 @@ export async function* executeCodePhase(
       yield* deps.gitBranchManager.commitChanges(
         `feat(${featureId}): ${allocation.coderId} CODE phase 완료`,
       );
-      // WHY: PI-004 — 병합 충돌 시 충돌 해결 프롬프트를 메시지 이벤트로 전달한다
+      // WHY: PI-003 — 병합 충돌 시 충돌 해결 프롬프트를 전달하고 architect spawn으로 해결 조율
       for await (const mergeEvent of deps.gitBranchManager.mergeBranch(allocation.branchName)) {
         if (mergeEvent.type === 'error' && mergeEvent.metadata?.conflictResolutionPrompt) {
           yield createEvent(
             'message',
             `[충돌 감지] ${allocation.coderId}: ${String(mergeEvent.metadata.conflictResolutionPrompt)}`,
+          );
+          // WHY: PI-003 — architect 에이전트를 spawn하여 충돌 해결 조율
+          yield* spawnConflictResolver(
+            deps,
+            featureId,
+            handoffPackage,
+            String(mergeEvent.metadata.conflictResolutionPrompt),
           );
         }
         yield mergeEvent;
@@ -238,92 +245,101 @@ export async function* executeTestPhase(
     { scope: 'e2e', dir: 'tests/e2e/' },
   ];
 
+  // WHY: PI-004 — 단계별 최대 1회 재시도 (qc 분석 → coder 수정 → 재실행)
+  const MAX_TEST_RETRIES = 1;
+
   for (const stage of TEST_STAGES) {
-    deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope });
-    yield createEvent('message', `[TEST] ${stage.scope} 테스트 실행 시작`);
+    let stageResolved = false;
 
-    let stageFailed = false;
-
-    // WHY: tester 에이전트에게 테스트 범위를 명시적으로 지정하여 spawn
-    const ragContext = await queryRagContext(deps.ragSearcher, featureId, 'tester');
-    const scopePrompt = [
-      `[TEST 범위 지정] scope=${stage.scope}, dir=${stage.dir}`,
-      `featureId=${featureId}`,
-      `이 단계에서는 ${stage.dir} 경로의 ${stage.scope} 테스트만 실행하라.`,
-      '1개라도 실패 시 즉시 중단하고 실패 내역을 보고하라.',
-    ].join('\n');
-
-    const configResult = deps.agentGenerator.generateAgentConfig(
-      'tester',
-      `${handoffPackage.specDocument}\n\n${scopePrompt}`,
-      featureId,
-      ragContext,
-    );
-
-    if (!configResult.ok) {
-      deps.logger.error('tester 에이전트 설정 생성 실패', {
-        scope: stage.scope,
-        error: configResult.error.message,
-      });
+    for (let retry = 0; retry <= MAX_TEST_RETRIES; retry++) {
+      deps.logger.info('TEST Phase 단계 시작', { featureId, scope: stage.scope, retry });
       yield createEvent(
-        'error',
-        `tester(${stage.scope}) 설정 생성 실패: ${configResult.error.message}`,
+        'message',
+        `[TEST] ${stage.scope} 테스트 실행 시작${retry > 0 ? ` (재시도 ${retry}/${MAX_TEST_RETRIES})` : ''}`,
       );
-      return;
-    }
 
-    const config = {
-      ...configResult.value,
-      projectId: handoffPackage.projectId,
-      phase: 'TEST' as const,
-    };
+      let stageFailed = false;
 
-    deps.sessionManager.createSession('tester', config.projectId, featureId, 'TEST');
+      // WHY: tester 에이전트에게 테스트 범위를 명시적으로 지정하여 spawn
+      const ragContext = await queryRagContext(deps.ragSearcher, featureId, 'tester');
+      const scopePrompt = [
+        `[TEST 범위 지정] scope=${stage.scope}, dir=${stage.dir}`,
+        `featureId=${featureId}`,
+        `이 단계에서는 ${stage.dir} 경로의 ${stage.scope} 테스트만 실행하라.`,
+        '1개라도 실패 시 즉시 중단하고 실패 내역을 보고하라.',
+      ].join('\n');
 
-    for await (const event of deps.agentSpawner.spawn(config)) {
-      deps.streamMonitor.onEvent({
-        type: event.type === 'tool_use' ? 'PreToolUse' : 'PostToolUse',
-        agentName: event.agentName,
-        toolName: event.type === 'tool_use' ? event.content : undefined,
-        data: event.metadata ?? {},
-        timestamp: event.timestamp,
-      });
+      const configResult = deps.agentGenerator.generateAgentConfig(
+        'tester',
+        `${handoffPackage.specDocument}\n\n${scopePrompt}`,
+        featureId,
+        ragContext,
+      );
 
-      yield event;
-
-      // WHY: PI-002 — tester에서 error 이벤트 발생 시 해당 단계 실패로 판정
-      if (event.type === 'error') {
-        stageFailed = true;
+      if (!configResult.ok) {
+        deps.logger.error('tester 에이전트 설정 생성 실패', {
+          scope: stage.scope,
+          error: configResult.error.message,
+        });
+        yield createEvent(
+          'error',
+          `tester(${stage.scope}) 설정 생성 실패: ${configResult.error.message}`,
+        );
+        return;
       }
-    }
 
-    if (stageFailed) {
-      deps.logger.warn('TEST Phase 단계 실패 — 즉시 중단', {
-        featureId,
-        scope: stage.scope,
-      });
+      const config = {
+        ...configResult.value,
+        projectId: handoffPackage.projectId,
+        phase: 'TEST' as const,
+      };
 
-      // WHY: PI-002 — 실패 시 qc 에이전트 spawn하여 원인 분석
-      const qcRagContext = await queryRagContext(deps.ragSearcher, featureId, 'qc');
-      const qcConfigResult = deps.agentGenerator.generateAgentConfig(
-        'qc',
-        `${handoffPackage.specDocument}\n\n[QC 분석 요청] ${stage.scope} 테스트 실패. 근본 원인을 분석하라.`,
-        featureId,
-        qcRagContext,
-      );
+      deps.sessionManager.createSession('tester', config.projectId, featureId, 'TEST');
 
-      if (qcConfigResult.ok) {
-        const qcConfig = {
-          ...qcConfigResult.value,
-          projectId: handoffPackage.projectId,
-          phase: 'TEST' as const,
-        };
-        deps.sessionManager.createSession('qc', qcConfig.projectId, featureId, 'TEST');
-        for await (const qcEvent of deps.agentSpawner.spawn(qcConfig)) {
-          yield qcEvent;
+      for await (const event of deps.agentSpawner.spawn(config)) {
+        deps.streamMonitor.onEvent({
+          type: event.type === 'tool_use' ? 'PreToolUse' : 'PostToolUse',
+          agentName: event.agentName,
+          toolName: event.type === 'tool_use' ? event.content : undefined,
+          data: event.metadata ?? {},
+          timestamp: event.timestamp,
+        });
+
+        yield event;
+
+        // WHY: PI-002 — tester에서 error 이벤트 발생 시 해당 단계 실패로 판정
+        if (event.type === 'error') {
+          stageFailed = true;
         }
       }
 
+      if (!stageFailed) {
+        // WHY: 단계 통과 — 재시도 루프 탈출
+        stageResolved = true;
+        break;
+      }
+
+      deps.logger.warn('TEST Phase 단계 실패', {
+        featureId,
+        scope: stage.scope,
+        retry,
+        maxRetries: MAX_TEST_RETRIES,
+      });
+
+      // WHY: PI-004 — 실패 시 qc 에이전트 spawn하여 원인 분석
+      yield* spawnQcForTestFailure(deps, featureId, handoffPackage, stage.scope);
+
+      if (retry < MAX_TEST_RETRIES) {
+        // WHY: PI-004 — qc 분석 후 coder 에이전트에게 수정 요청
+        yield createEvent(
+          'message',
+          `[TEST] ${stage.scope} 실패 — qc 분석 후 coder 수정 재시도 (${retry + 1}/${MAX_TEST_RETRIES})`,
+        );
+        yield* spawnCoderForTestFix(deps, featureId, handoffPackage, stage.scope);
+      }
+    }
+
+    if (!stageResolved) {
       yield createEvent('error', `[TEST] ${stage.scope} 테스트 실패 — CODE Phase로 롤백 필요`);
       return;
     }
@@ -377,6 +393,7 @@ export interface DocumenterTriggerContext {
  * @param featureId - 기능 ID / Feature ID
  * @param handoffPackage - 인수 패키지 / Handoff package
  * @param triggerContext - 트리거 컨텍스트 (선택) / Trigger context (optional, defaults to feature_complete)
+ * @param ragSearcher - RAG 검색기 (선택) / RAG searcher (optional)
  * @returns 에이전트 이벤트 스트림 / Agent event stream
  */
 export async function* spawnDocumenter(
@@ -386,6 +403,7 @@ export async function* spawnDocumenter(
   featureId: string,
   handoffPackage: HandoffPackage,
   triggerContext?: DocumenterTriggerContext,
+  ragSearcher?: RagSearcher,
 ): AsyncIterable<AgentEvent> {
   const trigger = triggerContext?.trigger ?? 'feature_complete';
 
@@ -393,7 +411,15 @@ export async function* spawnDocumenter(
   const triggerPrompt = buildTriggerPrompt(trigger, featureId, triggerContext?.context);
   const specWithTrigger = `${handoffPackage.specDocument}\n\n${triggerPrompt}`;
 
-  const configResult = agentGenerator.generateAgentConfig('documenter', specWithTrigger, featureId);
+  // WHY: PI-013 — documenter가 관련 feature 설계 결정과 이전 문서 컨텍스트를 활용하도록 RAG 검색 수행
+  const ragContext = await queryRagContext(ragSearcher, featureId, 'documenter');
+
+  const configResult = agentGenerator.generateAgentConfig(
+    'documenter',
+    specWithTrigger,
+    featureId,
+    ragContext,
+  );
 
   if (!configResult.ok) {
     logger.warn('documenter 설정 생성 실패 — 문서화 생략', {
@@ -673,6 +699,9 @@ export async function* executeDesignPhaseWithMonitoring(
     } finally {
       deps.streamMonitor.stopMonitoring();
       deps.ipcPoller.stop();
+      // WHY: PI-016 — §16 알려진 SDK 버그: TeamDelete 시 config.json 멤버 자동 갱신 안 됨
+      //      200ms 대기로 race condition 완화
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -709,4 +738,137 @@ export async function* executeDesignPhaseWithMonitoring(
   // WHY: 모든 재시도 + fallback 실패 시 에러 이벤트
   deps.logger.error('DESIGN Phase 재시도 횟수 초과', { featureId, maxRetries });
   yield createEvent('error', `DESIGN Phase ${maxRetries}회 재시도 후에도 실패`);
+}
+
+// ── PI-003: Git 충돌 해결 헬퍼 / Git conflict resolution helper ──
+
+/**
+ * Git 충돌 시 architect 에이전트를 spawn하여 해결을 조율한다 / Spawns architect to coordinate conflict resolution
+ *
+ * @param deps - CODE Phase 의존성 / CODE phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @param conflictPrompt - 충돌 해결 프롬프트 / Conflict resolution prompt
+ * @returns 에이전트 이벤트 스트림 / Agent event stream
+ */
+async function* spawnConflictResolver(
+  deps: ExecuteCodePhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+  conflictPrompt: string,
+): AsyncIterable<AgentEvent> {
+  const specWithConflict = `${handoffPackage.specDocument}\n\n[Git 충돌 해결 요청]\n${conflictPrompt}`;
+  const configResult = deps.agentGenerator.generateAgentConfig(
+    'architect',
+    specWithConflict,
+    featureId,
+  );
+
+  if (!configResult.ok) {
+    deps.logger.warn('architect 충돌 해결 설정 생성 실패', {
+      featureId,
+      error: configResult.error.message,
+    });
+    return;
+  }
+
+  const config = {
+    ...configResult.value,
+    projectId: handoffPackage.projectId,
+    phase: 'CODE' as const,
+  };
+
+  for await (const event of deps.agentSpawner.spawn(config)) {
+    yield event;
+  }
+}
+
+// ── PI-004: TEST 실패 시 qc/coder 재시도 헬퍼 / TEST failure retry helpers ──
+
+/**
+ * 테스트 실패 시 qc 에이전트를 spawn하여 원인을 분석한다 / Spawns qc agent to analyze test failure
+ *
+ * @param deps - TEST Phase 의존성 / TEST phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @param scope - 실패한 테스트 범위 / Failed test scope
+ * @returns 에이전트 이벤트 스트림 / Agent event stream
+ */
+async function* spawnQcForTestFailure(
+  deps: ExecuteTestPhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+  scope: string,
+): AsyncIterable<AgentEvent> {
+  const qcRagContext = await queryRagContext(deps.ragSearcher, featureId, 'qc');
+  const qcConfigResult = deps.agentGenerator.generateAgentConfig(
+    'qc',
+    `${handoffPackage.specDocument}\n\n[QC 분석 요청] ${scope} 테스트 실패. 근본 원인을 분석하라.`,
+    featureId,
+    qcRagContext,
+  );
+
+  if (!qcConfigResult.ok) {
+    deps.logger.warn('qc 에이전트 설정 생성 실패', { scope, error: qcConfigResult.error.message });
+    return;
+  }
+
+  const qcConfig = {
+    ...qcConfigResult.value,
+    projectId: handoffPackage.projectId,
+    phase: 'TEST' as const,
+  };
+  deps.sessionManager.createSession('qc', qcConfig.projectId, featureId, 'TEST');
+  for await (const qcEvent of deps.agentSpawner.spawn(qcConfig)) {
+    yield qcEvent;
+  }
+}
+
+/**
+ * 테스트 실패 후 coder 에이전트를 spawn하여 수정을 요청한다 / Spawns coder agent to fix test failure
+ *
+ * @param deps - TEST Phase 의존성 / TEST phase dependencies
+ * @param featureId - 기능 ID / Feature ID
+ * @param handoffPackage - 인수 패키지 / Handoff package
+ * @param scope - 실패한 테스트 범위 / Failed test scope
+ * @returns 에이전트 이벤트 스트림 / Agent event stream
+ */
+async function* spawnCoderForTestFix(
+  deps: ExecuteTestPhaseDeps,
+  featureId: string,
+  handoffPackage: HandoffPackage,
+  scope: string,
+): AsyncIterable<AgentEvent> {
+  const coderRagContext = await queryRagContext(deps.ragSearcher, featureId, 'coder');
+  const fixPrompt = [
+    `[CODER 수정 요청] ${scope} 테스트 실패에 대한 코드 수정`,
+    `featureId=${featureId}`,
+    'qc 분석 결과를 참고하여 테스트가 통과하도록 코드를 수정하라.',
+    '수정 범위를 최소화하고, 테스트 실패의 근본 원인만 해결하라.',
+  ].join('\n');
+
+  const configResult = deps.agentGenerator.generateAgentConfig(
+    'coder',
+    `${handoffPackage.specDocument}\n\n${fixPrompt}`,
+    featureId,
+    coderRagContext,
+  );
+
+  if (!configResult.ok) {
+    deps.logger.warn('coder 에이전트 설정 생성 실패 (테스트 수정)', {
+      scope,
+      error: configResult.error.message,
+    });
+    return;
+  }
+
+  const coderConfig = {
+    ...configResult.value,
+    projectId: handoffPackage.projectId,
+    phase: 'TEST' as const,
+  };
+  deps.sessionManager.createSession('coder', coderConfig.projectId, featureId, 'TEST');
+  for await (const coderEvent of deps.agentSpawner.spawn(coderConfig)) {
+    yield coderEvent;
+  }
 }

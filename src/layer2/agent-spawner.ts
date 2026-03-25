@@ -80,7 +80,10 @@ export class AgentSpawner {
         content: message,
         timestamp: new Date(),
         metadata: {
-          error: error instanceof AgentError ? error : new AgentError('agent_execution_error', `에이전트 실행 실패: ${message}`, error),
+          error:
+            error instanceof AgentError
+              ? error
+              : new AgentError('agent_execution_error', `에이전트 실행 실패: ${message}`, error),
         },
       };
     }
@@ -114,7 +117,10 @@ export class AgentSpawner {
         content: message,
         timestamp: new Date(),
         metadata: {
-          error: error instanceof AgentError ? error : new AgentError('agent_session_resume_error', `세션 재개 실패: ${message}`, error),
+          error:
+            error instanceof AgentError
+              ? error
+              : new AgentError('agent_session_resume_error', `세션 재개 실패: ${message}`, error),
           sessionId,
         },
       };

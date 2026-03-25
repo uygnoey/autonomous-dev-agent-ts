@@ -128,13 +128,7 @@ export async function runSupervisionWithVerdict(
   const verdicts: SupervisionVerdict[] = [];
 
   for (const agentName of supervisors) {
-    const verdict = await runSingleSupervision(
-      agentName,
-      featureId,
-      handoffPackage,
-      deps,
-      logger,
-    );
+    const verdict = await runSingleSupervision(agentName, featureId, handoffPackage, deps, logger);
     verdicts.push(verdict);
   }
 
@@ -193,9 +187,7 @@ async function runSingleSupervision(
 
   logger.info('CODE Phase 감독 세션 시작', { agent: agentName, featureId });
 
-  const events: AgentEvent[] = [
-    createEvent('message', `CODE Phase ${agentName} 감독 세션 시작`),
-  ];
+  const events: AgentEvent[] = [createEvent('message', `CODE Phase ${agentName} 감독 세션 시작`)];
 
   for await (const event of deps.agentSpawner.spawn(config)) {
     // WHY: 스트림 모니터에 이벤트를 전달해 이상 패턴 감지 활성화
@@ -243,9 +235,7 @@ export function analyzeSupervisionOutput(
   agentName: 'architect' | 'reviewer',
   events: readonly AgentEvent[],
 ): SupervisionVerdict {
-  const messageEvents = events.filter(
-    (e) => e.type === 'message' || e.type === 'done',
-  );
+  const messageEvents = events.filter((e) => e.type === 'message' || e.type === 'done');
   const allText = messageEvents.map((e) => e.content).join('\n');
   const upperText = allText.toUpperCase();
 

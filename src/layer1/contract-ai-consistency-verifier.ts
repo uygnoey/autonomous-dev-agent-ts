@@ -118,9 +118,10 @@ export class ContractAiConsistencyVerifier {
     const allIssues = [...architectResult.value, ...qaResult.value];
     const passed = allIssues.filter((i) => i.severity === 'error').length === 0;
 
-    const feedback = allIssues.length > 0
-      ? allIssues.map((i) => `[${i.severity}] ${i.field}: ${i.message}`).join('\n')
-      : 'architect + qa AI 정합성 검증 통과';
+    const feedback =
+      allIssues.length > 0
+        ? allIssues.map((i) => `[${i.severity}] ${i.field}: ${i.message}`).join('\n')
+        : 'architect + qa AI 정합성 검증 통과';
 
     const result: ContractVerificationResult = {
       packageId: pkg.id,
@@ -240,10 +241,7 @@ function buildContractSummary(pkg: HandoffPackage): string {
  * @param agentRole - 에이전트 역할 (이슈 field 접두사용) / Agent role for field prefix
  * @returns 파싱된 이슈 목록 / Parsed issue list
  */
-function parseIssuesFromResponse(
-  content: string,
-  agentRole: string,
-): ContractVerificationIssue[] {
+function parseIssuesFromResponse(content: string, agentRole: string): ContractVerificationIssue[] {
   const trimmed = content.trim();
 
   // WHY: JSON 배열을 추출하기 위해 첫 번째 '[' ~ 마지막 ']' 범위를 파싱
@@ -266,7 +264,7 @@ function parseIssuesFromResponse(
               'message' in item,
           )
           .map((item) => ({
-            severity: item.severity === 'error' ? 'error' as const : 'warning' as const,
+            severity: item.severity === 'error' ? ('error' as const) : ('warning' as const),
             field: `${agentRole}:${item.field}`,
             message: item.message,
           }));

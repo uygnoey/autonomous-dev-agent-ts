@@ -11,10 +11,7 @@
 import type { Logger } from 'core/logger.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
-import type {
-  DocumenterEvent,
-  DocumenterEventType,
-} from 'layer2/documenter-event-types.js';
+import type { DocumenterEvent, DocumenterEventType } from 'layer2/documenter-event-types.js';
 import { DOCUMENTER_OUTPUT_MAP } from 'layer2/documenter-event-types.js';
 import type { AgentEvent } from 'layer2/types.js';
 
@@ -141,11 +138,7 @@ export class DocumenterEventDispatcher {
     const prompt = buildDocumenterPrompt(event);
     const featureId = extractFeatureId(event);
 
-    const configResult = this.agentGenerator.generateAgentConfig(
-      'documenter',
-      prompt,
-      featureId,
-    );
+    const configResult = this.agentGenerator.generateAgentConfig('documenter', prompt, featureId);
 
     if (!configResult.ok) {
       this.logger.warn('documenter 설정 생성 실패 — 문서화 생략', {

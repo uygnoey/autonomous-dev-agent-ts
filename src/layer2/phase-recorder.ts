@@ -80,10 +80,11 @@ export class PhaseRecorder {
   attach(): void {
     if (this.attached) return;
     // WHY: EventEmitter 기반 — PhaseEngine.transition()이 emit하는 'phase:changed' 이벤트 구독
-    (this.phaseEngine as unknown as { on(event: string, handler: (...args: unknown[]) => void): void }).on(
-      'phase:changed',
-      this.boundHandler as (...args: unknown[]) => void,
-    );
+    (
+      this.phaseEngine as unknown as {
+        on(event: string, handler: (...args: unknown[]) => void): void;
+      }
+    ).on('phase:changed', this.boundHandler as (...args: unknown[]) => void);
     this.attached = true;
     this.logger.debug('PhaseRecorder 이벤트 구독 시작');
   }
@@ -93,10 +94,11 @@ export class PhaseRecorder {
    */
   detach(): void {
     if (!this.attached) return;
-    (this.phaseEngine as unknown as { off(event: string, handler: (...args: unknown[]) => void): void }).off(
-      'phase:changed',
-      this.boundHandler as (...args: unknown[]) => void,
-    );
+    (
+      this.phaseEngine as unknown as {
+        off(event: string, handler: (...args: unknown[]) => void): void;
+      }
+    ).off('phase:changed', this.boundHandler as (...args: unknown[]) => void);
     this.attached = false;
     this.logger.debug('PhaseRecorder 이벤트 구독 해제');
   }

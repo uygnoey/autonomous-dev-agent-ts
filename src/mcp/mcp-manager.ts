@@ -139,7 +139,12 @@ export class McpManager {
       const handshakeResult = await performHandshake(proc, name, this.logger);
       if (!handshakeResult.ok) {
         instance.status = 'error';
-        return err(new McpError('mcp_server_start_failed', `MCP 핸드셰이크 실패: ${name} — ${handshakeResult.error.message}`));
+        return err(
+          new McpError(
+            'mcp_server_start_failed',
+            `MCP 핸드셰이크 실패: ${name} — ${handshakeResult.error.message}`,
+          ),
+        );
       }
 
       for (const tool of handshakeResult.value) {
@@ -241,6 +246,115 @@ export class McpManager {
     }
 
     return tools;
+  }
+
+  /**
+   * MCP 도구를 직접 호출한다 / Call an MCP tool directly
+   *
+   * @description
+   * KR: adev가 MCP 서버의 도구를 직접 호출한다 (tools/call JSON-RPC).
+   *     서버가 실행 중이어야 하며, stdin/stdout 파이프를 통해 JSON-RPC 요청을 전송한다.
+   * EN: adev calls an MCP server tool directly (tools/call JSON-RPC).
+   *     Server must be running. Sends JSON-RPC request via stdin/stdout pipes.
+   *
+   * @param serverName - 서버 이름 / Server name
+   * @param toolName - 호출할 도구 이름 / Tool name to call
+   * @param args - 도구 인자 / Tool arguments
+   * @returns 도구 호출 결과 / Tool call result
+   */
+  async callTool(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<Result<unknown>> {
+    const instance = this.instances.get(serverName);
+    if (!instance || instance.status !== 'running') {
+      return err(
+        new McpError(
+          'mcp_server_not_found',
+          `실행 중인 서버를 찾을 수 없습니다 / Running server not found: ${serverName}`,
+        ),
+      );
+    }
+
+    const proc = this.processes.get(serverName);
+    if (!proc) {
+      return err(
+        new McpError(
+          'mcp_server_not_found',
+          `서버 프로세스를 찾을 수 없습니다 / Server process not found: ${serverName}`,
+        ),
+      );
+    }
+
+    try {
+      // WHY: PI-009 — JSON-RPC tools/call 요청을 stdin에 전송하고 stdout에서 응답을 읽는다
+      const requestId = Date.now();
+      const rpcMessage = JSON.stringify({
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args },
+      });
+
+      proc.stdin.write(`${rpcMessage}\n`);
+
+      // WHY: stdout에서 응답 한 줄 읽기 — 핸드셰이크와 동일한 패턴
+      const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<
+        Uint8Array<ArrayBuffer>
+      >;
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const CALL_TIMEOUT_MS = 30_000;
+
+      const readResponse = async (): Promise<Result<unknown>> => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            return err(new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다'));
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const newlineIdx = buffer.indexOf('\n');
+          if (newlineIdx !== -1) {
+            const line = buffer.slice(0, newlineIdx).trim();
+            buffer = buffer.slice(newlineIdx + 1);
+            if (line) {
+              const parsed = JSON.parse(line) as { result?: unknown; error?: { message: string } };
+              if (parsed.error) {
+                return err(new McpError('mcp_tool_call_failed', parsed.error.message));
+              }
+              return ok(parsed.result);
+            }
+          }
+        }
+      };
+
+      const timeout = new Promise<Result<unknown>>((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              err(
+                new McpError(
+                  'mcp_tool_call_timeout',
+                  `도구 호출 타임아웃: ${CALL_TIMEOUT_MS}ms 초과`,
+                ),
+              ),
+            ),
+          CALL_TIMEOUT_MS,
+        ),
+      );
+
+      return await Promise.race([readResponse(), timeout]);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('MCP 도구 호출 실패', { serverName, toolName, error: msg });
+      return err(
+        new McpError(
+          'mcp_tool_call_failed',
+          `MCP 도구 호출 실패: ${serverName}/${toolName} — ${msg}`,
+        ),
+      );
+    }
   }
 
   // ── 내부 메서드 / Private methods ────────────────────────────

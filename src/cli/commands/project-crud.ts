@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { loadRegistry, saveRegistry } from 'cli/commands/project-registry.js';
 import type { ProjectInfo, ProjectOptions, ProjectRegistry } from 'cli/types.js';
 import { AdevError } from 'core/errors.js';
@@ -190,10 +191,43 @@ export class ProjectCrudHandler {
       (p) => p.name === projectName || p.path === projectPath,
     );
     if (duplicate) {
-      // WHY: 구조화된 에러로 반환하여 호출 측이 유저에게 선택지 제시 가능
-      //   1) rename: 다른 이름으로 등록
-      //   2) update: 기존 프로젝트 정보 업데이트
-      //   3) cancel: 취소
+      // WHY: PI-012 — TTY 환경에서는 3선택지 인터랙티브 UI를 제공한다
+      if (process.stdin.isTTY && process.stdout.isTTY) {
+        const choice = await this.promptDuplicateAction(duplicate.name);
+
+        if (choice === 'rename') {
+          // WHY: 다른 이름으로 재등록 — 새 이름을 입력받아 재귀 호출 대신 직접 등록
+          const newName = await this.promptNewName();
+          if (!newName) {
+            return err(new AdevError('cli_project_cancelled', '프로젝트 등록이 취소되었습니다'));
+          }
+          // WHY: 새 이름으로 등록 진행 (아래 등록 로직에서 projectName 대신 newName 사용)
+          return this.registerProject(newName, projectPath, registry);
+        }
+
+        if (choice === 'update') {
+          // WHY: 기존 프로젝트의 경로를 업데이트한다
+          const updatedProjects = registry.projects.map((p) =>
+            p.name === duplicate.name ? { ...p, path: projectPath, lastAccessedAt: new Date() } : p,
+          );
+          const updatedRegistry: ProjectRegistry = {
+            activeProject: registry.activeProject,
+            projects: updatedProjects,
+          };
+          const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
+          if (!saveResult.ok) return saveResult;
+          this.logger.info('기존 프로젝트 업데이트 완료', {
+            name: duplicate.name,
+            path: projectPath,
+          });
+          return ok(undefined);
+        }
+
+        // WHY: cancel 선택
+        return err(new AdevError('cli_project_cancelled', '프로젝트 등록이 취소되었습니다'));
+      }
+
+      // WHY: non-TTY 환경에서는 구조화된 에러로 반환
       const duplicateInfo: DuplicateProjectInfo = {
         existingName: duplicate.name,
         existingPath: duplicate.path,
@@ -205,8 +239,7 @@ export class ProjectCrudHandler {
           '선택: 1) 다른 이름으로 등록 (rename) 2) 기존 업데이트 (update) 3) 취소 (cancel)',
       );
       // WHY: cause에 구조화된 정보를 첨부하여 CLI 레이어에서 파싱 가능
-      (error as AdevError & { duplicateInfo: DuplicateProjectInfo }).duplicateInfo =
-        duplicateInfo;
+      (error as AdevError & { duplicateInfo: DuplicateProjectInfo }).duplicateInfo = duplicateInfo;
       return err(error);
     }
 
@@ -230,6 +263,94 @@ export class ProjectCrudHandler {
     if (!saveResult.ok) return saveResult;
 
     // WHY: 프로젝트 등록 시 .adev/ 서브디렉토리를 자동 scaffold (PI-006)
+    await scaffoldProjectDirectories(projectPath, this.logger);
+
+    this.logger.info('프로젝트 등록 완료 / Project registered', {
+      name: projectName,
+      path: projectPath,
+    });
+    return ok(undefined);
+  }
+
+  /**
+   * 중복 시 3선택지 인터랙티브 프롬프트 / Interactive prompt for duplicate resolution
+   *
+   * @param existingName - 기존 프로젝트 이름 / Existing project name
+   * @returns 선택된 액션 / Selected action
+   */
+  private async promptDuplicateAction(
+    existingName: string,
+  ): Promise<'rename' | 'update' | 'cancel'> {
+    process.stdout.write(`\n프로젝트 이름 '${existingName}'이 이미 존재합니다.\n`);
+    process.stdout.write('  1) 다른 이름 입력\n');
+    process.stdout.write('  2) 기존 프로젝트 업데이트\n');
+    process.stdout.write('  3) 취소\n');
+    process.stdout.write('선택 (1-3, 기본값: 3): ');
+
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const input = await new Promise<string>((resolve) => {
+      rl.once('line', (line) => {
+        rl.close();
+        resolve(line.trim());
+      });
+    });
+
+    if (input === '1') return 'rename';
+    if (input === '2') return 'update';
+    return 'cancel';
+  }
+
+  /**
+   * 새 프로젝트 이름을 입력받는다 / Prompts for a new project name
+   *
+   * @returns 입력된 이름 또는 null / Entered name or null
+   */
+  private async promptNewName(): Promise<string | null> {
+    process.stdout.write('새 프로젝트 이름을 입력하세요 (엔터=취소): ');
+
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const input = await new Promise<string>((resolve) => {
+      rl.once('line', (line) => {
+        rl.close();
+        resolve(line.trim());
+      });
+    });
+
+    return input || null;
+  }
+
+  /**
+   * 프로젝트를 레지스트리에 등록한다 / Registers a project to the registry
+   *
+   * @param projectName - 프로젝트 이름 / Project name
+   * @param projectPath - 프로젝트 경로 / Project path
+   * @param registry - 현재 레지스트리 / Current registry
+   * @returns 성공 시 ok(void), 실패 시 err(AdevError)
+   */
+  private async registerProject(
+    projectName: string,
+    projectPath: string,
+    registry: ProjectRegistry,
+  ): Promise<Result<void, AdevError>> {
+    const now = new Date();
+    const projectId = crypto.randomUUID();
+    const newProject: ProjectInfo = {
+      id: projectId,
+      name: projectName,
+      path: projectPath,
+      createdAt: now,
+      lastAccessedAt: now,
+      status: 'active',
+    };
+
+    const updatedRegistry: ProjectRegistry = {
+      activeProject: registry.activeProject ?? projectName,
+      projects: [...registry.projects, newProject],
+    };
+
+    const saveResult = await saveRegistry(updatedRegistry, this.registryDir);
+    if (!saveResult.ok) return saveResult;
+
     await scaffoldProjectDirectories(projectPath, this.logger);
 
     this.logger.info('프로젝트 등록 완료 / Project registered', {

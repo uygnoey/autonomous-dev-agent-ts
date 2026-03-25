@@ -239,11 +239,12 @@ describe('V2SessionExecutor.executeDesignPhase', () => {
   });
 
   it('systemPrompt 없는 config → prompt만 전송', async () => {
-    let sentMessage = '';
+    let firstSentMessage = '';
     const session: V2Session = {
       sessionId: 'mock-no-sysprompt',
       send: mock(async (msg: string) => {
-        sentMessage = msg;
+        // WHY: PI-002 재토론 루프로 send가 여러 번 호출될 수 있으므로 첫 번째 메시지만 캡처
+        if (!firstSentMessage) firstSentMessage = msg;
       }),
       stream: mock(async function* () {
         yield mkDoneMsg();
@@ -261,8 +262,8 @@ describe('V2SessionExecutor.executeDesignPhase', () => {
       // consume
     }
 
-    // WHY: systemPrompt가 비어있으면 구분선 없이 prompt만 전송
-    expect(sentMessage).toBe('Design the auth system.');
+    // WHY: systemPrompt가 비어있으면 구분선 없이 prompt만 전송 (첫 번째 send 기준)
+    expect(firstSentMessage).toBe('Design the auth system.');
   });
 });
 

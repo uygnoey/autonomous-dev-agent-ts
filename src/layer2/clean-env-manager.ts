@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CleanEnvType } from 'core/config-schema.js';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
@@ -35,12 +36,21 @@ import { err, ok } from 'core/types.js';
 export class CleanEnvManager {
   private readonly activeEnvs: Set<string> = new Set();
   private readonly logger: Logger;
+  // WHY: PI-006 — §8.5 클라우드 환경 선택 지원. 현재는 로컬만 구현, 클라우드는 추후 확장
+  private readonly cleanEnvType: CleanEnvType;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param cleanEnvType - 클린 환경 유형 (기본: 'local') / Clean env type (default: 'local')
    */
-  constructor(logger: Logger) {
+  constructor(logger: Logger, cleanEnvType: CleanEnvType = 'local') {
     this.logger = logger.child({ module: 'clean-env-manager' });
+    this.cleanEnvType = cleanEnvType;
+
+    // WHY: PI-006 — 클라우드 클린 환경은 아직 지원되지 않으므로 로컬로 대체
+    if (this.cleanEnvType === 'cloud') {
+      this.logger.warn('클라우드 클린 환경은 아직 지원되지 않습니다 — 로컬 환경으로 대체합니다');
+    }
   }
 
   /**

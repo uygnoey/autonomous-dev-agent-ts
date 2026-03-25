@@ -105,12 +105,16 @@ export class ClaudeApi implements IClaudeApi {
   private readonly logger: Logger;
   private readonly retryPolicy: RetryPolicy;
   private readonly client: Anthropic;
+  // WHY: PI-015 — §6.1 Claude Opus 4.6 기본, config에서 변경 가능
+  private readonly model: string;
 
   constructor(
     private readonly authProvider: AuthProvider,
     logger: Logger,
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
+    model = DEFAULT_MODEL,
   ) {
+    this.model = model;
     this.logger = logger.child({ module: 'claude-api' });
     this.retryPolicy = retryPolicy;
 
@@ -152,7 +156,8 @@ export class ClaudeApi implements IClaudeApi {
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     options: ClaudeApiRequestOptions = {},
   ): Promise<Result<ClaudeApiResponse, AgentError>> {
-    const model = options.model ?? DEFAULT_MODEL;
+    // WHY: PI-015 — options.model > this.model(constructor) > DEFAULT_MODEL 우선순위
+    const model = options.model ?? this.model;
     const maxTokens = options.maxTokens ?? 4096;
     const temperature = options.temperature ?? 1.0;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -222,7 +227,8 @@ export class ClaudeApi implements IClaudeApi {
     onEvent: StreamCallback,
     options: ClaudeApiRequestOptions = {},
   ): Promise<Result<void, AgentError>> {
-    const model = options.model ?? DEFAULT_MODEL;
+    // WHY: PI-015 — options.model > this.model(constructor) > DEFAULT_MODEL 우선순위
+    const model = options.model ?? this.model;
     const maxTokens = options.maxTokens ?? 4096;
     const temperature = options.temperature ?? 1.0;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;

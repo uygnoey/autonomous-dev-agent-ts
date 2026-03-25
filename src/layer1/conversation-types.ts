@@ -20,15 +20,15 @@ import type { HandoffPackage } from 'layer1/contract-types.js';
  *     Development must never be mentioned until user explicitly confirms.
  */
 export type ConversationPhase =
-  | 'IDEA'        // 아이디어 도출 / Idea generation
-  | 'PLANNING'    // 기획 / Planning
-  | 'DESIGN'      // 설계 / Design
-  | 'UI_DESIGN'   // 디자인 / UI Design
-  | 'STACK'       // 기술 스택 선정 / Tech stack selection
-  | 'DOCS'        // 문서 목록 확정 / Document list finalization
-  | 'TEST_TYPES'  // 테스트 유형 정의서 / Test type definition
-  | 'CONFIRMED'   // 유저 확정 / User confirmed
-  | 'CONTRACT';   // Contract 생성 중 / Contract generation
+  | 'IDEA' // 아이디어 도출 / Idea generation
+  | 'PLANNING' // 기획 / Planning
+  | 'DESIGN' // 설계 / Design
+  | 'UI_DESIGN' // 디자인 / UI Design
+  | 'STACK' // 기술 스택 선정 / Tech stack selection
+  | 'DOCS' // 문서 목록 확정 / Document list finalization
+  | 'TEST_TYPES' // 테스트 유형 정의서 / Test type definition
+  | 'CONFIRMED' // 유저 확정 / User confirmed
+  | 'CONTRACT'; // Contract 생성 중 / Contract generation
 
 /**
  * Phase 전환 맵 / Phase transition map

@@ -21,6 +21,7 @@ import {
   type SessionRestoreOrchestratorDeps,
 } from 'layer2/session-restore-orchestrator-types.js';
 import { mapSdkEvent, sdkResumeSession } from 'layer2/v2-session-factory.js';
+import type { RagSearcher } from 'rag/search.js';
 
 export type { SessionRestoreOrchestratorDeps } from 'layer2/session-restore-orchestrator-types.js';
 
@@ -42,6 +43,7 @@ export class SessionRestoreOrchestrator {
   private readonly logger: SessionRestoreOrchestratorDeps['logger'];
   private readonly authProvider: SessionRestoreOrchestratorDeps['authProvider'];
   private readonly tokenMonitor: SessionRestoreOrchestratorDeps['tokenMonitor'];
+  private readonly ragSearcher: RagSearcher | undefined;
 
   /** @param deps - 의존성 / Dependencies */
   constructor(deps: SessionRestoreOrchestratorDeps) {
@@ -49,6 +51,7 @@ export class SessionRestoreOrchestrator {
     this.logger = deps.logger.child({ module: 'session-restore-orchestrator' });
     this.authProvider = deps.authProvider;
     this.tokenMonitor = deps.tokenMonitor;
+    this.ragSearcher = deps.ragSearcher;
   }
 
   /**
@@ -180,11 +183,82 @@ export class SessionRestoreOrchestrator {
     } catch (error: unknown) {
       this.logger.error('세션 복원 실패', { sessionId, error: String(error) });
       yield makeRestoreErrorEvent(`세션 복원 실패 [${sessionId}]: ${String(error)}`, agentName);
+
+      // WHY: PI-007 — sdkResumeSession 실패 시 RAG 컨텍스트로 새 세션 시작을 안내하는 fallback
+      if (this.ragSearcher !== undefined) {
+        yield* this.fallbackWithRagContext(sessionId, agentName);
+      }
     } finally {
       // WHY: finally로 session.close() 보장 (done/error 이벤트에서 이미 닫았으면 무시)
       if (session !== null) {
         session.close();
       }
+    }
+  }
+
+  /**
+   * 세션 복원 실패 시 RAG 컨텍스트를 검색하여 fallback 이벤트를 yield한다
+   * Searches RAG context on session restore failure and yields fallback events
+   *
+   * @param sessionId - 실패한 세션 ID / Failed session ID
+   * @param agentName - 에이전트 이름 / Agent name
+   * @yields RAG 컨텍스트가 포함된 fallback 메시지 이벤트 / Fallback message events with RAG context
+   */
+  private async *fallbackWithRagContext(
+    sessionId: string,
+    agentName: AgentName,
+  ): AsyncIterable<AgentEvent> {
+    if (this.ragSearcher === undefined) return;
+
+    try {
+      // WHY: 세션 ID에서 featureId를 추출하여 관련 코드를 RAG 검색한다
+      //      세션 ID 형식: projectId:featureId:agentName:phase
+      const parts = sessionId.split(':');
+      const featureId = parts.length >= 2 ? parts[1] : sessionId;
+
+      const searchResult = await this.ragSearcher.searchCode(`${featureId} ${agentName}`, 5);
+
+      let ragContext = '';
+      if (searchResult.ok && searchResult.value.length > 0) {
+        ragContext = searchResult.value
+          .map((r, i) => `[${i + 1}] ${r.record.filePath}\n${r.record.chunk}`)
+          .join('\n\n');
+      }
+
+      this.logger.info('세션 복원 실패 — RAG 컨텍스트 fallback 생성', {
+        sessionId,
+        agentName,
+        featureId,
+        ragResultCount: searchResult.ok ? searchResult.value.length : 0,
+      });
+
+      yield {
+        type: 'message',
+        agentName,
+        content: ragContext
+          ? `[Fallback] 세션 재개 실패 — RAG 컨텍스트로 새 세션 시작 가능\n\n관련 코드:\n${ragContext}`
+          : '[Fallback] 세션 재개 실패 — RAG 검색 결과 없음. 새 세션으로 재시작 필요',
+        timestamp: new Date(),
+        metadata: {
+          restoreFallback: true,
+          sessionId,
+          featureId,
+          ragContextAvailable: ragContext.length > 0,
+        },
+      };
+    } catch (ragError: unknown) {
+      this.logger.warn('RAG fallback 검색 실패', {
+        sessionId,
+        error: String(ragError),
+      });
+      // WHY: RAG 검색 실패는 치명적이지 않으므로 경고만 yield
+      yield {
+        type: 'message',
+        agentName,
+        content: '[Fallback] 세션 재개 실패 + RAG 검색도 실패 — 새 세션으로 재시작 필요',
+        timestamp: new Date(),
+        metadata: { restoreFallback: true, sessionId, ragSearchFailed: true },
+      };
     }
   }
 

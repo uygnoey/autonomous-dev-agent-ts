@@ -50,6 +50,7 @@ export {
 } from 'core/config.js';
 export type {
   AuthMode,
+  CleanEnvType,
   ConfigSchema,
   EmbeddingConfig,
   EnvironmentVars,
