@@ -133,10 +133,20 @@ export class ParallelCoderRunner {
       return;
     }
 
-    // WHY: 감독 불합격 시 coder 1회 재실행 후 재감독 — 무한 루프 방지를 위해 재시도는 1회로 제한
+    // WHY: M-002 — 감독 피드백을 coder에 전달하여 의미있는 재실행
+    const feedbackText = supervisionResult.verdicts
+      .filter((v) => !v.passed)
+      .map((v) => `[${v.agentName}] ${v.feedback}`)
+      .join('\n');
+
+    const handoffWithFeedback: HandoffPackage = {
+      ...handoffPackage,
+      specDocument: `${handoffPackage.specDocument}\n\n## 이전 코드 리뷰 피드백 (수정 필요)\n${feedbackText}`,
+    };
+
     yield createEvent('message', 'CODE Phase 감독 불합격 — coder 재실행 1/1');
 
-    const retryResults = await this.runInBatches(allocations, handoffPackage);
+    const retryResults = await this.runInBatches(allocations, handoffWithFeedback);
     for (const result of retryResults) {
       for (const event of result.events) {
         yield event;
@@ -145,7 +155,7 @@ export class ParallelCoderRunner {
 
     const retrySupervision = await runSupervisionWithVerdict(
       featureId,
-      handoffPackage,
+      handoffWithFeedback,
       this.deps,
       this.logger,
     );

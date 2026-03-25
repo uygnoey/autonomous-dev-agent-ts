@@ -11,7 +11,6 @@ import { resolve } from 'node:path';
 import type { VerificationConfig } from '../../core/config-schema.js';
 import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
-import { ProcessExecutor } from '../../core/process-executor.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
 import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
@@ -21,11 +20,12 @@ import type { AgentMdReviewInput } from '../../layer1/agent-md-reviewer.js';
 import { SkillMdGenerator } from '../../layer1/skill-md-generator.js';
 import type { SkillMdGeneratorConfig } from '../../layer1/skill-md-generator.js';
 import type { HandoffPackage } from '../../layer1/types.js';
-import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
-import { IntegrationTester } from '../../layer2/integration-tester.js';
-import { Layer2Bootstrap } from '../../layer2/layer2-bootstrap.js';
-import { UserCheckpoint } from '../../layer2/user-checkpoint.js';
-import type { UserInputProvider } from '../../layer2/user-checkpoint.js';
+import {
+  createLayer2Bootstrap,
+  createIntegrationTester,
+  createUserCheckpoint,
+} from '../layer2-runner.js';
+import type { UserInputProvider } from '../layer2-runner.js';
 import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
@@ -208,9 +208,9 @@ export async function runLayer2(
         return { type: event.type, text: 'text' in event ? event.text : undefined };
       },
     };
-    const userCheckpoint = new UserCheckpoint(logger);
+    const userCheckpoint = createUserCheckpoint(logger);
 
-    const bootstrap = new Layer2Bootstrap({
+    const bootstrap = createLayer2Bootstrap({
       authProvider: session.authProvider,
       logger,
       projectCwd: session.projectInfo.path,
@@ -291,10 +291,8 @@ export async function runLayer3(
       projectPath: session.projectInfo.path,
     });
 
-    // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성
-    const processExecutor = new ProcessExecutor(logger);
-    const cleanEnvManager = new CleanEnvManager(logger);
-    const integrationTester = new IntegrationTester(logger, processExecutor, cleanEnvManager);
+    // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성 (facade 경유)
+    const integrationTester = createIntegrationTester(logger);
 
     // WHY: 4단계 계단식 통합 검증으로 Layer2 결과물을 종합 검증한다
     const verifyResult = await runStepwiseVerification(

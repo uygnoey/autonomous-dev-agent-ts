@@ -8,6 +8,7 @@
 
 import type { AuthProvider } from 'auth/types.js';
 import type { Logger } from 'core/logger.js';
+import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { RagSearcher } from 'rag/search.js';
@@ -36,4 +37,6 @@ export interface SessionRestoreOrchestratorDeps {
   readonly tokenMonitor?: TokenMonitor;
   /** RAG 검색기 (선택, 세션 복원 실패 시 컨텍스트 fallback) / RAG searcher (optional, context fallback on restore failure) */
   readonly ragSearcher?: RagSearcher;
+  /** 에이전트 스포너 (선택, RAG fallback 후 새 세션 spawn) / Agent spawner (optional, spawns new session after RAG fallback) */
+  readonly agentSpawner?: AgentSpawner;
 }

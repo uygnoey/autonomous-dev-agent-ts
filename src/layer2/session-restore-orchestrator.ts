@@ -8,7 +8,8 @@
  *     and yields AgentEvent streams.
  */
 
-import type { AgentName } from 'core/types.js';
+import type { AgentName, Phase } from 'core/types.js';
+import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { AgentConfig, AgentEvent } from 'layer2/agent-types.js';
 import {
   buildEnvFromAuthProvider,
@@ -45,6 +46,7 @@ export class SessionRestoreOrchestrator {
   private readonly authProvider: SessionRestoreOrchestratorDeps['authProvider'];
   private readonly tokenMonitor: SessionRestoreOrchestratorDeps['tokenMonitor'];
   private readonly ragSearcher: RagSearcher | undefined;
+  private readonly agentSpawner: AgentSpawner | undefined;
 
   /** @param deps - 의존성 / Dependencies */
   constructor(deps: SessionRestoreOrchestratorDeps) {
@@ -53,6 +55,7 @@ export class SessionRestoreOrchestrator {
     this.authProvider = deps.authProvider;
     this.tokenMonitor = deps.tokenMonitor;
     this.ragSearcher = deps.ragSearcher;
+    this.agentSpawner = deps.agentSpawner;
   }
 
   /**
@@ -112,7 +115,24 @@ export class SessionRestoreOrchestrator {
   ): AsyncIterable<AgentEvent> {
     for (const snapshot of snapshots) {
       try {
-        yield* this.restoreSession(snapshot.sessionId, snapshot.agentName);
+        for await (const event of this.restoreSession(snapshot.sessionId, snapshot.agentName)) {
+          yield event;
+
+          // WHY: M-005 — RAG fallback 후 실제 새 세션 spawn
+          if (event.metadata?.needsNewSession && this.agentSpawner) {
+            const newConfig = this.buildFallbackSessionConfig(
+              snapshot,
+              String(event.metadata.ragContext ?? ''),
+            );
+            if (newConfig) {
+              this.logger.info('RAG 컨텍스트로 새 세션 시작', {
+                sessionId: snapshot.sessionId,
+                agentName: snapshot.agentName,
+              });
+              yield* this.agentSpawner.spawn(newConfig);
+            }
+          }
+        }
       } catch (error: unknown) {
         this.logger.error('세션 복원 예외', {
           sessionId: snapshot.sessionId,
@@ -326,5 +346,42 @@ export class SessionRestoreOrchestrator {
 
     this.logger.info('paused 스냅샷 복원 시작', { count: pausedSnapshots.length });
     yield* this.restoreSnapshots(pausedSnapshots);
+  }
+
+  /**
+   * RAG fallback용 새 세션 설정을 생성한다 / Builds agent config for RAG fallback new session
+   *
+   * @param snapshot - 실패한 세션 스냅샷 정보 / Failed session snapshot info
+   * @param ragContext - RAG 검색 결과 컨텍스트 / RAG search result context
+   * @returns AgentConfig 또는 null (spawn 불가 시) / AgentConfig or null if unable to build
+   */
+  private buildFallbackSessionConfig(
+    snapshot: { sessionId: string; agentName: AgentName },
+    ragContext: string,
+  ): AgentConfig | null {
+    // WHY: 세션 ID 형식 projectId:featureId:agentName:phase 에서 정보 추출
+    const parts = snapshot.sessionId.split(':');
+    if (parts.length < 4) {
+      this.logger.warn('세션 ID 형식 불일치 — fallback 세션 생성 불가', {
+        sessionId: snapshot.sessionId,
+      });
+      return null;
+    }
+
+    const projectId = parts[0] ?? '';
+    const featureId = parts[1] ?? '';
+    const phase = (parts[3] ?? 'CODE') as Phase;
+
+    const ragPromptSection = ragContext ? `\n\n## 이전 세션 RAG 컨텍스트\n${ragContext}` : '';
+
+    return {
+      name: snapshot.agentName,
+      projectId,
+      featureId,
+      phase,
+      systemPrompt: `이전 세션 복원 실패로 새 세션을 시작합니다. 이전 작업 컨텍스트를 참고하여 작업을 계속하세요.${ragPromptSection}`,
+      prompt: `이전 세션(${snapshot.sessionId})이 복원 실패하여 새로 시작합니다. 이전 작업을 이어서 진행해주세요.`,
+      tools: [],
+    };
   }
 }

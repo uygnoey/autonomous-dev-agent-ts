@@ -1,0 +1,25 @@
+# {{projectName}} 테스트 리포트 / Test Report
+
+## 요약 / Summary
+- **실행 일시 / Date:** {{date}}
+- **총 테스트 / Total:** {{totalTests}}
+- **통과 / Passed:** {{passedTests}}
+- **실패 / Failed:** {{failedTests}}
+- **커버리지 / Coverage:** {{coverage}}%
+
+## 단위 테스트 / Unit Tests
+{{#each unitTests}}
+- {{#if passed}}PASS{{else}}FAIL{{/if}} {{name}} ({{duration}}ms)
+{{/each}}
+
+## 통합 테스트 / Integration Tests
+{{#each integrationTests}}
+- {{#if passed}}PASS{{else}}FAIL{{/if}} {{name}} ({{duration}}ms)
+{{/each}}
+
+## 실패 상세 / Failure Details
+{{#each failures}}
+### {{name}}
+- **에러 / Error:** {{error}}
+- **스택 / Stack:** `{{stack}}`
+{{/each}}

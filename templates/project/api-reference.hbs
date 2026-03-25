@@ -1,0 +1,19 @@
+# {{projectName}} API Reference
+
+## 엔드포인트 / Endpoints
+
+{{#each endpoints}}
+### {{method}} {{path}}
+
+{{description}}
+
+**파라미터 / Parameters:**
+{{#each params}}
+- `{{name}}` ({{type}}) — {{description}}
+{{/each}}
+
+**응답 / Response:**
+```json
+{{responseExample}}
+```
+{{/each}}
