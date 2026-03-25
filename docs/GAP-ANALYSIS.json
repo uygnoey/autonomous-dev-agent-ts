@@ -1,18 +1,20 @@
 {
   "_meta": {
     "analyzedAt": "2026-03-25T10:40:00+09:00",
+    "updatedAt": "2026-03-25T11:10:00+09:00",
     "specVersion": "v2.4",
     "specFile": "adev-spec-full-v2_4.md",
     "analyst": "3-agent parallel (analyst-1: §1-§7, analyst-2: §8-§10, analyst-3: §11-§17+CLI+Core)",
     "totalSpecItems": 101,
-    "overallComplianceScore": 92,
-    "note": "스펙 전체 101개 항목 상세 분석. FI 86개(85%), PI 13개(13%), NI 2개(2%). 가중 점수: (86*1.0 + 13*0.5) / 101 = 92점"
+    "overallComplianceScore": 99,
+    "previousScore": 92,
+    "note": "2026-03-25 NI 2개 + PI 10개 구현 완료. FI 98개(97%), PI 3개(3%), NI 0개. 가중 점수: (98*1.0 + 3*0.5) / 101 = 99점. PI-011(동적 모듈 분배) PI-013(배포 인프라)는 코드 외 운영 레벨이거나 아키텍처 수준으로 남김"
   },
   "summary": {
     "totalSpecItems": 101,
-    "fullyImplemented": 86,
-    "partiallyImplemented": 13,
-    "notImplemented": 2,
+    "fullyImplemented": 98,
+    "partiallyImplemented": 3,
+    "notImplemented": 0,
     "byPriority": {
       "HIGH": { "FI": 38, "PI": 4, "NI": 2 },
       "MEDIUM": { "FI": 29, "PI": 7, "NI": 0 },
