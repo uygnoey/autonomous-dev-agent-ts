@@ -321,8 +321,10 @@ export class ClaudeApi implements IClaudeApi {
           // WHY: PI-010 — V2 Session API는 @anthropic-ai/claude-agent-sdk 에서 동적 import
           const { unstable_v2_createSession } = await import('@anthropic-ai/claude-agent-sdk');
 
+          // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
           const sessionOptions = {
             model,
+            settingSources: [] as string[],
             ...(options.system ? { systemPrompt: options.system } : {}),
           };
 

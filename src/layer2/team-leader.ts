@@ -34,6 +34,15 @@ export type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 const MAX_ITERATIONS = 10;
 
 /**
+ * 각 Phase당 최대 재시도 횟수 / Maximum retries per phase
+ *
+ * @description
+ * KR: PI-002 — §8.3 이상 패턴 감지로 인한 Phase 재실행이 이 값을 초과하면 자율 개발을 중단한다.
+ * EN: PI-002 — Autonomous development stops when anomaly-driven phase retries exceed this threshold.
+ */
+const MAX_PHASE_RETRIES = 3;
+
+/**
  * TeamLeader 인터페이스 / TeamLeader interface
  *
  * @description
@@ -153,10 +162,18 @@ export class TeamLeader implements ITeamLeader {
 
     try {
       let iteration = 0;
+      let phaseRetryCount = 0;
+      let lastPhase: Phase | null = null;
 
       while (iteration < MAX_ITERATIONS) {
         iteration += 1;
         const currentPhase = this.phaseEngine.currentPhase;
+
+        // WHY: PI-002 — Phase가 변경되면 재시도 카운터 초기화
+        if (lastPhase !== null && lastPhase !== currentPhase) {
+          phaseRetryCount = 0;
+        }
+        lastPhase = currentPhase;
 
         this.logger.info('Phase 실행', { featureId, phase: currentPhase, iteration });
 
@@ -269,10 +286,30 @@ export class TeamLeader implements ITeamLeader {
               featureId,
               alertCount: highAlerts.length,
             });
-            yield createEvent(
-              'message',
-              `[경고] 이상 패턴 감지 (${highAlerts.map((a) => a.type).join(', ')}) — ${currentPhase} Phase 재실행`,
-            );
+            // WHY: PI-002 — Phase 재실행 임계값 초과 시 명시적 중단
+            phaseRetryCount += 1;
+            if (phaseRetryCount > MAX_PHASE_RETRIES) {
+              this.logger.error('Phase 재시도 임계값 초과 — 자율 개발 중단', {
+                featureId,
+                phase: currentPhase,
+                maxRetries: MAX_PHASE_RETRIES,
+              });
+              this.progressTracker.updateStatus(featureId, 'failed');
+              yield createEvent(
+                'error',
+                `[크리티컬] ${currentPhase} Phase ${MAX_PHASE_RETRIES}회 재시도 실패. 수동 개입 필요.`,
+              );
+              return;
+            }
+
+            const warningMessage = `[경고] 이상 패턴 감지 (${highAlerts.map((a) => a.type).join(', ')}) — ${currentPhase} Phase 재실행 (${phaseRetryCount}/${MAX_PHASE_RETRIES})`;
+            yield createEvent('message', warningMessage);
+
+            // WHY: PI-005 — §12 비크리티컬 이슈 배치 수집. 경고를 큐에 적재
+            if (this.userCheckpoint) {
+              this.userCheckpoint.queueNormalIssue(warningMessage);
+            }
+
             // WHY: Phase를 재실행하기 위해 advancePhase 건너뜀
             continue;
           }
@@ -300,8 +337,13 @@ export class TeamLeader implements ITeamLeader {
           if (
             this.verificationGate.isAllPassed(featureId) &&
             this.phaseEngine.currentPhase === 'VERIFY'
-          )
+          ) {
+            // WHY: PI-005 — VERIFY 완료 후 배치 수집된 비크리티컬 이슈를 일괄 출력
+            if (this.userCheckpoint && this.userInputProvider) {
+              this.userCheckpoint.flushQueuedIssues(this.userInputProvider);
+            }
             return;
+          }
         } else {
           advancePhase(
             { phaseEngine: this.phaseEngine, progressTracker: this.progressTracker },

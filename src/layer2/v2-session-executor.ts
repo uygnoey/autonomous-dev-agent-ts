@@ -223,9 +223,12 @@ export class V2SessionExecutor implements AgentExecutor {
     env: Record<string, string>,
   ): Promise<Result<{ session: V2Session; options: SDKSessionOptions }, AgentError>> {
     try {
-      const sessionOptions: SDKSessionOptions = {
+      // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
+      //   SDKSessionOptions 타입에 settingSources가 아직 미포함이므로 별도 캐스팅
+      const sessionOptions: SDKSessionOptions & { settingSources: string[] } = {
         model: this.defaultOptions?.model ?? 'claude-opus-4-6',
         permissionMode: 'bypassPermissions',
+        settingSources: [],
         executable: 'bun',
         env,
         allowedTools: config.tools.length > 0 ? [...config.tools] : undefined,

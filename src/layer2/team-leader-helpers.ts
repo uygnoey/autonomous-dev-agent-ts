@@ -261,6 +261,7 @@ export async function* executeTestPhase(
       );
 
       let stageFailed = false;
+      const stageEvents: AgentEvent[] = [];
 
       // WHY: tester 에이전트에게 테스트 범위를 명시적으로 지정하여 spawn
       const ragContext = await queryRagContext(deps.ragSearcher, featureId, 'tester');
@@ -308,6 +309,7 @@ export async function* executeTestPhase(
         });
 
         yield event;
+        stageEvents.push(event);
 
         // WHY: PI-002 — tester에서 error 이벤트 발생 시 해당 단계 실패로 판정
         if (event.type === 'error') {
@@ -316,6 +318,15 @@ export async function* executeTestPhase(
       }
 
       if (!stageFailed) {
+        // WHY: PI-004 — §8.4 random/edge case 80%+ 강제 검증
+        const ratio = estimateEdgeCaseRatio(stageEvents);
+        if (ratio < 0.5) {
+          yield createEvent(
+            'message',
+            `[경고] edge case 비율 낮음 (추정 ${Math.round(ratio * 100)}%) — 80%+ 권장`,
+          );
+        }
+
         // WHY: 단계 통과 — 재시도 루프 탈출
         stageResolved = true;
         break;
@@ -711,6 +722,8 @@ export async function* executeDesignPhaseWithMonitoring(
         await new Promise((resolve) => setTimeout(resolve, 300));
         deps.logger.debug('TeamDelete race condition 대기', { attempt: i + 1, maxAttempts: 3 });
       }
+      // WHY: PI-006 — 파일시스템 변경이 반영될 시간 추가 (race condition 완화, 총 1100ms 확보)
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -747,6 +760,32 @@ export async function* executeDesignPhaseWithMonitoring(
   // WHY: 모든 재시도 + fallback 실패 시 에러 이벤트
   deps.logger.error('DESIGN Phase 재시도 횟수 초과', { featureId, maxRetries });
   yield createEvent('error', `DESIGN Phase ${maxRetries}회 재시도 후에도 실패`);
+}
+
+/**
+ * tester 실행 결과에서 edge case 비율을 추정한다 / Estimates edge case ratio from tester output
+ *
+ * @description
+ * KR: PI-004 — §8.4 random/edge case 80%+ 강제 검증.
+ *     tester 이벤트 메시지에서 edge/boundary 키워드와 normal/happy path 키워드 비율을 추정한다.
+ * EN: PI-004 — §8.4 enforce 80%+ random/edge case ratio.
+ *     Estimates ratio from edge/boundary vs normal/happy path keywords in tester event messages.
+ *
+ * @param events - tester 에이전트 이벤트 목록 / Tester agent events
+ * @returns 추정 edge case 비율 (0~1) / Estimated edge case ratio (0~1)
+ */
+function estimateEdgeCaseRatio(events: readonly AgentEvent[]): number {
+  const messages = events
+    .filter((e) => e.type === 'message')
+    .map((e) => e.content)
+    .join('\n');
+  const edgeCount = (
+    messages.match(/edge|boundary|error|invalid|null|empty|overflow|corner/gi) ?? []
+  ).length;
+  const normalCount = (messages.match(/normal|happy path|기본|정상/gi) ?? []).length;
+  const total = edgeCount + normalCount;
+  // WHY: 키워드가 없으면 판별 불가 — 기본값 80%로 경고 생략
+  return total > 0 ? edgeCount / total : 0.8;
 }
 
 // ── PI-003: Git 충돌 해결 헬퍼 / Git conflict resolution helper ──

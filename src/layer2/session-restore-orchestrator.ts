@@ -20,6 +20,7 @@ import {
   RESET_POLL_INTERVAL_MS,
   type SessionRestoreOrchestratorDeps,
 } from 'layer2/session-restore-orchestrator-types.js';
+import type { SDKSessionOptions } from 'layer2/v2-session-executor-types.js';
 import { mapSdkEvent, sdkResumeSession } from 'layer2/v2-session-factory.js';
 import type { RagSearcher } from 'rag/search.js';
 
@@ -143,12 +144,15 @@ export class SessionRestoreOrchestrator {
       // WHY: AuthProvider에서 인증 헤더를 추출하여 환경변수로 전달 — process.env 직접 접근 금지
       const env = buildEnvFromAuthProvider(this.authProvider);
 
-      session = sdkResumeSession(sessionId, {
+      // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
+      const resumeOptions = {
         model: DEFAULT_RESTORE_MODEL,
-        permissionMode: 'bypassPermissions',
-        executable: 'bun',
+        permissionMode: 'bypassPermissions' as const,
+        settingSources: [] as string[],
+        executable: 'bun' as const,
         env,
-      });
+      };
+      session = sdkResumeSession(sessionId, resumeOptions as SDKSessionOptions);
 
       for await (const msg of session.stream()) {
         const event = mapSdkEvent(msg, agentName, (eventType) => {
