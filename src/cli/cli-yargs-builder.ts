@@ -44,6 +44,7 @@ export async function buildYargsParser(
         .option('status', { type: 'boolean', describe: 'Show current auth status' })
         .option('clear', { type: 'boolean', describe: 'Clear saved credentials' }),
     )
+    .command('setup-token', 'Renew Claude OAuth token (shortcut for auth --renew)')
     .command('status', 'Show current development status', (y) =>
       y.option('project-path', {
         type: 'string',

@@ -8,7 +8,7 @@
  *     based on CPU cores and available memory. Reduces automatically above 80% memory usage.
  */
 
-import { cpus, freemem, totalmem } from 'node:os';
+import { availableParallelism, cpus, freemem, totalmem } from 'node:os';
 import type { Logger } from 'core/logger.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
@@ -65,7 +65,9 @@ export function resolveParallelWorkers(workers: number | 'auto', logger: Logger)
  *     4. If memory usage > 80%, halve the CPU-based upper bound
  */
 function calculateAutoWorkers(logger: Logger): number {
-  const coreCount = cpus().length;
+  // WHY: PI-012 — availableParallelism()이 cpus().length보다 정확 (논리적 병렬성 반영)
+  const coreCount =
+    typeof availableParallelism === 'function' ? availableParallelism() : cpus().length;
   const total = totalmem();
   const free = freemem();
   const usageRatio = 1 - free / total;

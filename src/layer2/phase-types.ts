@@ -120,7 +120,12 @@ export interface FailureReport {
  * KR: 에이전트의 비정상 동작 패턴 유형.
  * EN: Types of anomalous agent behavior patterns.
  */
-export type BiasType = 'confirmation_bias' | 'infinite_loop' | 'deadlock' | 'scope_creep';
+export type BiasType =
+  | 'confirmation_bias'
+  | 'infinite_loop'
+  | 'deadlock'
+  | 'scope_creep'
+  | 'feedback_ignored';
 
 /**
  * 편향 심각도 / Bias severity

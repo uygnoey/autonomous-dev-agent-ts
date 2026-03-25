@@ -18,6 +18,64 @@ import type { MemoryRecord, Result } from 'core/types.js';
 import type { ConversationMessage } from 'layer1/types.js';
 import type { EmbeddingProvider } from 'rag/types.js';
 
+// ── PI-009: 모호성 감지 상수 / Ambiguity detection constants ────
+
+/** 최소 구체성 길이 (짧으면 모호) / Min specificity length */
+const MIN_SPECIFIC_LENGTH = 20;
+
+/** 모호성 마커 / Ambiguity markers */
+const VAGUE_MARKERS = ['그냥', '뭔가', '좀', 'something', 'kind of', 'sort of', 'maybe'];
+
+/**
+ * 유저 메시지의 모호성 점수를 계산한다 (0~1, 높을수록 모호)
+ * Calculate ambiguity score for user message (0~1, higher = more ambiguous)
+ *
+ * @description
+ * KR: PI-009 — 짧은 메시지와 모호한 표현이 포함된 메시지에 높은 점수 부여.
+ * EN: PI-009 — Assigns higher score to short messages and those with vague markers.
+ *
+ * @param text - 유저 입력 텍스트 / User input text
+ * @returns 0~1 사이의 모호성 점수 / Ambiguity score between 0 and 1
+ */
+function calculateAmbiguityScore(text: string): number {
+  let score = 0;
+
+  if (text.length < MIN_SPECIFIC_LENGTH) {
+    score += 0.4;
+  }
+
+  const vagueCount = VAGUE_MARKERS.filter((m) => text.toLowerCase().includes(m)).length;
+  score += Math.min(vagueCount * 0.2, 0.6);
+
+  return Math.min(score, 1.0);
+}
+
+/**
+ * 모호성이 높은 경우 구체화 질문을 생성한다
+ * Generate a probing question when ambiguity is high
+ *
+ * @description
+ * KR: PI-009 — 스펙 §6.3 능동적 탐색 질문 코드 레벨 구현.
+ *     모호성 점수 0.5 이상일 때만 질문을 생성한다.
+ * EN: PI-009 — Implements spec §6.3 active probing question at code level.
+ *     Only generates question when ambiguity score >= 0.5.
+ *
+ * @param text - 유저 입력 텍스트 / User input text
+ * @param phase - 현재 대화 Phase / Current conversation phase
+ * @returns 구체화 질문 또는 null / Probing question or null
+ */
+export function generateProbingQuestion(text: string, phase: string): string | null {
+  if (calculateAmbiguityScore(text) < 0.5) {
+    return null;
+  }
+
+  // WHY: PI-009 — 스펙 §6.3 능동적 탐색 질문 코드 레벨 구현
+  return (
+    '좀 더 구체적으로 설명해주실 수 있을까요? ' +
+    `"${text}"에서 어떤 부분을 ${phase} 단계에서 더 다루어야 할까요?`
+  );
+}
+
 // ── 상수 / Constants ────────────────────────────────────────────
 
 /** 기본 대화 조회 수 / Default conversation retrieval limit */

@@ -15,9 +15,9 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import type { AuthProvider } from 'auth/types.js';
-import { type AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
+import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
-import { type Result, ok } from 'core/types.js';
+import { type Result, err, ok } from 'core/types.js';
 import {
   buildMetadata,
   extractTextContent,
@@ -107,14 +107,20 @@ export class ClaudeApi implements IClaudeApi {
   private readonly client: Anthropic;
   // WHY: PI-015 — §6.1 Claude Opus 4.6 기본, config에서 변경 가능
   private readonly model: string;
+  // WHY: PI-010 — 스펙 §1 'V2 Session API 단독 런타임' 준수
+  //      Layer1 대화에서 V2 Session API 사용 옵션 제공
+  //      기본값은 Messages API로 유지하여 하위 호환성 보장
+  private readonly useV2Session: boolean;
 
   constructor(
     private readonly authProvider: AuthProvider,
     logger: Logger,
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
     model = DEFAULT_MODEL,
+    useV2Session = false,
   ) {
     this.model = model;
+    this.useV2Session = useV2Session;
     this.logger = logger.child({ module: 'claude-api' });
     this.retryPolicy = retryPolicy;
 
@@ -156,6 +162,11 @@ export class ClaudeApi implements IClaudeApi {
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     options: ClaudeApiRequestOptions = {},
   ): Promise<Result<ClaudeApiResponse, AgentError>> {
+    // WHY: PI-010 — V2 Session API 사용 시 별도 분기로 처리
+    if (this.useV2Session) {
+      return this.createMessageViaV2Session(messages, options);
+    }
+
     // WHY: PI-015 — options.model > this.model(constructor) > DEFAULT_MODEL 우선순위
     const model = options.model ?? this.model;
     const maxTokens = options.maxTokens ?? 4096;
@@ -285,6 +296,92 @@ export class ClaudeApi implements IClaudeApi {
    *
    * @param response - Claude API 응답 / Claude API response
    */
+  /**
+   * V2 Session API를 통한 메시지 생성 / Create message via V2 Session API
+   *
+   * @description
+   * KR: unstable_v2_createSession을 사용하여 세션 기반 대화를 수행한다.
+   *     세션 생성 → 프롬프트 전송 → 응답 수집 → 세션 종료 순서로 동작한다.
+   * EN: Uses unstable_v2_createSession for session-based conversation.
+   *     Creates session → sends prompt → collects response → closes session.
+   *
+   * @param messages - 메시지 배열 / Message array
+   * @param options - 요청 옵션 / Request options
+   * @returns 성공 시 ClaudeApiResponse, 실패 시 AgentError
+   */
+  private async createMessageViaV2Session(
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options: ClaudeApiRequestOptions = {},
+  ): Promise<Result<ClaudeApiResponse, AgentError>> {
+    const model = options.model ?? this.model;
+
+    return withRetry(
+      async () => {
+        try {
+          // WHY: PI-010 — V2 Session API는 @anthropic-ai/claude-agent-sdk 에서 동적 import
+          const { unstable_v2_createSession } = await import('@anthropic-ai/claude-agent-sdk');
+
+          const sessionOptions = {
+            model,
+            ...(options.system ? { systemPrompt: options.system } : {}),
+          };
+
+          // WHY: V2Session 타입은 send() + stream()이 분리된 구조
+          const session = unstable_v2_createSession(sessionOptions) as unknown as {
+            send(message: string): Promise<void>;
+            stream(): AsyncGenerator<import('@anthropic-ai/claude-agent-sdk').SDKMessage, void>;
+            close(): void;
+          };
+
+          // WHY: 마지막 user 메시지를 프롬프트로 전송, 이전 메시지는 컨텍스트로 활용
+          const lastUserMessage = messages.filter((m) => m.role === 'user').at(-1);
+          const prompt = lastUserMessage?.content ?? '';
+
+          await session.send(prompt);
+
+          let responseContent = '';
+
+          for await (const event of session.stream()) {
+            if (event.type === 'result') {
+              if (event.subtype === 'success') {
+                responseContent = event.result;
+              } else {
+                const errResult = event as { errors?: string[] };
+                session.close();
+                return err(
+                  new AgentError(
+                    'v2_session_failed',
+                    errResult.errors?.[0] ?? 'V2 Session execution failed',
+                  ),
+                );
+              }
+            }
+          }
+
+          session.close();
+
+          this.logger.info('V2 Session 메시지 생성 완료 / V2 Session message created', {
+            model,
+          });
+
+          return ok({
+            content: responseContent,
+            metadata: {
+              model,
+              inputTokens: 0,
+              outputTokens: 0,
+              stopReason: 'end_turn',
+            },
+          });
+        } catch (error: unknown) {
+          return handleApiError(error, 'createMessageViaV2Session', this.logger);
+        }
+      },
+      this.retryPolicy,
+      this.logger,
+    );
+  }
+
   private async updateRateLimitFromResponse(response: Message): Promise<void> {
     // WHY: Anthropic SDK는 응답 헤더를 직접 노출하지 않으므로,
     //      usage 정보를 authProvider에 전달하여 구독 추적을 지원한다.

@@ -67,6 +67,8 @@ export class BiasDetector {
     alerts.push(...this.detectInfiniteLoop(agentEvents, agentName));
     alerts.push(...this.detectDeadlock(agentEvents, agentName));
     alerts.push(...this.detectScopeCreep(agentEvents, agentName));
+    // WHY: PI-001 — architect 피드백 무시 패턴 감지 (전체 이벤트 필요)
+    alerts.push(...this.detectFeedbackIgnored(events, agentName));
 
     if (alerts.length > 0) {
       this.logger.warn('편향 감지 완료', { agentName, alertCount: alerts.length });
@@ -243,6 +245,56 @@ export class BiasDetector {
         description: `도구 다양성이 높음: ${uniqueTools.size}개 도구 / ${toolEvents.length}회 호출`,
         evidence: `도구 다양성: ${(toolDiversity * 100).toFixed(1)}%`,
         severity: 'low',
+        timestamp: new Date(),
+      });
+    }
+
+    return alerts;
+  }
+
+  /**
+   * architect 피드백 무시 패턴을 감지한다 / Detects feedback ignored pattern
+   *
+   * @description
+   * KR: architect의 FAIL/REJECT 피드백 이후 coder가 동일 패턴을 반복하면 감지한다.
+   * EN: Detects when coder repeats similar actions after architect's FAIL/REJECT feedback.
+   *
+   * @param events - 전체 이벤트 배열 (에이전트 무관) / All events (cross-agent)
+   * @param agentName - 분석 대상 에이전트 / Target agent to analyze
+   * @returns 피드백 무시 알림 배열 / Feedback ignored alerts
+   */
+  private detectFeedbackIgnored(events: HookEvent[], agentName: AgentName): BiasAlert[] {
+    const alerts: BiasAlert[] = [];
+
+    // WHY: architect의 FAIL/REJECT 키워드 포함 이벤트를 찾는다
+    const architectFeedback = events.filter(
+      (e) =>
+        e.agentName === 'architect' &&
+        e.type === 'PostToolUse' &&
+        e.data?.content != null &&
+        /FAIL|REJECT|수정|불합격/i.test(String(e.data.content)),
+    );
+
+    if (architectFeedback.length === 0) return alerts;
+
+    // WHY: 마지막 architect 피드백 이후 대상 에이전트의 도구 호출 횟수로 무시 여부 판정
+    const lastFeedback = architectFeedback[architectFeedback.length - 1];
+    if (!lastFeedback) return alerts;
+
+    const coderAfterFeedback = events.filter(
+      (e) =>
+        e.agentName === agentName &&
+        e.timestamp > lastFeedback.timestamp &&
+        e.type === 'PreToolUse',
+    );
+
+    if (coderAfterFeedback.length >= CONFIRMATION_BIAS_THRESHOLD) {
+      alerts.push({
+        type: 'feedback_ignored',
+        agentName,
+        description: `architect 피드백(${architectFeedback.length}회) 후 ${agentName}가 유사 작업 반복`,
+        evidence: `architect 피드백: ${architectFeedback.length}건, 후속 작업: ${coderAfterFeedback.length}건`,
+        severity: 'medium',
         timestamp: new Date(),
       });
     }

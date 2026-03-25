@@ -83,6 +83,9 @@ export class SubscriptionAuth implements AuthProvider {
   private readonly nowFn: () => number;
   private readonly expiryChecker: OAuthExpiryChecker;
 
+  // WHY: PI-003 — 401 응답에서 토큰 만료 감지 시 플래그 설정, 상위에서 재인증 요청 가능
+  private _tokenExpired = false;
+
   constructor(
     private readonly oauthToken: string,
     logger: Logger,
@@ -95,6 +98,15 @@ export class SubscriptionAuth implements AuthProvider {
     this.nowFn = nowFn;
     // WHY: 선택 주입 — 테스트 시 커스텀 checker 주입 가능, 미주입 시 내부 생성
     this.expiryChecker = expiryChecker ?? new OAuthExpiryChecker(nowFn);
+  }
+
+  /**
+   * 401 응답으로 인한 토큰 만료 여부를 반환한다 / Returns whether token was marked expired by 401 response
+   *
+   * @returns 토큰 만료 플래그 / Token expired flag
+   */
+  get tokenExpired(): boolean {
+    return this._tokenExpired;
   }
 
   /**
@@ -200,6 +212,72 @@ export class SubscriptionAuth implements AuthProvider {
    */
   getExpiryInfo(token: string): OAuthExpiryInfo {
     return this.expiryChecker.check(token);
+  }
+
+  /**
+   * HTTP 응답 상태 코드로 401 에러를 분류 처리한다 / Classifies and handles 401 errors from HTTP response
+   *
+   * @description
+   * KR: PI-003 — §11.2 Subscription 401 에러 처리.
+   *     토큰 만료(JWT exp 지남): setup-token 재실행 안내.
+   *     rate limit으로 인한 401: 대기 후 재시도 안내.
+   * EN: PI-003 — §11.2 Subscription 401 error handling.
+   *     Token expired (JWT exp passed): guide to re-run setup-token.
+   *     Rate-limit 401: advise retry after wait.
+   *
+   * @param status - HTTP 상태 코드 / HTTP status code
+   * @param wwwAuthenticate - WWW-Authenticate 헤더 값 / WWW-Authenticate header value
+   */
+  handleHttpStatus(status: number, wwwAuthenticate?: string): void {
+    if (status !== 401) {
+      return;
+    }
+
+    const errorType = this.classify401Error(wwwAuthenticate);
+    if (errorType === 'token_expired') {
+      this.logger.error('OAuth 토큰 만료 — adev setup-token 재실행 필요', {
+        guidance: 'adev auth --renew 또는 adev setup-token 명령어 실행',
+      });
+      // WHY: 만료 플래그 설정으로 상위에서 재인증 요청 가능
+      this._tokenExpired = true;
+    } else {
+      this.logger.warn('401 에러 (rate limit) — 잠시 후 재시도', {});
+    }
+  }
+
+  /**
+   * 401 에러 원인을 분류한다 / Classifies the cause of a 401 error
+   *
+   * @param wwwAuthenticate - WWW-Authenticate 헤더 값 / WWW-Authenticate header value
+   * @returns 'token_expired' 또는 'rate_limit' / 'token_expired' or 'rate_limit'
+   */
+  private classify401Error(wwwAuthenticate?: string): 'token_expired' | 'rate_limit' {
+    // WHY: WWW-Authenticate 헤더에서 만료/무효 토큰 키워드 감지
+    const header = wwwAuthenticate ?? '';
+    if (header.includes('expired') || header.includes('invalid_token')) {
+      return 'token_expired';
+    }
+    return 'rate_limit';
+  }
+
+  /**
+   * 5시간 롤링 윈도우 시작 시각을 반환한다 / Returns the start time of the 5-hour rolling window
+   *
+   * @description
+   * KR: PI-016 — 가장 오래된 사용량 기록의 타임스탬프를 반환한다.
+   *     사용량 기록이 없으면 null을 반환한다.
+   *     리셋 예상 시각 = windowStartTime + 5h.
+   * EN: PI-016 — Returns timestamp of the oldest usage entry.
+   *     Returns null if no usage history exists.
+   *     Estimated reset time = windowStartTime + 5h.
+   *
+   * @returns 윈도우 시작 시각 (밀리초) 또는 null / Window start time (ms) or null
+   */
+  getWindowStartTime(): number | null {
+    this.pruneExpiredEntries();
+    if (this.usageHistory.length === 0) return null;
+    // WHY: 가장 오래된 기록이 윈도우 시작 시각
+    return this.usageHistory[0]!.timestamp;
   }
 
   /**

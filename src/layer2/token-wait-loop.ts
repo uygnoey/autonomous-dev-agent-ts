@@ -46,6 +46,16 @@ export interface TokenWaitLoopDeps {
   readonly sessionRestoreOrchestrator: SessionRestoreOrchestrator;
   /** 로거 인스턴스 / Logger instance */
   readonly logger: Logger;
+  /**
+   * 5시간 윈도우 시작 시각 제공자 (선택) / Window start time provider (optional)
+   *
+   * @description
+   * KR: PI-016 — SubscriptionAuth.getWindowStartTime()을 주입하여 정밀 대기 활성화.
+   * EN: PI-016 — Inject SubscriptionAuth.getWindowStartTime() for precise wait.
+   *
+   * @returns 윈도우 시작 시각 (밀리초) 또는 null / Window start time (ms) or null
+   */
+  readonly getWindowStartTime?: () => number | null;
 }
 
 // ── runTokenWaitLoop ──────────────────────────────────────────────
@@ -136,6 +146,36 @@ export async function* runTokenWaitLoop(
     logger.info('API Key 모드 — retry-after 기반 대기', { retryAfterMs: retryWaitMs });
     yield makeMessageEvent(`429 응답 — retry-after ${status.retryAfterSeconds}초 대기`);
     await Bun.sleep(retryWaitMs);
+  }
+
+  // WHY: PI-016 — Subscription 모드에서 5시간 윈도우 시작 시각 기반 정밀 대기
+  //      windowStart + 5h = 리셋 예상 시각, 남은 시간만 대기하여 불필요한 폴링 방지
+  const WINDOW_DURATION_MS = 5 * 60 * 60 * 1000;
+  if (isSubscription && deps.getWindowStartTime) {
+    const windowStart = deps.getWindowStartTime();
+    if (windowStart !== null) {
+      const resetAt = windowStart + WINDOW_DURATION_MS;
+      const waitMs = Math.max(0, resetAt - Date.now());
+      if (waitMs > 0) {
+        const waitMin = Math.ceil(waitMs / 60_000);
+        logger.info('5시간 윈도우 기반 정밀 대기', {
+          windowStartMs: windowStart,
+          resetAtMs: resetAt,
+          waitMs,
+          waitMin,
+        });
+        yield makeMessageEvent(`5시간 윈도우 리셋까지 약 ${waitMin}분 대기`);
+        await Bun.sleep(waitMs);
+
+        // WHY: 정밀 대기 후 즉시 리셋 확인 — shouldPauseAll()이 false면 복원으로 진행
+        if (!deps.tokenMonitor.shouldPauseAll()) {
+          yield makeMessageEvent('토큰 윈도우 리셋 — 세션 복원 시작');
+          logger.info('5시간 윈도우 정밀 대기 완료 — 세션 복원 시작', { featureId });
+          yield* deps.sessionRestoreOrchestrator.restoreFeatureSessions(featureId);
+          return;
+        }
+      }
+    }
   }
 
   logger.info('토큰 대기 루프 시작', {

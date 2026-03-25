@@ -53,9 +53,7 @@ export interface PhaseHandlerDeps {
       featureId: string,
     ): { ok: true; value: { passed: boolean; summary: string } } | { ok: false };
     /** PI-005 — 통합 검증 실패 판단을 위해 결과 조회 / Get results for integration failure check */
-    getResults(
-      featureId: string,
-    ): ReadonlyArray<{
+    getResults(featureId: string): ReadonlyArray<{
       readonly phase: string;
       readonly passed: boolean;
       readonly feedback: string;

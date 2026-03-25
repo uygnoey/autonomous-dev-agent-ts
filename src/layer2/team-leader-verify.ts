@@ -182,11 +182,25 @@ export async function* executeVerifyPhase(
     ? 'adev 종합 판단: 전체 통과'
     : `adev 종합 판단: 실패 — ${adevFeedbackParts.join(', ')}`;
 
+  // WHY: PI-002 — §8.4 'adev 확증편향 체크' — 전원 통과라도 편향 패턴 분석
+  // WHY: optional chaining — mock/미지원 환경에서도 안전하게 처리
+  const biasAlerts = deps.streamMonitor.detectAnomalies?.() ?? [];
+  const confirmationBias = biasAlerts.filter((a) => a.type === 'confirmation_bias');
+  let finalAdevFeedback = adevFeedback;
+  if (confirmationBias.length > 0) {
+    deps.logger.warn('VERIFY Phase 확증편향 감지 — 전원 통과에도 불구하고 편향 경고', {
+      featureId,
+      alertCount: confirmationBias.length,
+    });
+    const biasWarning = `[확증편향 경고] ${confirmationBias.map((a) => a.description).join('; ')}`;
+    finalAdevFeedback = `${adevFeedback}\n${biasWarning}`;
+  }
+
   deps.verificationGate.addResult({
     featureId,
     phase: 'adev',
     passed: adevPassed,
-    feedback: adevFeedback,
+    feedback: finalAdevFeedback,
     timestamp: new Date(),
   });
 
@@ -194,6 +208,7 @@ export async function* executeVerifyPhase(
     featureId,
     adevPassed,
     integrationAllPassed: integrationResult.allPassed,
+    biasAlertCount: confirmationBias.length,
   });
 }
 

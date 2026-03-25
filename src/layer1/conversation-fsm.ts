@@ -20,6 +20,19 @@ import {
   PHASE_TRANSITIONS,
 } from 'layer1/conversation-types.js';
 
+// ── PI-008: 단순 긍정 키워드 / Simple affirmative keywords ──────
+
+/** 단순 긍정 키워드 (추가 제안 필요 패턴) / Simple affirmative keywords requiring further proposals */
+const SIMPLE_AFFIRMATIVE = ['ok', 'good', 'yes', '응', '네', '좋아', '알겠어'];
+
+/**
+ * 제안 유도 Phase 목록 / Phases that trigger proposal prompts
+ *
+ * WHY: PI-008 — IDEA/PLANNING/DESIGN Phase에서만 무한 제안 루프를 적용한다.
+ *      STACK 이후 Phase는 확정적 선택이 필요하므로 제외.
+ */
+const PROPOSAL_PHASES: ReadonlySet<ConversationPhase> = new Set(['IDEA', 'PLANNING', 'DESIGN']);
+
 // ── ConversationFsm ─────────────────────────────────────────────
 
 /**
@@ -123,6 +136,45 @@ export class ConversationFsm {
    */
   isContractPhase(): boolean {
     return this.phase === 'CONTRACT';
+  }
+
+  /**
+   * 유저 응답이 단순 긍정인지 확인한다 / Checks if user response is simple affirmative
+   *
+   * @description
+   * KR: PI-008 — 유저가 "ok", "네" 등 단순 긍정만 했을 때 추가 제안을 유도하기 위한 판별.
+   * EN: PI-008 — Detects simple affirmative to trigger further proposal prompts.
+   *
+   * @param text - 유저 입력 텍스트 / User input text
+   * @returns 단순 긍정 여부 / Whether input is simple affirmative
+   */
+  isSimpleAffirmative(text: string): boolean {
+    const lower = text.trim().toLowerCase();
+    return SIMPLE_AFFIRMATIVE.some((kw) => lower === kw || lower === `${kw}.`);
+  }
+
+  /**
+   * Phase 유지 상태에서 추가 제안 프롬프트를 반환한다 / Get proposal prompt for current phase
+   *
+   * @description
+   * KR: PI-008 — 유저가 단순 긍정만 할 때 더 깊은 탐색을 유도하는 프롬프트 생성.
+   *     IDEA/PLANNING/DESIGN Phase에서만 동작한다.
+   * EN: PI-008 — Generates a prompt for deeper exploration when user gives simple affirmative.
+   *     Only active in IDEA/PLANNING/DESIGN phases.
+   *
+   * @param phase - 현재 Phase / Current phase
+   * @returns 추가 제안 프롬프트 또는 null (해당 Phase가 아닐 때) / Proposal prompt or null
+   */
+  getProposalPrompt(phase: ConversationPhase): string | null {
+    if (!PROPOSAL_PHASES.has(phase)) {
+      return null;
+    }
+
+    // WHY: PI-008 — 유저가 단순 긍정만 할 때 더 깊은 탐색을 유도
+    return (
+      `현재 ${phase} 단계에서 더 탐색할 수 있는 관점:\n` +
+      '1. 대안 방식이 있는가?\n2. 놓친 요구사항은 없는가?\n3. 엣지 케이스를 고려했는가?'
+    );
   }
 
   /**

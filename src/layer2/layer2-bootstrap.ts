@@ -11,7 +11,12 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { HookCallbackMatcher, TeammateIdleHookInput } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  HookCallbackMatcher,
+  PreToolUseHookInput,
+  PostToolUseHookInput,
+  TeammateIdleHookInput,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
 import type { TestingConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
@@ -143,7 +148,41 @@ export class Layer2Bootstrap {
       ],
     };
 
-    // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle 훅 주입)
+    // WHY: PI-006/PI-015 — PreToolUse/PostToolUse SDK 훅을 StreamMonitor에 연결하여
+    //      도구 사용 전후 이벤트를 실시간으로 캡처한다.
+    const preToolUseHook: HookCallbackMatcher = {
+      hooks: [
+        async (input) => {
+          const hookInput = input as PreToolUseHookInput;
+          streamMonitor.onEvent({
+            type: 'PreToolUse',
+            agentName: (hookInput.agent_type ?? 'unknown') as AgentName,
+            toolName: hookInput.tool_name,
+            data: {},
+            timestamp: new Date(),
+          });
+          return { continue: true };
+        },
+      ],
+    };
+
+    const postToolUseHook: HookCallbackMatcher = {
+      hooks: [
+        async (input) => {
+          const hookInput = input as PostToolUseHookInput;
+          streamMonitor.onEvent({
+            type: 'PostToolUse',
+            agentName: (hookInput.agent_type ?? 'unknown') as AgentName,
+            toolName: hookInput.tool_name,
+            data: { content: hookInput.tool_response },
+            timestamp: new Date(),
+          });
+          return { continue: true };
+        },
+      ],
+    };
+
+    // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle + PreToolUse/PostToolUse 훅 주입)
     const executor = new V2SessionExecutor({
       authProvider: this.authProvider,
       logger,
@@ -151,7 +190,11 @@ export class Layer2Bootstrap {
         model: 'claude-opus-4-6',
         maxTurns: 50,
       },
-      hooks: { TeammateIdle: [teammateIdleHook] },
+      hooks: {
+        TeammateIdle: [teammateIdleHook],
+        PreToolUse: [preToolUseHook],
+        PostToolUse: [postToolUseHook],
+      },
     });
 
     // 3. 핵심 컴포넌트 (서로 독립적)
