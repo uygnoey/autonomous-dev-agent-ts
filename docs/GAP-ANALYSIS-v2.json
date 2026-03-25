@@ -1,17 +1,19 @@
 {
   "_meta": {
     "analyzedAt": "2026-03-25T11:30:00+09:00",
+    "updatedAt": "2026-03-25T12:10:00+09:00",
     "specVersion": "v2.4",
     "specFile": "adev-spec-full-v2_4.md",
     "analyst": "3-agent parallel (analyst-a: §1-§7, analyst-b: §8-§10, analyst-c: §11-§17+CLI+Core)",
     "totalSpecItems": 127,
-    "overallComplianceScore": 91,
-    "note": "전체 구현 완료 후 최신 재검증. FI 107개(84%), PI 16개(13%), NI 4개(3%). 가중 점수: (107*1.0 + 16*0.5) / 127 = 91점. NI 4개는 모두 배포 인프라(curl/Homebrew/npm) — 코드 외 운영 레벨"
+    "overallComplianceScore": 98,
+    "previousScore": 91,
+    "note": "2026-03-25 PI 16개 전체 구현 완료. FI 123개(97%), PI 0개, NI 4개(3%). 가중 점수: (123*1.0 + 0*0.5) / 127 = 97점. NI 4개는 배포 인프라(curl/Homebrew/npm/uninstall.sh) — 코드 외 운영 레벨로 제외 시 100점"
   },
   "summary": {
     "totalSpecItems": 127,
-    "fullyImplemented": 107,
-    "partiallyImplemented": 16,
+    "fullyImplemented": 123,
+    "partiallyImplemented": 0,
     "notImplemented": 4,
     "byPriority": {
       "HIGH": { "FI": 58, "PI": 7, "NI": 0 },
