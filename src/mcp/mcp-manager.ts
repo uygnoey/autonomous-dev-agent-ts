@@ -326,6 +326,9 @@ export class McpManager {
       );
     }
 
+    // WHY: reader를 try 외부에서 선언하여 finally에서 확실히 releaseLock 수행
+    const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>;
+
     try {
       // WHY: PI-009 — JSON-RPC tools/call 요청을 stdin에 전송하고 stdout에서 응답을 읽는다
       const requestId = Date.now();
@@ -338,10 +341,6 @@ export class McpManager {
 
       proc.stdin.write(`${rpcMessage}\n`);
 
-      // WHY: stdout에서 응답 한 줄 읽기 — 핸드셰이크와 동일한 패턴
-      const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<
-        Uint8Array<ArrayBuffer>
-      >;
       const decoder = new TextDecoder();
       let buffer = '';
       const CALL_TIMEOUT_MS = 30_000;
@@ -393,6 +392,9 @@ export class McpManager {
           `MCP 도구 호출 실패: ${serverName}/${toolName} — ${msg}`,
         ),
       );
+    } finally {
+      // WHY: 타임아웃/에러 시에도 reader lock을 반드시 해제하여 다음 callTool 호출 가능
+      reader.releaseLock();
     }
   }
 

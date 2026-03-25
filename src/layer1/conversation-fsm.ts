@@ -86,9 +86,23 @@ export class ConversationFsm {
     const normalized = userInput.toLowerCase().trim();
 
     for (const keyword of CONFIRMATION_KEYWORDS) {
-      if (normalized.includes(keyword.toLowerCase())) {
-        this.logger.debug('확정 키워드 감지', { keyword, phase: this.phase });
-        return true;
+      const lower = keyword.toLowerCase();
+      const isAscii = /^[a-z]+$/i.test(keyword);
+
+      if (isAscii) {
+        // WHY: 영어 키워드는 단어 경계로 정확히 매칭 — "ok 근데" 같은 부분 매칭 오탐 방지
+        const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(^|\\s)${escaped}(\\s|$|[.,!?])`, 'i');
+        if (regex.test(normalized)) {
+          this.logger.debug('확정 키워드 감지', { keyword, phase: this.phase });
+          return true;
+        }
+      } else {
+        // WHY: 한국어 키워드는 조사/어미가 바로 붙으므로 includes 매칭 유지
+        if (normalized.includes(lower)) {
+          this.logger.debug('확정 키워드 감지', { keyword, phase: this.phase });
+          return true;
+        }
       }
     }
 
@@ -150,6 +164,8 @@ export class ConversationFsm {
    */
   isSimpleAffirmative(text: string): boolean {
     const lower = text.trim().toLowerCase();
+    // WHY: detectConfirmation()과 동시 트리거 방지 — 확정 키워드로도 감지되면 false 반환
+    if (this.detectConfirmation(text)) return false;
     return SIMPLE_AFFIRMATIVE.some((kw) => lower === kw || lower === `${kw}.`);
   }
 
@@ -175,6 +191,18 @@ export class ConversationFsm {
       `현재 ${phase} 단계에서 더 탐색할 수 있는 관점:\n` +
       '1. 대안 방식이 있는가?\n2. 놓친 요구사항은 없는가?\n3. 엣지 케이스를 고려했는가?'
     );
+  }
+
+  /**
+   * Phase를 초기 상태(IDEA)로 리셋한다 / Reset phase to initial state (IDEA)
+   *
+   * @description
+   * KR: /clear 등 대화 이력 초기화 시 Phase도 함께 리셋한다.
+   * EN: Resets phase along with conversation history clear (/clear).
+   */
+  reset(): void {
+    this.logger.debug('FSM 리셋', { from: this.phase, to: 'IDEA' });
+    this.phase = 'IDEA';
   }
 
   /**

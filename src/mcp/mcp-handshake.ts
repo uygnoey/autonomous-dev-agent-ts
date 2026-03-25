@@ -50,35 +50,40 @@ export async function performHandshake(
   // WHY: Bun의 ReadableStream<Uint8Array>에서 ArrayBuffer 특정 리더 취득
   const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>;
 
-  // 1. initialize 요청 전송
-  writeRpc(proc, {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'initialize',
-    params: {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: { name: 'adev', version: '1.0.0' },
-    },
-  });
+  try {
+    // 1. initialize 요청 전송
+    writeRpc(proc, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: 'adev', version: '1.0.0' },
+      },
+    });
 
-  // 2. initialize 응답 수신
-  const initResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
-  if (!initResult.ok) return initResult;
+    // 2. initialize 응답 수신
+    const initResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+    if (!initResult.ok) return initResult;
 
-  // 3. initialized 알림 전송 (응답 없음)
-  writeRpc(proc, { jsonrpc: '2.0', method: 'notifications/initialized' });
+    // 3. initialized 알림 전송 (응답 없음)
+    writeRpc(proc, { jsonrpc: '2.0', method: 'notifications/initialized' });
 
-  // 4. tools/list 요청 전송
-  writeRpc(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+    // 4. tools/list 요청 전송
+    writeRpc(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 
-  // 5. tools/list 응답 수신 및 파싱
-  const toolsResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
-  if (!toolsResult.ok) return toolsResult;
+    // 5. tools/list 응답 수신 및 파싱
+    const toolsResult = await readRpcLine(reader, HANDSHAKE_TIMEOUT_MS);
+    if (!toolsResult.ok) return toolsResult;
 
-  const toolsRaw = toolsResult.value;
-  logger.debug('MCP 도구 목록 수신', { name, preview: toolsRaw.slice(0, 200) });
-  return ok(parseToolsResponse(toolsRaw, logger));
+    const toolsRaw = toolsResult.value;
+    logger.debug('MCP 도구 목록 수신', { name, preview: toolsRaw.slice(0, 200) });
+    return ok(parseToolsResponse(toolsRaw, logger));
+  } finally {
+    // WHY: 핸드셰이크 완료/실패 후 reader lock 해제 — callTool에서 "Reader already locked" 방지
+    reader.releaseLock();
+  }
 }
 
 // ── 내부 헬퍼 / Internal helpers ─────────────────────────────────

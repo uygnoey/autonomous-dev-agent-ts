@@ -19,7 +19,12 @@ import type { ChatUi } from '../tui/chat.js';
 import type { GlobalCliOptions } from '../types.js';
 import { generateContract, handleContractPostProcess } from './start-pipeline.js';
 import { initializeLayer1Session, loadActiveProject } from './start-session.js';
-import { ADEV_VERSION, LAYER1_SYSTEM_PROMPT } from './start-types.js';
+import {
+  ADEV_VERSION,
+  LAYER1_MAX_TOKENS,
+  LAYER1_SYSTEM_PROMPT,
+  LAYER1_TEMPERATURE,
+} from './start-types.js';
 import type { Layer1SessionState, StartOptions } from './start-types.js';
 
 // Re-export for external consumers
@@ -136,6 +141,8 @@ export class StartCommand {
             break;
           case 'clear':
             session.messages.length = 0;
+            // WHY: 대화 이력 초기화 시 FSM Phase도 리셋하여 상태 불일치 방지
+            session.conversationFsm?.reset();
             chat.system('대화 이력이 초기화되었습니다.');
             break;
           case 'contract': {
@@ -236,7 +243,7 @@ export class StartCommand {
             assistantContent += event.text;
           }
         },
-        { maxTokens: 4096, temperature: 0.7 },
+        { maxTokens: LAYER1_MAX_TOKENS, temperature: LAYER1_TEMPERATURE },
       );
 
       chat.showStreamingEnd();

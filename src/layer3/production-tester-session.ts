@@ -47,13 +47,19 @@ export async function executeOnce(
   sessionId: string,
   sessions: Map<string, ContinuousE2ESession>,
   timers: Map<string, Timer>,
-  integrationTester: IntegrationTester,
+  integrationTester: IntegrationTester | null,
   logger: Logger,
   stopSession: (sessionId: string) => Promise<void>,
   onFailure?: OnE2EFailureCallback,
 ): Promise<void> {
   const session = sessions.get(sessionId);
   if (!session || session.status !== 'running') return;
+
+  // WHY: 간단 API (logger만 전달) 사용 시 integrationTester가 null — 실행 불가
+  if (!integrationTester) {
+    logger.warn('integrationTester가 없어 E2E 실행을 건너뜁니다', { sessionId });
+    return;
+  }
 
   logger.debug('E2E 테스트 실행 시작', {
     sessionId,

@@ -45,7 +45,7 @@ const DEFAULT_FAIL_FAST = true;
  */
 export class ProductionTester implements IProductionTester {
   private readonly logger: Logger;
-  private readonly integrationTester: IntegrationTester;
+  private readonly integrationTester: IntegrationTester | null;
   private readonly bugEscalator: IBugEscalator | null;
   private readonly sessions: Map<string, ContinuousE2ESession>;
   private readonly timers: Map<string, Timer>;
@@ -63,7 +63,6 @@ export class ProductionTester implements IProductionTester {
     // WHY: 간단한 API 지원 - logger만 전달하는 경우
     if (!logger) {
       this.logger = (integrationTester as Logger).child({ module: 'production-tester' });
-      // @ts-expect-error - 간단한 API 사용 시 integrationTester는 사용되지 않음
       this.integrationTester = null;
       this.bugEscalator = null;
     } else {

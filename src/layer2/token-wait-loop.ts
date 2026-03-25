@@ -40,8 +40,8 @@ export interface TokenWaitLoopDeps {
   readonly tokenMonitor: TokenMonitor;
   /** 세션 관리자 / Session manager */
   readonly sessionManager: SessionManager;
-  /** 세션 스냅샷 저장소 / Session snapshot store */
-  readonly sessionSnapshotStore: SessionSnapshotStore;
+  /** 세션 스냅샷 저장소 (선택) / Session snapshot store (optional) */
+  readonly sessionSnapshotStore?: SessionSnapshotStore;
   /** 세션 복원 오케스트레이터 / Session restore orchestrator */
   readonly sessionRestoreOrchestrator: SessionRestoreOrchestrator;
   /** 로거 인스턴스 / Logger instance */
@@ -117,12 +117,15 @@ export async function* runTokenWaitLoop(
       conversationHistory: session.conversationHistory ?? [],
     };
 
-    const saveResult = await deps.sessionSnapshotStore.save(snapshot);
-    if (!saveResult.ok) {
-      logger.warn('세션 스냅샷 저장 실패', {
-        sessionId: session.sessionId,
-        error: saveResult.error.message,
-      });
+    // WHY: sessionSnapshotStore가 없으면 스냅샷 저장을 건너뜀
+    if (deps.sessionSnapshotStore) {
+      const saveResult = await deps.sessionSnapshotStore.save(snapshot);
+      if (!saveResult.ok) {
+        logger.warn('세션 스냅샷 저장 실패', {
+          sessionId: session.sessionId,
+          error: saveResult.error.message,
+        });
+      }
     }
   }
 

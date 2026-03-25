@@ -67,8 +67,9 @@ export function adjustWorkersForMemoryPressure(
   logger: Logger,
   totalMemoryMb?: number,
 ): number {
-  // WHY: PI-003 — 환경변수에서 총 메모리 한도 읽기 (config.ts 경유 권장이나 worker-resolver는 core 독립 모듈)
-  const limitMb = totalMemoryMb ?? Number(process.env.ADEV_TOTAL_MEMORY_MB || '4096');
+  // WHY: PI-003 — 총 메모리 한도는 호출자가 config.ts 경유로 주입 (기본 4096 MB)
+  const DEFAULT_TOTAL_MEMORY_MB = 4096;
+  const limitMb = totalMemoryMb ?? DEFAULT_TOTAL_MEMORY_MB;
   const rssMb = process.memoryUsage().rss / 1024 / 1024;
 
   if (rssMb > limitMb * MEMORY_SAFE_CEILING) {

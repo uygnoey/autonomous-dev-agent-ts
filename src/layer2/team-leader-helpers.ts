@@ -593,10 +593,14 @@ export function updateStatusForPhase(
  * @param content - 이벤트 내용 / Event content
  * @returns AgentEvent
  */
-export function createEvent(type: AgentEvent['type'], content: string): AgentEvent {
+export function createEvent(
+  type: AgentEvent['type'],
+  content: string,
+  agentName: AgentName = 'architect',
+): AgentEvent {
   return {
     type,
-    agentName: 'architect',
+    agentName,
     content,
     timestamp: new Date(),
   };

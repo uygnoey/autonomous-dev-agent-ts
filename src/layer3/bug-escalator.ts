@@ -2,7 +2,7 @@
 import { mkdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { type AdevError, AgentError } from 'core/errors.js';
-import { ConsoleLogger, type Logger } from 'core/logger.js';
+import type { Logger } from 'core/logger.js';
 import type { Phase, Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { FailureHandler } from 'layer2/failure-handler.js';
@@ -109,7 +109,9 @@ export class BugEscalator implements IBugEscalator {
       this.teamLeader = teamLeader as TeamLeader;
       this.failureHandler = failureHandler ?? null;
       this.integrationTester = integrationTester ?? null;
-      this.logger = logger ? logger.child({ module: 'bug-escalator' }) : new ConsoleLogger('info');
+      this.logger = (logger ?? (teamLeader as unknown as Logger)).child({
+        module: 'bug-escalator',
+      });
       this.onLayer2RerunRequired = onLayer2RerunRequired ?? null;
     }
   }

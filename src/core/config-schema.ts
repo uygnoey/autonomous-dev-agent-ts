@@ -38,6 +38,8 @@ export interface TestingConfig {
   readonly e2eTimeoutSeconds: number;
   // WHY: PI-006 — §8.5 클라우드 환경 선택 지원. 현재는 로컬만 구현
   readonly cleanEnvType: CleanEnvType;
+  /** 워커 메모리 한도 (MB) / Total memory limit for worker resolver (MB) */
+  readonly totalMemoryMb: number;
 }
 
 /** 4중 검증 모델 설정 / Verification model configuration */
@@ -89,6 +91,7 @@ export const DEFAULT_CONFIG: ConfigSchema = {
     parallelWorkers: 'auto',
     e2eTimeoutSeconds: 300,
     cleanEnvType: 'local',
+    totalMemoryMb: 4096,
   },
   verification: {
     layer1Model: 'opus',
