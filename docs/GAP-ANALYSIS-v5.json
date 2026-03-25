@@ -1,0 +1,117 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-25T14:20:00+09:00",
+    "specVersion": "v2.4",
+    "specFile": "adev-spec-full-v2_4.md",
+    "analyst": "3-agent parallel (analyst-1: §1-§7, analyst-2: §8-§10, analyst-3: §11-§17+CLI+Core) + lead reconciliation",
+    "totalSpecItems": 125,
+    "overallComplianceScore": 96,
+    "note": "GAP-ANALYSIS-v4 NI 2개 + PI 14개 구현 후 5차 재검증. 125개 항목 분석. FI 116개(93%), PI 7개(6%), NI 2개(2%). 가중 점수: (116*1.0 + 7*0.5) / 125 = 96점. 오분류 수정: CLI-004 FI(install.sh/brew 존재), S8-031 FI(TeammateIdle layer2-bootstrap에 구현)"
+  },
+  "summary": {
+    "totalSpecItems": 125,
+    "fullyImplemented": 116,
+    "partiallyImplemented": 7,
+    "notImplemented": 2,
+    "byPriority": {
+      "HIGH": { "FI": 72, "PI": 2, "NI": 1 },
+      "MEDIUM": { "FI": 35, "PI": 2, "NI": 1 },
+      "LOW": { "FI": 9, "PI": 3, "NI": 0 }
+    }
+  },
+  "notImplemented": [
+    {
+      "id": "NI-001",
+      "specRef": "§13 SDK — settingSources: []",
+      "requirement": "V2 Session API 호출 시 settingSources: [] 옵션 설정 (파일시스템 설정 의존 제거)",
+      "reason": "v2-session-factory.ts, v2-session-executor.ts 모두 settingSources 옵션 미설정. permissionMode: 'bypassPermissions'는 구현됨",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/v2-session-factory.ts", "src/layer2/v2-session-executor.ts"]
+    },
+    {
+      "id": "NI-002",
+      "specRef": "§8.5 통합 검증 — 클라우드 환경 실행",
+      "requirement": "유저가 설정한 클라우드 환경(원격 서버, CI 등)에서 통합 테스트 실행",
+      "reason": "CleanEnvManager는 로컬 임시 폴더만 지원. cleanEnvType: 'cloud' 타입은 정의됐으나 실제 클라우드 환경 연결 미구현",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/clean-env-manager.ts"]
+    }
+  ],
+  "partiallyImplemented": [
+    {
+      "id": "PI-001",
+      "specRef": "§13 SDK — settingSources:[] 외 V2 Session 완전한 옵션 체계",
+      "requirement": "V2 Session API의 모든 권장 옵션(settingSources, maxTurns 등) 완전 적용",
+      "implemented": "permissionMode: 'bypassPermissions', Agent Teams env, hooks 모두 구현됨",
+      "missing": "settingSources: [] 미설정 (NI-001과 동일)",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/v2-session-factory.ts"]
+    },
+    {
+      "id": "PI-002",
+      "specRef": "§8.3 adev 개입 — 극단적: Agent Teams 비활성화 후 독립 세션 전환",
+      "requirement": "재spawn 반복 실패 시 Agent Teams 환경변수를 제거하고 독립 unstable_v2_prompt()로 완전 전환",
+      "implemented": "MAX_DESIGN_RETRIES=2 재토론 루프, maxRetries 소진 후 environment:{} fallback 구현됨",
+      "missing": "fallback이 executeDesignPhaseWithMonitoring() 내부에만 존재. TeamLeader 메인 루프에서 다른 Phase 이상 감지 시 Agent Teams 완전 비활성화 전환 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "id": "PI-003",
+      "specRef": "§11.3 세션 스냅샷 — 진행률/미완료 항목 필드",
+      "requirement": "스냅샷에 Phase, 진행률, 마지막 작업, 미완료 항목 포함",
+      "implemented": "session-snapshot-store-types.ts에 phase/state/metadata 저장됨",
+      "missing": "progressPercent(진행률), pendingItems(미완료 항목 목록) 필드 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/session-snapshot-store-types.ts", "src/layer2/session-snapshot-store.ts"]
+    },
+    {
+      "id": "PI-004",
+      "specRef": "§8.4 TEST Phase — random/edge case 80%+ 강제 메커니즘",
+      "requirement": "tester 에이전트가 생성하는 테스트 케이스의 random/edge case 비중을 코드 레벨에서 강제 검증",
+      "implemented": "enforceEdgeCaseRatio() test-type-designer.ts에 구현됨. tester 프롬프트에 80%+ 지시 포함",
+      "missing": "tester 에이전트 실행 결과에서 실제 edge case 비율을 계산하여 80% 미달 시 재생성하는 검증 루프 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts", "src/layer1/test-type-designer.ts"]
+    },
+    {
+      "id": "PI-005",
+      "specRef": "§12 크리티컬 이슈 배치 수집 전달",
+      "requirement": "비크리티컬 이슈는 완성 후 모아서 일괄 전달 (배치 큐)",
+      "implemented": "queueNormalIssue()/flushQueuedIssues() UserCheckpoint에 구현됨",
+      "missing": "TeamLeader 메인 루프에서 이슈 발생 시 실제로 queueNormalIssue() 호출하는 코드 없음. 큐 기능은 있으나 실제 사용 연결 안 됨",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/team-leader.ts", "src/layer2/user-checkpoint.ts"]
+    },
+    {
+      "id": "PI-006",
+      "specRef": "§13 Agent Teams — TeamDelete race condition 완전 우회",
+      "requirement": "TeamDelete 후 config.json 멤버 자동 갱신 안 됨 → 명시적 우회 처리",
+      "implemented": "3회×300ms 대기로 개선됨",
+      "missing": "단순 대기만으로는 race condition 완전 해결 불가. config.json을 직접 확인/수정하거나 SDK 재연결하는 명시적 우회 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-007",
+      "specRef": "§4 설치 — Bun 글로벌 패키지 publish 설정",
+      "requirement": "bun install -g autonomous-dev-agent 동작을 위한 npm/bun 레지스트리 publish 설정",
+      "implemented": "package.json에 bin 필드 정의됨. install.sh/uninstall.sh/brew formula 존재",
+      "missing": "npm/bun 레지스트리에 실제 패키지 발행 설정 미완료. package.json publish 설정 미확인",
+      "priority": "LOW",
+      "affectedFiles": ["package.json"]
+    }
+  ],
+  "correctedFromAnalysts": [
+    "CLI-004 (analyst-3 NI): scripts/install.sh + scripts/uninstall.sh + scripts/brew/ 존재 → FI",
+    "S8-031 (analyst-2 NI): TeammateIdle 훅이 layer2-bootstrap.ts에 구현됨 → FI",
+    "S12-005 (analyst-3 PI): file-size-guard.ts의 guardAndSplitIfNeeded() + code-indexer.ts 통합 → FI"
+  ],
+  "progressHistory": {
+    "v1": { "score": 62, "FI": 8, "PI": 12, "NI": 2 },
+    "v2": { "score": 91, "FI": 107, "PI": 16, "NI": 4 },
+    "v3": { "score": 94, "FI": 122, "PI": 16, "NI": 4 },
+    "v4": { "score": 93, "FI": 95, "PI": 14, "NI": 4 },
+    "v5": { "score": 96, "FI": 116, "PI": 7, "NI": 2 }
+  }
+}
