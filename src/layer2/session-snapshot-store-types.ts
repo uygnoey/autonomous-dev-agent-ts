@@ -40,6 +40,12 @@ export interface PersistableSessionSnapshot {
   readonly metadata: Readonly<Record<string, unknown>>;
   /** 토큰 리셋 복원용 대화 이력 (직렬화 전 원본) / Conversation history for token reset recovery */
   readonly conversationHistory?: readonly unknown[];
+  /** 진행률 (0~100) / Progress percentage (0~100) */
+  readonly progressPercent?: number;
+  /** 미완료 항목 목록 / Pending items list */
+  readonly pendingItems?: readonly string[];
+  /** 마지막 작업 설명 / Last work description */
+  readonly lastWorkDescription?: string;
 }
 
 // ── FlatSessionSnapshot ──────────────────────────────────────────
@@ -74,6 +80,12 @@ export interface FlatSessionSnapshot {
   conversationHistory: string;
   /** 메타데이터 JSON 직렬화 / Metadata JSON serialized */
   metadata: string;
+  /** 진행률 (0~100) / Progress percentage (0~100) */
+  progressPercent: number;
+  /** 미완료 항목 JSON 직렬화 / Pending items JSON serialized */
+  pendingItems: string;
+  /** 마지막 작업 설명 / Last work description */
+  lastWorkDescription: string;
   /** 더미 벡터 / Dummy embedding vector */
   vector: number[];
 }
@@ -102,6 +114,9 @@ export function toFlatSnapshot(s: PersistableSessionSnapshot): FlatSessionSnapsh
     lastActivity: s.lastActivity.toISOString(),
     conversationHistory: JSON.stringify(s.conversationHistory ?? []),
     metadata: JSON.stringify(s.metadata),
+    progressPercent: s.progressPercent ?? 0,
+    pendingItems: JSON.stringify(s.pendingItems ?? []),
+    lastWorkDescription: s.lastWorkDescription ?? '',
     // WHY: 벡터 검색 미사용 — dummy 벡터로 LanceDB 스키마 요구사항 충족
     vector: Array(8).fill(0) as number[],
   };
@@ -129,5 +144,12 @@ export function fromFlatSnapshot(f: FlatSessionSnapshot): PersistableSessionSnap
     lastActivity: new Date(f.lastActivity),
     conversationHistory: JSON.parse(f.conversationHistory) as readonly unknown[],
     metadata: JSON.parse(f.metadata) as Readonly<Record<string, unknown>>,
+    // WHY: H-002 — 0이 falsy이므로 || 대신 ?? 사용하여 progressPercent 0% 손실 방지
+    progressPercent: f.progressPercent ?? undefined,
+    pendingItems:
+      f.pendingItems && f.pendingItems !== '[]'
+        ? (JSON.parse(f.pendingItems) as readonly string[])
+        : undefined,
+    lastWorkDescription: f.lastWorkDescription || undefined,
   };
 }

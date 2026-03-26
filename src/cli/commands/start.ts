@@ -19,7 +19,12 @@ import type { ChatUi } from '../tui/chat.js';
 import type { GlobalCliOptions } from '../types.js';
 import { generateContract, handleContractPostProcess } from './start-pipeline.js';
 import { initializeLayer1Session, loadActiveProject } from './start-session.js';
-import { ADEV_VERSION, LAYER1_SYSTEM_PROMPT } from './start-types.js';
+import {
+  ADEV_VERSION,
+  LAYER1_MAX_TOKENS,
+  LAYER1_SYSTEM_PROMPT,
+  LAYER1_TEMPERATURE,
+} from './start-types.js';
 import type { Layer1SessionState, StartOptions } from './start-types.js';
 
 // Re-export for external consumers
@@ -106,6 +111,13 @@ export class StartCommand {
     try {
       chat.start();
 
+      // WHY: PI-001 — 현재 Phase를 유저에게 표시하여 대화 맥락 제공
+      if (session.conversationFsm) {
+        chat.system(
+          `[${session.conversationFsm.currentPhase}] 대화 시작. 아이디어를 말씀해주세요.`,
+        );
+      }
+
       const initialFeature = (options as StartOptions).feature;
       if (initialFeature) {
         const responseResult = await this.processUserInput(session, initialFeature, chat);
@@ -129,6 +141,8 @@ export class StartCommand {
             break;
           case 'clear':
             session.messages.length = 0;
+            // WHY: 대화 이력 초기화 시 FSM Phase도 리셋하여 상태 불일치 방지
+            session.conversationFsm?.reset();
             chat.system('대화 이력이 초기화되었습니다.');
             break;
           case 'contract': {
@@ -194,8 +208,26 @@ export class StartCommand {
 
       await session.conversationManager.addMessage(userMessage);
 
+      // WHY: PI-002/003 — §6.3 유저 확정 감지 → Phase 전환
+      if (session.conversationFsm) {
+        const confirmed = session.conversationFsm.detectConfirmation(userInput);
+        if (confirmed) {
+          const advanced = session.conversationFsm.advancePhase();
+          if (advanced.ok) {
+            const newPhase = session.conversationFsm.currentPhase;
+            chat.system(`[Phase 전환] ${newPhase}`);
+            this.logger.info('ConversationFsm Phase 전환', { newPhase });
+          }
+        }
+      }
+
+      // WHY: PI-001 — §6.2 Phase별 시스템 프롬프트 동적 주입
+      const phaseSystemPrompt = session.conversationFsm
+        ? session.conversationFsm.getSystemPrompt()
+        : LAYER1_SYSTEM_PROMPT;
+
       const messages = [
-        { role: 'user' as const, content: LAYER1_SYSTEM_PROMPT },
+        { role: 'user' as const, content: phaseSystemPrompt },
         ...session.messages.map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: userInput },
       ];
@@ -211,7 +243,7 @@ export class StartCommand {
             assistantContent += event.text;
           }
         },
-        { maxTokens: 4096, temperature: 0.7 },
+        { maxTokens: LAYER1_MAX_TOKENS, temperature: LAYER1_TEMPERATURE },
       );
 
       chat.showStreamingEnd();

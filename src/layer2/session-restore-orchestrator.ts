@@ -9,7 +9,12 @@
  */
 
 import type { AgentName } from 'core/types.js';
+import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { AgentConfig, AgentEvent } from 'layer2/agent-types.js';
+import {
+  fallbackWithRagContext as fallbackWithRagContextFn,
+  buildFallbackSessionConfig as buildFallbackSessionConfigFn,
+} from 'layer2/session-restore-orchestrator-fallback.js';
 import {
   buildEnvFromAuthProvider,
   makeRestoreErrorEvent,
@@ -20,7 +25,9 @@ import {
   RESET_POLL_INTERVAL_MS,
   type SessionRestoreOrchestratorDeps,
 } from 'layer2/session-restore-orchestrator-types.js';
+import type { SDKSessionOptions } from 'layer2/v2-session-executor-types.js';
 import { mapSdkEvent, sdkResumeSession } from 'layer2/v2-session-factory.js';
+import type { RagSearcher } from 'rag/search.js';
 
 export type { SessionRestoreOrchestratorDeps } from 'layer2/session-restore-orchestrator-types.js';
 
@@ -42,6 +49,8 @@ export class SessionRestoreOrchestrator {
   private readonly logger: SessionRestoreOrchestratorDeps['logger'];
   private readonly authProvider: SessionRestoreOrchestratorDeps['authProvider'];
   private readonly tokenMonitor: SessionRestoreOrchestratorDeps['tokenMonitor'];
+  private readonly ragSearcher: RagSearcher | undefined;
+  private readonly agentSpawner: AgentSpawner | undefined;
 
   /** @param deps - 의존성 / Dependencies */
   constructor(deps: SessionRestoreOrchestratorDeps) {
@@ -49,6 +58,8 @@ export class SessionRestoreOrchestrator {
     this.logger = deps.logger.child({ module: 'session-restore-orchestrator' });
     this.authProvider = deps.authProvider;
     this.tokenMonitor = deps.tokenMonitor;
+    this.ragSearcher = deps.ragSearcher;
+    this.agentSpawner = deps.agentSpawner;
   }
 
   /**
@@ -108,7 +119,24 @@ export class SessionRestoreOrchestrator {
   ): AsyncIterable<AgentEvent> {
     for (const snapshot of snapshots) {
       try {
-        yield* this.restoreSession(snapshot.sessionId, snapshot.agentName);
+        for await (const event of this.restoreSession(snapshot.sessionId, snapshot.agentName)) {
+          yield event;
+
+          // WHY: M-005 — RAG fallback 후 실제 새 세션 spawn
+          if (event.metadata?.needsNewSession && this.agentSpawner) {
+            const newConfig = this.buildFallbackSessionConfig(
+              snapshot,
+              String(event.metadata.ragContext ?? ''),
+            );
+            if (newConfig) {
+              this.logger.info('RAG 컨텍스트로 새 세션 시작', {
+                sessionId: snapshot.sessionId,
+                agentName: snapshot.agentName,
+              });
+              yield* this.agentSpawner.spawn(newConfig);
+            }
+          }
+        }
       } catch (error: unknown) {
         this.logger.error('세션 복원 예외', {
           sessionId: snapshot.sessionId,
@@ -140,12 +168,15 @@ export class SessionRestoreOrchestrator {
       // WHY: AuthProvider에서 인증 헤더를 추출하여 환경변수로 전달 — process.env 직접 접근 금지
       const env = buildEnvFromAuthProvider(this.authProvider);
 
-      session = sdkResumeSession(sessionId, {
+      // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
+      const resumeOptions = {
         model: DEFAULT_RESTORE_MODEL,
-        permissionMode: 'bypassPermissions',
-        executable: 'bun',
+        permissionMode: 'bypassPermissions' as const,
+        settingSources: [] as string[],
+        executable: 'bun' as const,
         env,
-      });
+      };
+      session = sdkResumeSession(sessionId, resumeOptions as SDKSessionOptions);
 
       for await (const msg of session.stream()) {
         const event = mapSdkEvent(msg, agentName, (eventType) => {
@@ -180,12 +211,33 @@ export class SessionRestoreOrchestrator {
     } catch (error: unknown) {
       this.logger.error('세션 복원 실패', { sessionId, error: String(error) });
       yield makeRestoreErrorEvent(`세션 복원 실패 [${sessionId}]: ${String(error)}`, agentName);
+
+      // WHY: PI-007 — sdkResumeSession 실패 시 RAG 컨텍스트로 새 세션 시작을 안내하는 fallback
+      if (this.ragSearcher !== undefined) {
+        yield* this.fallbackWithRagContext(sessionId, agentName);
+      }
     } finally {
       // WHY: finally로 session.close() 보장 (done/error 이벤트에서 이미 닫았으면 무시)
       if (session !== null) {
         session.close();
       }
     }
+  }
+
+  /**
+   * 세션 복원 실패 시 RAG 컨텍스트를 검색하여 fallback 이벤트를 yield한다
+   * Delegates to session-restore-orchestrator-fallback.ts
+   *
+   * @param sessionId - 실패한 세션 ID / Failed session ID
+   * @param agentName - 에이전트 이름 / Agent name
+   * @yields RAG 컨텍스트가 포함된 fallback 메시지 이벤트 / Fallback message events with RAG context
+   */
+  private async *fallbackWithRagContext(
+    sessionId: string,
+    agentName: AgentName,
+  ): AsyncIterable<AgentEvent> {
+    if (this.ragSearcher === undefined) return;
+    yield* fallbackWithRagContextFn(this.ragSearcher, this.logger, sessionId, agentName);
   }
 
   /**
@@ -239,5 +291,19 @@ export class SessionRestoreOrchestrator {
 
     this.logger.info('paused 스냅샷 복원 시작', { count: pausedSnapshots.length });
     yield* this.restoreSnapshots(pausedSnapshots);
+  }
+
+  /**
+   * RAG fallback용 새 세션 설정을 생성한다 / Delegates to session-restore-orchestrator-fallback.ts
+   *
+   * @param snapshot - 실패한 세션 스냅샷 정보 / Failed session snapshot info
+   * @param ragContext - RAG 검색 결과 컨텍스트 / RAG search result context
+   * @returns AgentConfig 또는 null (spawn 불가 시) / AgentConfig or null if unable to build
+   */
+  private buildFallbackSessionConfig(
+    snapshot: { sessionId: string; agentName: AgentName },
+    ragContext: string,
+  ): AgentConfig | null {
+    return buildFallbackSessionConfigFn(this.logger, snapshot, ragContext);
   }
 }

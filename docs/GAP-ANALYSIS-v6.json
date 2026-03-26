@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-25T14:50:00+09:00",
+    "specVersion": "v2.4",
+    "specFile": "adev-spec-full-v2_4.md",
+    "analyst": "3-agent parallel (analyst-I: §1-§7, analyst-II: §8-§10, analyst-III: §11-§17+CLI+Core) + lead",
+    "totalSpecItems": 125,
+    "overallComplianceScore": 98,
+    "note": "GAP-ANALYSIS-v5 NI/PI 구현 후 6차 재검증. §8-§10 전체 FI, §11-§17+CLI+Core 전체 FI. §1-§7에서 핵심 이슈 2개 발견. FI 121개(97%), PI 4개(3%), NI 0개"
+  },
+  "summary": {
+    "totalSpecItems": 125,
+    "fullyImplemented": 121,
+    "partiallyImplemented": 4,
+    "notImplemented": 0,
+    "bySection": {
+      "§1-§7": { "FI": 12, "PI": 3, "NI": 0 },
+      "§8-§10": { "FI": 26, "PI": 0, "NI": 0 },
+      "§11-§17+CLI+Core": { "FI": 28, "PI": 0, "NI": 0 }
+    }
+  },
+  "notImplemented": [],
+  "partiallyImplemented": [
+    {
+      "id": "PI-001",
+      "specRef": "§6.2~6.3 ConversationFsm — 대화 루프 dead code",
+      "requirement": "adev start 대화 루프에서 ConversationFsm이 Phase별 시스템 프롬프트 주입 + 유저 확정 감지 + Phase 전환을 실제로 제어",
+      "implemented": "ConversationFsm 클래스 완전 구현. start-session.ts에서 세션 객체에 주입(conversationFsm 필드). PHASE_SYSTEM_PROMPTS 9개 Phase별 프롬프트 정의됨.",
+      "missing": "start.ts의 processUserInput()/runConversationLoop()에서 session.conversationFsm을 전혀 사용하지 않음. 정적 LAYER1_SYSTEM_PROMPT 하나만 사용. detectConfirmation()/advancePhase()가 호출되지 않음. FSM이 dead code 상태 — 주입했으나 실제 제어에 미사용",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/start.ts", "src/cli/commands/start-session.ts", "src/layer1/conversation-fsm.ts"]
+    },
+    {
+      "id": "PI-002",
+      "specRef": "§6.2 Phase별 시스템 프롬프트 제어",
+      "requirement": "각 Phase(IDEA/PLANNING/DESIGN 등)마다 다른 시스템 프롬프트를 사용하여 Claude 행동 제어",
+      "implemented": "PHASE_SYSTEM_PROMPTS에 9개 Phase별 프롬프트 정의됨. getSystemPrompt() 메서드 구현됨.",
+      "missing": "PI-001과 동일 원인. 대화 루프에서 getSystemPrompt()가 호출되지 않으므로 Phase별 프롬프트가 실제로 적용되지 않음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/start.ts", "src/layer1/conversation-types.ts"]
+    },
+    {
+      "id": "PI-003",
+      "specRef": "§6.3 대화 흐름 Phase 전환",
+      "requirement": "유저 '확정' 키워드 감지 시 Phase가 IDEA→PLANNING→...→CONTRACT 순서로 전환",
+      "implemented": "detectConfirmation(), advancePhase(), PHASE_TRANSITIONS 모두 구현됨.",
+      "missing": "PI-001과 동일 원인. 대화 루프에서 detectConfirmation()/advancePhase()가 호출되지 않아 Phase 전환이 일어나지 않음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/start.ts", "src/layer1/conversation-fsm.ts"]
+    },
+    {
+      "id": "PI-004",
+      "specRef": "§7.4 SKILL.md 자동 생성 — CLI 파이프라인 통합",
+      "requirement": "Contract 생성 완료 후 SkillMdGenerator가 AgentMdGenerator와 동일하게 자동 실행되어 SKILL.md를 생성하고 저장",
+      "implemented": "SkillMdGenerator 클래스 완전 구현. generate()/save() 메서드 존재. src/layer1/index.ts에서 export됨.",
+      "missing": "start-execution.ts의 generateAgentMds() 또는 handleContractPostProcess()에서 SkillMdGenerator 호출 코드 없음. AgentMd는 통합 완료, SkillMd는 파이프라인에 미통합",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/cli/commands/start-execution.ts", "src/layer1/skill-md-generator.ts"]
+    }
+  ],
+  "sectionResults": {
+    "§8-§10": {
+      "note": "전체 FI 확인. 4-Phase FSM, Coder×N 병렬, TEST 무한반복, VERIFY 4중검증, 5명 충돌 해결, 통합 검증, 유저 확인, 지속 E2E, BugEscalator, LanceDB 4종 스키마 모두 구현 완료",
+      "FI": 26, "PI": 0, "NI": 0
+    },
+    "§11-§17+CLI+Core": {
+      "note": "전체 FI 확인. settingSources:[], permissionMode:bypassPermissions, Agent Teams env, Hook(Pre/Post/TeammateIdle), IPC 폴링, 세션 스냅샷 progressPercent/pendingItems, CloudEnvConfig, MAX_PHASE_RETRIES, 비크리티컬 배치 수집, package.json publish 설정 모두 확인됨",
+      "FI": 28, "PI": 0, "NI": 0
+    }
+  },
+  "prioritySummary": {
+    "HIGH": {
+      "PI": ["PI-001: ConversationFsm dead code", "PI-002: Phase별 프롬프트 미적용", "PI-003: Phase 전환 미실행"]
+    },
+    "MEDIUM": {
+      "PI": ["PI-004: SkillMdGenerator CLI 파이프라인 미통합"]
+    }
+  },
+  "progressHistory": {
+    "v1": 62, "v2": 91, "v3": 94, "v4": 93, "v5": 96, "v6": 98
+  }
+}

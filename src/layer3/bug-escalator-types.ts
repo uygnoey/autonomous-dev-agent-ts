@@ -7,6 +7,7 @@
  */
 
 import type { Phase, Result } from 'core/types.js';
+import type { HandoffPackage } from 'layer1/types.js';
 import type { BugReport } from 'layer3/types.js';
 
 /**
@@ -40,6 +41,10 @@ export interface EscalateBugOptions {
   readonly failedTest: ContinuousE2EResult;
   /** 추가 컨텍스트 / Additional context */
   readonly context?: string;
+  /** 산출물 파일 경로 목록 (스냅샷용) / Artifact file paths (for snapshot) */
+  readonly artifactPaths?: readonly string[];
+  /** HandoffPackage — TeamLeader.executeFeature() 직접 호출 시 필요 / Required for direct TeamLeader invocation */
+  readonly handoffPackage?: HandoffPackage;
 }
 
 /**
@@ -52,6 +57,8 @@ export interface TriggerLayer2Options {
   readonly bugReport: BugReport;
   /** 시작 Phase (architect 고정) / Start phase (fixed to architect) */
   readonly startPhase: 'DESIGN';
+  /** HandoffPackage — TeamLeader.executeFeature() 직접 호출 시 필요 / Required for direct TeamLeader invocation */
+  readonly handoffPackage?: HandoffPackage;
 }
 
 /**

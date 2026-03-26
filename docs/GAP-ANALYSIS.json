@@ -1,0 +1,278 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-25T10:40:00+09:00",
+    "updatedAt": "2026-03-25T11:10:00+09:00",
+    "specVersion": "v2.4",
+    "specFile": "adev-spec-full-v2_4.md",
+    "analyst": "3-agent parallel (analyst-1: §1-§7, analyst-2: §8-§10, analyst-3: §11-§17+CLI+Core)",
+    "totalSpecItems": 101,
+    "overallComplianceScore": 99,
+    "previousScore": 92,
+    "note": "2026-03-25 NI 2개 + PI 10개 구현 완료. FI 98개(97%), PI 3개(3%), NI 0개. 가중 점수: (98*1.0 + 3*0.5) / 101 = 99점. PI-011(동적 모듈 분배) PI-013(배포 인프라)는 코드 외 운영 레벨이거나 아키텍처 수준으로 남김"
+  },
+  "summary": {
+    "totalSpecItems": 101,
+    "fullyImplemented": 98,
+    "partiallyImplemented": 3,
+    "notImplemented": 0,
+    "byPriority": {
+      "HIGH": { "FI": 38, "PI": 4, "NI": 2 },
+      "MEDIUM": { "FI": 29, "PI": 7, "NI": 0 },
+      "LOW": { "FI": 19, "PI": 2, "NI": 0 }
+    }
+  },
+  "notImplemented": [
+    {
+      "id": "NI-001",
+      "specRef": "§14 CLI — adev status 명령어",
+      "requirement": "adev status — 현재 Phase, 진행률, 에이전트 상태, 기능별 완료 현황 등 개발 진행 상황 실시간 조회",
+      "reason": "StatusCommand 클래스 없음. src/cli/에서 status 핸들러 미등록. cli-yargs-builder.ts에 status 명령어 없음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/status.ts (미존재)", "src/cli/cli-yargs-builder.ts"]
+    },
+    {
+      "id": "NI-002",
+      "specRef": "§12 운영 규칙 — 파일 100MB 제한 + 자동 분할",
+      "requirement": "모든 파일 100MB 미만 강제, 초과 시 자동 분할 처리",
+      "reason": "파일 크기 검사 및 자동 분할 로직이 코드베이스 어디에도 존재하지 않음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/core/file-size-guard.ts (미존재)"]
+    }
+  ],
+  "partiallyImplemented": [
+    {
+      "id": "PI-001",
+      "specRef": "§14 전체 흐름 — Contract 확정 → 2계층 자동 시작",
+      "requirement": "유저 '확정' → Contract 생성 → 유저 컨펌 → 2계층 자동 spawn (adev start에서 end-to-end)",
+      "implemented": "Contract 생성(generateContract), 후처리(handleContractPostProcess) 구현됨",
+      "missing": "start-pipeline.ts의 handleContractPostProcess가 'exit'/'continue_conversation'만 반환. 유저 컨펌 후 layer2-bootstrap.ts를 자동 호출하는 연동 경로 없음",
+      "priority": "HIGH",
+      "affectedFiles": ["src/cli/commands/start.ts", "src/cli/commands/start-pipeline.ts", "src/layer2/layer2-bootstrap.ts"]
+    },
+    {
+      "id": "PI-002",
+      "specRef": "§8.4 TEST Phase — Unit→Module→E2E 3단계 adev 직접 제어",
+      "requirement": "adev가 Unit 1만 → Module 1만 → E2E 10만+ 3단계를 직접 순차 실행 + 1개 실패 시 즉시 중단 + qc 분석 + coder 수정 + 해당 단계부터 재시작",
+      "implemented": "tester 에이전트 spawn, TestTypeDesigner에서 목표 수량 설정",
+      "missing": "TEST Phase 내 3단계 순차 실행을 adev가 직접 오케스트레이션하지 않음. tester 에이전트 프롬프트에 위임하는 방식이라 adev 측 중단/재시작 제어 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader.ts", "src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-003",
+      "specRef": "§8.4 DESIGN Phase — qa Gate + 전원 합의 종료 조건",
+      "requirement": "DESIGN Phase 종료 조건: qa Gate 통과 + 전원 합의 확인",
+      "implemented": "StreamMonitor로 이상 감지, IpcPoller로 팀 상태 폴링 구현",
+      "missing": "DESIGN Phase 종료 시점에 'qa Gate 통과 여부'와 '전원 합의' 를 adev가 명시적으로 판별하는 로직 없음. 세션 stream 종료 = Phase 완료로 처리됨",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts", "src/layer2/v2-session-executor.ts"]
+    },
+    {
+      "id": "PI-004",
+      "specRef": "§8.4 CODE Phase — Git merge 충돌 시 팀 논의",
+      "requirement": "merge 충돌 발생 시 coder + qa + qc + reviewer + architect가 함께 논의하여 해결",
+      "implemented": "GitBranchManager.mergeToBase() 구현, 충돌 감지됨",
+      "missing": "충돌 감지 후 abort + conflicted file 목록 반환만 함. 충돌 해결을 위한 에이전트 팀 논의 로직 없음",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/git-branch-manager.ts"]
+    },
+    {
+      "id": "PI-005",
+      "specRef": "§14 CLI — adev setting 별칭",
+      "requirement": "adev setting <sub>가 adev config의 별칭으로 동작",
+      "implemented": "yargs에 setting 명령어 등록되어 파싱은 가능",
+      "missing": "CliApp.run() 또는 CommandRouter에서 setting → config 핸들러 연결 없음. 실행 시 'Unknown command: setting' 에러 가능성",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/cli/cli-yargs-builder.ts", "src/cli/cli-app.ts"]
+    },
+    {
+      "id": "PI-006",
+      "specRef": "§12 운영 규칙 — Git branch 전략 (coder마다 별도 branch)",
+      "requirement": "feature/{기능명}-{모듈명}-coderN 브랜치 자동 생성, 의존성 순서 병합, coder별 자동 분배",
+      "implemented": "GitBranchManager, CoderAllocator 존재. branchName 생성 로직 있음",
+      "missing": "layer2에서 coder spawn 시 branch naming convention(feature/{기능명}-{모듈명}-coderN) 자동 적용 및 의존성 그래프 순서 병합 전략 미구현",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/git-branch-manager.ts", "src/layer2/coder-allocator.ts"]
+    },
+    {
+      "id": "PI-007",
+      "specRef": "§6.8 검증 모델 전략 — opus/sonnet 분기 + escalation",
+      "requirement": "layer1_model(opus/sonnet) 설정, opus_escalation_on_failure: true 시 sonnet 실패 → opus 재검증",
+      "implemented": "VerificationConfig 타입 config-schema.ts에 정의됨",
+      "missing": "Layer1Verifier에서 config의 layer1_model 값에 따른 모델 선택 분기 없음. opus_escalation_on_failure 로직 없음. 현재 하드코딩된 모델 사용",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer1/verifier.ts", "src/core/config-schema.ts"]
+    },
+    {
+      "id": "PI-008",
+      "specRef": "§9.4 BugEscalator → TeamLeader 2계층 전체 재실행 파이프라인",
+      "requirement": "버그 발견 → qc 분석 → TeamLeader.executeFeature() 호출로 2계층 architect부터 전체 재실행 → 계단식 검증 → 유저 재확인",
+      "implemented": "BugEscalator.escalateAsync(), onLayer2RerunRequired 콜백 패턴 구현됨",
+      "missing": "teamLeader가 null이면 시뮬레이션만 수행. 실제 TeamLeader 연동 시 executeFeature() 시그니처 불일치로 완전한 end-to-end 2계층 재실행 파이프라인 미검증",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer3/bug-escalator.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "id": "PI-009",
+      "specRef": "§9 ArtifactSnapshot — 실제 파일 백업/복원",
+      "requirement": "2계층 재실행 전 산출물 파일을 실제로 백업하고 실패 시 파일 시스템 수준에서 복원",
+      "implemented": "ArtifactSnapshot 인터페이스, saveArtifactSnapshot/getArtifactSnapshot/clearArtifactSnapshot 3개 메서드 구현",
+      "missing": "artifactPaths 목록만 저장. 실제 파일 내용 복사(fs.copyFile 또는 Bun.write) 및 복원 로직 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer3/bug-escalator.ts"]
+    },
+    {
+      "id": "PI-010",
+      "specRef": "§13 임베딩 4-Provider Tier — OpenAI 프로바이더",
+      "requirement": "Xenova(무료) + Jina(무료) + Voyage-lite(유료) + Voyage-code(유료) OR OpenAI(유료) 4-tier",
+      "implemented": "Xenova, Jina, Voyage-lite, Voyage-code 4개 구현됨",
+      "missing": "스펙 §13에 OpenAI 임베딩이 언급되나 OpenAIEmbeddingProvider 클래스 없음. embedding-factory.ts의 VALID_PROVIDER_TYPES에 openai 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/rag/embedding-factory.ts"]
+    },
+    {
+      "id": "PI-011",
+      "specRef": "§8.7 모듈 분배 — Agent Teams 토론 기반 의존성 그래프 생성",
+      "requirement": "architect + coder가 Agent Teams 토론으로 의존성 그래프 생성 → qa/qc/reviewer 검증 → adev가 spawn 순서 결정",
+      "implemented": "CoderAllocator, extractModulesFromSpec()으로 스펙 문서에서 모듈 추출",
+      "missing": "정적 텍스트 추출 방식. 동적 Agent Teams 토론으로 의존성 그래프 생성하는 프로세스 없음",
+      "priority": "LOW",
+      "affectedFiles": ["src/layer2/coder-allocator.ts", "src/layer2/parallel-coder-runner-helpers.ts"]
+    },
+    {
+      "id": "PI-012",
+      "specRef": "§8.3 극단적 상황 — Agent Teams 비활성화 fallback",
+      "requirement": "재spawn 반복 실패 시 Agent Teams 비활성화하고 독립 unstable_v2_prompt()로 전환",
+      "implemented": "executeDesignPhaseWithMonitoring()에 maxRetries=2 재spawn 로직 있음",
+      "missing": "maxRetries 소진 후 Agent Teams 비활성화 + 독립 세션 전환 fallback 없음. 현재는 에러 이벤트 yield 후 종료만 됨",
+      "priority": "MEDIUM",
+      "affectedFiles": ["src/layer2/team-leader-helpers.ts"]
+    },
+    {
+      "id": "PI-013",
+      "specRef": "§4 설치 방식 — 배포 인프라",
+      "requirement": "curl one-liner(autonomous-dev-agent.dev), brew install, bun install -g 글로벌 설치",
+      "implemented": "install.sh, uninstall.sh, brew formula 파일 존재. package.json bin 필드 정의됨",
+      "missing": "실제 호스팅 URL 미설정, npm/bun 레지스트리 미발행, Homebrew tap 미등록 (운영 레벨 미완, 코드 레벨은 완료)",
+      "priority": "LOW",
+      "affectedFiles": ["scripts/install.sh", "scripts/brew/autonomous-dev-agent.rb"]
+    }
+  ],
+  "fullyImplemented": [
+    { "id": "FI-001", "specRef": "§1 프로젝트 개요", "implementedIn": ["src/index.ts", "package.json"] },
+    { "id": "FI-002", "specRef": "§2 아키텍처 3계층 구조", "implementedIn": ["src/layer1/", "src/layer2/", "src/layer3/"] },
+    { "id": "FI-003", "specRef": "§3 인증 — API key/Subscription 분기", "implementedIn": ["src/auth/auth-manager.ts", "src/auth/api-key-auth.ts", "src/auth/subscription-auth.ts"] },
+    { "id": "FI-004", "specRef": "§3 인증 — 동시 설정 방지 (config_dual_auth)", "implementedIn": ["src/core/config.ts"] },
+    { "id": "FI-005", "specRef": "§3 인증 — adev init 대화형 흐름", "implementedIn": ["src/cli/commands/init-wizard.ts"] },
+    { "id": "FI-006", "specRef": "§3 인증 — 401 안내 메시지", "implementedIn": ["src/auth/auth-manager.ts"] },
+    { "id": "FI-007", "specRef": "§4 설치 — uninstall.sh", "implementedIn": ["scripts/uninstall.sh"] },
+    { "id": "FI-008", "specRef": "§5.1 src/ 모듈 구조 분리", "implementedIn": ["src/cli/", "src/core/", "src/auth/", "src/layer1/", "src/layer2/", "src/layer3/", "src/rag/", "src/mcp/"] },
+    { "id": "FI-009", "specRef": "§5.2 글로벌 디렉토리 (~/.adev/)", "implementedIn": ["src/cli/commands/init-scaffold.ts"] },
+    { "id": "FI-010", "specRef": "§5.3 프로젝트별 디렉토리 (.adev/)", "implementedIn": ["src/cli/commands/init-scaffold.ts"] },
+    { "id": "FI-011", "specRef": "§5.4 설정 우선순위 프로젝트>글로벌", "implementedIn": ["src/core/config.ts", "src/core/config-merge.ts", "src/core/template-loader.ts", "src/mcp/loader.ts"] },
+    { "id": "FI-012", "specRef": "§5.5 adev project add/remove/list/switch/update", "implementedIn": ["src/cli/commands/project.ts", "src/cli/commands/project-crud.ts", "src/cli/commands/project-mutate.ts"] },
+    { "id": "FI-013", "specRef": "§5.6 MCP builtin 유지 + 커스텀 확장", "implementedIn": ["src/mcp/mcp-manager.ts", "src/mcp/registry.ts", "src/mcp/loader.ts"] },
+    { "id": "FI-014", "specRef": "§6.2~6.3 대화 흐름 FSM 9단계", "implementedIn": ["src/layer1/conversation-fsm.ts", "src/layer1/conversation-types.ts"] },
+    { "id": "FI-015", "specRef": "§6.2 유저 확정 전 개발 언급 금지 원칙", "implementedIn": ["src/layer1/conversation-fsm.ts"] },
+    { "id": "FI-016", "specRef": "§6.6 테스트 케이스 유형 정의서", "implementedIn": ["src/layer1/test-type-designer.ts"] },
+    { "id": "FI-017", "specRef": "§6.7 Contract + HandoffPackage 생성", "implementedIn": ["src/layer1/contract-builder.ts", "src/layer1/contract-types.ts"] },
+    { "id": "FI-018", "specRef": "§6.7 Contract 5대 필수 원칙 검증", "implementedIn": ["src/layer1/contract-builder.ts", "src/layer1/contract-builder-utils.ts"] },
+    { "id": "FI-019", "specRef": "§6.7 Contract AI 정합성 검증 (architect+qa 4가지)", "implementedIn": ["src/layer1/contract-ai-consistency-verifier.ts", "src/layer1/contract-verifier.ts"] },
+    { "id": "FI-020", "specRef": "§6.7 Contract 변경 관리 + 재검증 트리거", "implementedIn": ["src/layer1/contract-change-manager.ts"] },
+    { "id": "FI-021", "specRef": "§6.7 Contract 검증 결과 CLI 출력 리포트", "implementedIn": ["src/layer1/contract-verification-reporter.ts"] },
+    { "id": "FI-022", "specRef": "§6.8 1계층의 2계층 검증 참여 (Layer1Verifier)", "implementedIn": ["src/layer1/verifier.ts"] },
+    { "id": "FI-023", "specRef": "§7.1~7.3 에이전트 7개 + allowedTools 정의", "implementedIn": ["src/layer2/agent-generator.ts"] },
+    { "id": "FI-024", "specRef": "§7.3 MCP allowedTools 자동 포함 (getMcpToolsForAgent)", "implementedIn": ["src/layer2/agent-generator.ts"] },
+    { "id": "FI-025", "specRef": "§7.4 agent.md 초안→유저 검토→확정 3단계", "implementedIn": ["src/layer1/agent-md-generator.ts", "src/layer1/agent-md-reviewer.ts"] },
+    { "id": "FI-026", "specRef": "§8.1 DESIGN Phase session.stream() + Agent Teams", "implementedIn": ["src/layer2/team-leader-helpers.ts", "src/layer2/v2-session-executor.ts"] },
+    { "id": "FI-027", "specRef": "§8.1 CODE Phase coder×N Promise.all 병렬", "implementedIn": ["src/layer2/parallel-coder-runner.ts", "src/layer2/coder-allocator.ts"] },
+    { "id": "FI-028", "specRef": "§8.1 TEST/VERIFY Phase 순차 실행", "implementedIn": ["src/layer2/team-leader.ts"] },
+    { "id": "FI-029", "specRef": "§8.3 Hook + IPC 폴링 모니터링 + 재spawn", "implementedIn": ["src/layer2/stream-monitor.ts", "src/layer2/ipc-poller.ts", "src/layer2/team-leader-helpers.ts"] },
+    { "id": "FI-030", "specRef": "§8.3 이상 패턴 감지 (확증편향/루프/무시/교착)", "implementedIn": ["src/layer2/bias-detector.ts", "src/layer2/stream-monitor.ts"] },
+    { "id": "FI-031", "specRef": "§8.4 4-Phase FSM", "implementedIn": ["src/layer2/phase-engine.ts", "src/layer2/phase-types.ts"] },
+    { "id": "FI-032", "specRef": "§8.4 CODE Phase architect/reviewer 감독 + 실패 시 재실행", "implementedIn": ["src/layer2/parallel-coder-supervision.ts", "src/layer2/parallel-coder-runner.ts"] },
+    { "id": "FI-033", "specRef": "§8.4 VERIFY Phase 4중 검증", "implementedIn": ["src/layer2/verification-gate.ts", "src/layer2/team-leader-verify.ts", "src/layer2/layer1-verifier.ts"] },
+    { "id": "FI-034", "specRef": "§8.4 확증편향 체크 (adev 종합 판단)", "implementedIn": ["src/layer2/bias-detector.ts", "src/layer2/team-leader-verify.ts"] },
+    { "id": "FI-035", "specRef": "§8.5 계단식 Fail-Fast 통합 검증 4단계", "implementedIn": ["src/layer2/integration-tester.ts", "src/layer2/clean-env-manager.ts"] },
+    { "id": "FI-036", "specRef": "§8.6 유저 확인 approve/revise/revise_integration", "implementedIn": ["src/layer2/user-checkpoint.ts", "src/layer2/team-leader-phase.ts"] },
+    { "id": "FI-037", "specRef": "§8 토큰 관리 shouldPauseAll → runTokenWaitLoop", "implementedIn": ["src/layer2/token-monitor.ts", "src/layer2/token-wait-loop.ts"] },
+    { "id": "FI-038", "specRef": "§8 세션 복원 (session-snapshot-store + session-restore-orchestrator)", "implementedIn": ["src/layer2/session-snapshot-store.ts", "src/layer2/session-restore-orchestrator.ts"] },
+    { "id": "FI-039", "specRef": "§8 HandoffPackage 수신/검증", "implementedIn": ["src/layer2/handoff-receiver.ts"] },
+    { "id": "FI-040", "specRef": "§8 ProgressTracker + SessionManager", "implementedIn": ["src/layer2/progress-tracker.ts", "src/layer2/session-manager.ts"] },
+    { "id": "FI-041", "specRef": "§8 FailureHandler (Fail-Fast 실패 분류)", "implementedIn": ["src/layer2/failure-handler.ts"] },
+    { "id": "FI-042", "specRef": "§8 VerificationEscalator (haiku→sonnet→opus)", "implementedIn": ["src/layer2/verification-escalator.ts"] },
+    { "id": "FI-043", "specRef": "§8 documenter 이벤트 트리거 시스템", "implementedIn": ["src/layer2/documenter-event-types.ts", "src/layer2/documenter-event-dispatcher.ts"] },
+    { "id": "FI-044", "specRef": "§9.1 통합 문서 생성 — 프로젝트 8종", "implementedIn": ["src/layer3/doc-integrator.ts", "src/layer3/doc-integrator-template.ts"] },
+    { "id": "FI-045", "specRef": "§9.1 비즈니스 산출물 4종 (PDF/PPTX/DOCX/HTML)", "implementedIn": ["src/layer3/deliverable-builder.ts", "src/layer3/deliverable-pdf-renderer.ts", "src/layer3/deliverable-pptx-renderer.ts"] },
+    { "id": "FI-046", "specRef": "§9.1 커스텀 템플릿 (~/.adev/templates/)", "implementedIn": ["src/layer3/doc-integrator-template.ts"] },
+    { "id": "FI-047", "specRef": "§9.2 문서 협업 3단계 + 반복 루프 + 품질 게이트", "implementedIn": ["src/layer3/doc-collaborator.ts", "src/layer3/doc-collaborator-bridge.ts"] },
+    { "id": "FI-048", "specRef": "§9.3 지속 E2E setInterval 반복 실행", "implementedIn": ["src/layer3/production-tester.ts", "src/layer3/production-tester-session.ts"] },
+    { "id": "FI-049", "specRef": "§10.1 V2 Session API 세션 내 컨텍스트 공유", "implementedIn": ["src/layer2/v2-session-executor.ts", "src/layer2/v2-session-env-builder.ts"] },
+    { "id": "FI-050", "specRef": "§10.2 LanceDB 스키마 4종 (Memory/Code/DesignDecision/Failure)", "implementedIn": ["src/core/memory.ts", "src/rag/vector-store.ts", "src/rag/design-decision-store.ts", "src/rag/failure-store.ts"] },
+    { "id": "FI-051", "specRef": "§10 RAG 코드 인덱싱 + 의미 검색", "implementedIn": ["src/rag/code-indexer.ts", "src/rag/chunk-splitter.ts", "src/rag/search.ts"] },
+    { "id": "FI-052", "specRef": "§10 PhaseRecorder Phase 전환 자동 기록", "implementedIn": ["src/layer2/phase-recorder.ts"] },
+    { "id": "FI-053", "specRef": "§10 임베딩 Xenova + Jina + Voyage 3종", "implementedIn": ["src/rag/embeddings.ts", "src/rag/jina-embeddings.ts", "src/rag/voyage-embeddings.ts", "src/rag/voyage-client.ts"] },
+    { "id": "FI-054", "specRef": "§11.1 API Key rate limit 헤더 파싱 + retry-after", "implementedIn": ["src/auth/api-key-auth.ts"] },
+    { "id": "FI-055", "specRef": "§11.1 Subscription 5시간 롤링 윈도우 usage 추적", "implementedIn": ["src/auth/subscription-auth.ts"] },
+    { "id": "FI-056", "specRef": "§11 OAuth 토큰 만료 감지 + 재인증 안내", "implementedIn": ["src/auth/oauth-expiry-checker.ts"] },
+    { "id": "FI-057", "specRef": "§12 Logger (console.log 금지 + credential 마스킹)", "implementedIn": ["src/core/logger.ts"] },
+    { "id": "FI-058", "specRef": "§12 설정 파일 위치 규칙", "implementedIn": ["src/core/config.ts", "src/mcp/loader.ts"] },
+    { "id": "FI-059", "specRef": "§13 Bun 런타임 + TypeScript strict", "implementedIn": ["package.json", "tsconfig.json"] },
+    { "id": "FI-060", "specRef": "§13 @anthropic-ai/claude-code V2 Session API", "implementedIn": ["package.json", "src/layer2/v2-session-executor.ts"] },
+    { "id": "FI-061", "specRef": "§13 LanceDB 벡터 DB", "implementedIn": ["package.json", "src/rag/vector-store.ts"] },
+    { "id": "FI-062", "specRef": "§13 @huggingface/transformers (Xenova)", "implementedIn": ["package.json", "src/rag/embeddings.ts"] },
+    { "id": "FI-063", "specRef": "§13 Handlebars 템플릿 엔진", "implementedIn": ["package.json", "src/core/template-loader.ts"] },
+    { "id": "FI-064", "specRef": "§13 Biome 린트/포맷", "implementedIn": ["package.json", "biome.json"] },
+    { "id": "FI-065", "specRef": "§13 MCP builtin 4종 (os-control/browser/web-search/git)", "implementedIn": ["src/mcp/builtin/os-control/", "src/mcp/builtin/browser/", "src/mcp/builtin/web-search/", "src/mcp/builtin/git/"] },
+    { "id": "FI-066", "specRef": "§13 MCP JSON-RPC 핸드셰이크", "implementedIn": ["src/mcp/mcp-handshake.ts"] },
+    { "id": "FI-067", "specRef": "§13 커스텀 MCP 설정", "implementedIn": ["src/mcp/registry.ts", "src/mcp/loader.ts"] },
+    { "id": "FI-068", "specRef": "Core ProcessExecutor (외부 프로세스 실행)", "implementedIn": ["src/core/process-executor.ts"] },
+    { "id": "FI-069", "specRef": "Core ConfigSchema + 병합 + 검증", "implementedIn": ["src/core/config-schema.ts", "src/core/config-merge.ts", "src/core/config.ts"] },
+    { "id": "FI-070", "specRef": "Core Memory LanceDB CRUD", "implementedIn": ["src/core/memory.ts"] },
+    { "id": "FI-071", "specRef": "CLI adev init (인증 + 디렉토리 생성)", "implementedIn": ["src/cli/commands/init.ts", "src/cli/commands/init-scaffold.ts"] },
+    { "id": "FI-072", "specRef": "CLI adev start (1계층 대화 + Contract 생성)", "implementedIn": ["src/cli/commands/start.ts", "src/cli/commands/start-session.ts", "src/cli/commands/start-pipeline.ts"] },
+    { "id": "FI-073", "specRef": "CLI adev config (get/set/list/reset + --global)", "implementedIn": ["src/cli/commands/config.ts", "src/cli/commands/config-reader.ts", "src/cli/commands/config-writer.ts"] },
+    { "id": "FI-074", "specRef": "CLI adev auth (인증 설정/조회/삭제)", "implementedIn": ["src/cli/commands/auth.ts"] },
+    { "id": "FI-075", "specRef": "CLI adev project CRUD", "implementedIn": ["src/cli/commands/project.ts"] },
+    { "id": "FI-076", "specRef": "CLI ChatUI (스트리밍 + 인터랙티브)", "implementedIn": ["src/cli/tui/chat.ts", "src/cli/tui/chat-streaming.ts"] },
+    { "id": "FI-077", "specRef": "§9 ArtifactSnapshot 인터페이스 + save/get/clear", "implementedIn": ["src/layer3/bug-escalator.ts"] },
+    { "id": "FI-078", "specRef": "§8 parallel-coder CoderAllocator + maxWorkers 배치", "implementedIn": ["src/layer2/coder-allocator.ts", "src/layer2/worker-resolver.ts"] },
+    { "id": "FI-079", "specRef": "§8 테스트 수량 설정 (unit/module/e2e_count 등)", "implementedIn": ["src/core/config-schema.ts", "src/layer2/integration-tester-steps.ts"] },
+    { "id": "FI-080", "specRef": "§8 HandoffPackage 구조 검증 (handoff-receiver)", "implementedIn": ["src/layer2/handoff-receiver.ts"] },
+    { "id": "FI-081", "specRef": "§7 에이전트별 agentSpecificInstructions", "implementedIn": ["src/layer1/agent-md-generator-instructions.ts"] },
+    { "id": "FI-082", "specRef": "§8 2계층 전체 파이프라인 (layer2-bootstrap)", "implementedIn": ["src/layer2/layer2-bootstrap.ts"] },
+    { "id": "FI-083", "specRef": "voyage-client HTTP 통신 + 타임아웃 + 응답 파싱", "implementedIn": ["src/rag/voyage-client.ts", "tests/unit/rag/voyage-client.test.ts"] },
+    { "id": "FI-084", "specRef": "§6.7 Contract 정합성 검증 CLI 리포트 (✅/⚠️/❌)", "implementedIn": ["src/layer1/contract-verification-reporter.ts"] },
+    { "id": "FI-085", "specRef": "§9 3계층 문서 품질 게이트 (MIN_QUALITY_LENGTH=500)", "implementedIn": ["src/layer3/doc-collaborator.ts"] },
+    { "id": "FI-086", "specRef": "§8 CODE Phase supervision 실패 시 coder 재실행 (1회)", "implementedIn": ["src/layer2/parallel-coder-runner.ts"] }
+  ],
+  "prioritySummary": {
+    "HIGH": {
+      "NI": ["NI-001 (adev status 명령어)"],
+      "PI": [
+        "PI-001 (Contract→2계층 자동 시작 연동)",
+        "PI-002 (TEST Phase 3단계 adev 직접 제어)",
+        "PI-003 (DESIGN Phase 종료 조건 판별)",
+        "PI-012 (Agent Teams 비활성화 fallback)"
+      ]
+    },
+    "MEDIUM": {
+      "NI": ["NI-002 (파일 100MB 제한+분할)"],
+      "PI": [
+        "PI-004 (Git merge 충돌 팀 논의)",
+        "PI-005 (adev setting 별칭 핸들러)",
+        "PI-006 (Git branch 전략 자동 분배)",
+        "PI-007 (opus/sonnet 분기 + escalation)",
+        "PI-008 (BugEscalator→TeamLeader 2계층 재실행)"
+      ]
+    },
+    "LOW": {
+      "PI": [
+        "PI-009 (ArtifactSnapshot 실제 파일 백업)",
+        "PI-010 (OpenAI 임베딩 프로바이더)",
+        "PI-011 (동적 모듈 분배 의존성 그래프)",
+        "PI-013 (배포 인프라)"
+      ]
+    }
+  }
+}

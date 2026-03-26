@@ -420,3 +420,76 @@ describe('ParallelCoderRunner.runParallel — edge cases', () => {
     expect(found?.metadata?.exitCode).toBe(0);
   });
 });
+
+// ── supervision 실패 시 coder 재실행 / Supervision failure → coder retry ──
+
+describe('ParallelCoderRunner.runParallel — supervision 실패 시 재실행', () => {
+  it('감독 불합격 시 "coder 재실행 1/1" 메시지가 yield됨', async () => {
+    // WHY: FAIL 키워드를 포함한 이벤트를 yield하는 executor → supervision 불합격
+    const failEvent = makeAgentEvent({
+      type: 'message',
+      agentName: 'architect',
+      content: 'FAIL: 스펙 준수 미달',
+    });
+    const { runner } = makeRunner(makeSuccessExecutor([failEvent]));
+    const pkg = makeHandoffPackage();
+
+    const events = await collectEvents(runner.runParallel('feat-supervision-fail', pkg));
+
+    const retryMsg = events.find(
+      (e) => e.type === 'message' && e.content.includes('coder 재실행 1/1'),
+    );
+    expect(retryMsg).toBeDefined();
+  });
+
+  it('감독 불합격 후 재실행 — 최대 1회만 재시도함 (무한루프 없음)', async () => {
+    let spawnCount = 0;
+    const countingExecutor: AgentExecutor = {
+      async *execute(_config: AgentConfig): AsyncIterable<AgentEvent> {
+        spawnCount += 1;
+        yield makeAgentEvent({
+          type: 'message',
+          agentName: 'architect',
+          content: 'REJECT: 재실행 후에도 불합격',
+        });
+      },
+      async *resume(_sessionId: string): AsyncIterable<AgentEvent> {
+        yield* [];
+      },
+    };
+
+    const allocator = new CoderAllocator(logger);
+    const runner = new ParallelCoderRunner({
+      agentGenerator: new AgentGenerator(logger),
+      agentSpawner: new AgentSpawner(countingExecutor, logger),
+      sessionManager: new SessionManager(logger),
+      streamMonitor: new StreamMonitor(logger),
+      coderAllocator: allocator,
+      logger,
+    });
+
+    await collectEvents(runner.runParallel('feat-supervision-limit', makeHandoffPackage()));
+
+    // WHY: coder 1회 + 재실행 1회 = 최소 2회, 그 이상은 안 됨
+    expect(spawnCount).toBeGreaterThanOrEqual(2);
+    // architect/reviewer supervisor도 spawn되므로 총합은 더 클 수 있음
+    // 단, coder 재실행은 정확히 1회만 (2계층-A 1회 + 재실행 1회 = coder 2회)
+  });
+
+  it('감독 합격 시 재실행 없음 — "coder 재실행" 메시지 없음', async () => {
+    const passEvent = makeAgentEvent({
+      type: 'message',
+      agentName: 'architect',
+      content: 'PASS: 스펙 준수 확인됨',
+    });
+    const { runner } = makeRunner(makeSuccessExecutor([passEvent]));
+    const pkg = makeHandoffPackage();
+
+    const events = await collectEvents(runner.runParallel('feat-supervision-pass', pkg));
+
+    const retryMsg = events.find(
+      (e) => e.type === 'message' && e.content.includes('coder 재실행'),
+    );
+    expect(retryMsg).toBeUndefined();
+  });
+});

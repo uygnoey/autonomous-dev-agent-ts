@@ -1360,7 +1360,7 @@ describe('createDefinitions 추가 경계값 #3', () => {
     }
   });
 
-  it('createDefinitions → sampleTests 개수 = categories × 2', () => {
+  it('createDefinitions → sampleTests 개수 = categories × 12', () => {
     const designer = new TestTypeDesigner(new ConsoleLogger('error'));
     const features = [createFeature({
       acceptanceCriteria: [
@@ -1371,7 +1371,8 @@ describe('createDefinitions 추가 경계값 #3', () => {
     const result = designer.createDefinitions(features);
     if (result.ok && result.value[0]) {
       const catCount = result.value[0].categories.length;
-      expect(result.value[0].sampleTests.length).toBe(catCount * 2);
+      // WHY: 카테고리별 12개 샘플 (normal 2 + edge 10) = catCount × 12
+      expect(result.value[0].sampleTests.length).toBe(catCount * 12);
     }
   });
 
@@ -1627,13 +1628,13 @@ describe('TestTypeDesigner 복합 시나리오', () => {
     }
   });
 
-  it('수락 기준 빈 기능 → sampleTests 2개 (general × 2)', () => {
+  it('수락 기준 빈 기능 → sampleTests 12개 (general × 12)', () => {
     const designer = new TestTypeDesigner(new ConsoleLogger('error'));
     const features = [createFeature({ acceptanceCriteria: [] })];
     const result = designer.createDefinitions(features);
     if (result.ok && result.value[0]) {
-      // general 카테고리 1개 × 2 샘플
-      expect(result.value[0].sampleTests.length).toBe(2);
+      // WHY: general 카테고리 1개 × 12 샘플
+      expect(result.value[0].sampleTests.length).toBe(12);
     }
   });
 
@@ -1651,17 +1652,19 @@ describe('TestTypeDesigner 복합 시나리오', () => {
     }
   });
 
-  it('각 카테고리 정상+엣지 2쌍 → sampleTests description에 edge 포함', () => {
+  it('각 카테고리에 경계값/에지 케이스 테스트가 포함된다', () => {
     const designer = new TestTypeDesigner(new ConsoleLogger('error'));
     const features = [createFeature({ acceptanceCriteria: [
       { id: 'ac0', description: '기준', verifiable: true, testCategory: 'unit' },
     ]})];
     const result = designer.createDefinitions(features);
     if (result.ok && result.value[0]) {
-      const hasEdge = result.value[0].sampleTests.some((s) =>
-        s.description.toLowerCase().includes('edge') || s.description.includes('엣지')
+      // WHY: 경계값 테스트가 다양한 형태로 포함되어 있는지 확인
+      const hasBoundary = result.value[0].sampleTests.some((s) =>
+        s.description.includes('경계') || s.description.includes('boundary') ||
+        s.description.includes('빈 입력') || s.description.includes('null')
       );
-      expect(hasEdge).toBe(true);
+      expect(hasBoundary).toBe(true);
     }
   });
 

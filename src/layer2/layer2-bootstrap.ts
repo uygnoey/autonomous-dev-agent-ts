@@ -11,12 +11,19 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { HookCallbackMatcher, TeammateIdleHookInput } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  HookCallbackMatcher,
+  PreToolUseHookInput,
+  PostToolUseHookInput,
+  TeammateIdleHookInput,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
-import type { TestingConfig } from 'core/config-schema.js';
+import type { TestingConfig, VerificationConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
+import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
 import type { AgentName } from 'core/types.js';
+import type { RagSearcher } from 'rag/search.js';
 import { ClaudeApi } from 'layer1/claude-api.js';
 import { Layer1Verifier } from 'layer1/verifier.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
@@ -62,6 +69,14 @@ export interface Layer2BootstrapOptions {
    * EN: If omitted, IntegrationTester defaults apply; parallelWorkers resolved as 'auto'.
    */
   readonly testing?: TestingConfig;
+  /** 사용자 체크포인트 (선택) — PI-014 유저 확인에 사용 / User checkpoint (optional) for PI-014 user confirmation */
+  readonly userCheckpoint?: UserCheckpoint;
+  /** 사용자 입력 제공자 (선택) — PI-014 CLI 인터랙션에 사용 / User input provider (optional) for PI-014 CLI interaction */
+  readonly userInputProvider?: UserInputProvider;
+  /** 4중 검증 설정 (PI-011 — §15 비용 최적화) / Verification config for cost optimization */
+  readonly verificationConfig?: VerificationConfig;
+  /** RAG 검색기 (선택) — 에이전트 컨텍스트 주입에 사용 / RAG searcher (optional) for agent context injection */
+  readonly ragSearcher?: RagSearcher;
 }
 
 // ── Layer2Bootstrap ─────────────────────────────────────────────
@@ -87,6 +102,10 @@ export class Layer2Bootstrap {
   private readonly logger: Logger;
   private readonly projectCwd: string;
   private readonly testing: TestingConfig | undefined;
+  private readonly userCheckpoint: UserCheckpoint | undefined;
+  private readonly userInputProvider: UserInputProvider | undefined;
+  private readonly verificationConfig: VerificationConfig | undefined;
+  private readonly ragSearcher: RagSearcher | undefined;
 
   /**
    * @param options - 부트스트랩 옵션 / Bootstrap options
@@ -96,6 +115,10 @@ export class Layer2Bootstrap {
     this.logger = options.logger;
     this.projectCwd = options.projectCwd;
     this.testing = options.testing;
+    this.userCheckpoint = options.userCheckpoint;
+    this.userInputProvider = options.userInputProvider;
+    this.verificationConfig = options.verificationConfig;
+    this.ragSearcher = options.ragSearcher;
   }
 
   /**
@@ -134,15 +157,57 @@ export class Layer2Bootstrap {
       ],
     };
 
-    // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle 훅 주입)
+    // WHY: PI-006/PI-015 — PreToolUse/PostToolUse SDK 훅을 StreamMonitor에 연결하여
+    //      도구 사용 전후 이벤트를 실시간으로 캡처한다.
+    const preToolUseHook: HookCallbackMatcher = {
+      hooks: [
+        async (input) => {
+          const hookInput = input as PreToolUseHookInput;
+          streamMonitor.onEvent({
+            type: 'PreToolUse',
+            agentName: (hookInput.agent_type ?? 'unknown') as AgentName,
+            toolName: hookInput.tool_name,
+            data: {},
+            timestamp: new Date(),
+          });
+          return { continue: true };
+        },
+      ],
+    };
+
+    const postToolUseHook: HookCallbackMatcher = {
+      hooks: [
+        async (input) => {
+          const hookInput = input as PostToolUseHookInput;
+          streamMonitor.onEvent({
+            type: 'PostToolUse',
+            agentName: (hookInput.agent_type ?? 'unknown') as AgentName,
+            toolName: hookInput.tool_name,
+            data: { content: hookInput.tool_response },
+            timestamp: new Date(),
+          });
+          return { continue: true };
+        },
+      ],
+    };
+
+    // WHY: L-R4 — 모델명 config 경유 (하드코딩 금지 컨벤션 준수)
+    const executorModel =
+      this.verificationConfig?.adevModel === 'sonnet' ? 'claude-sonnet-4-6' : 'claude-opus-4-6';
+
+    // 2. SDK executor: Anthropic Messages API 기반 에이전트 실행기 (TeammateIdle + PreToolUse/PostToolUse 훅 주입)
     const executor = new V2SessionExecutor({
       authProvider: this.authProvider,
       logger,
       defaultOptions: {
-        model: 'claude-opus-4-6',
+        model: executorModel,
         maxTurns: 50,
       },
-      hooks: { TeammateIdle: [teammateIdleHook] },
+      hooks: {
+        TeammateIdle: [teammateIdleHook],
+        PreToolUse: [preToolUseHook],
+        PostToolUse: [postToolUseHook],
+      },
     });
 
     // 3. 핵심 컴포넌트 (서로 독립적)
@@ -180,10 +245,15 @@ export class Layer2Bootstrap {
     }
 
     // 6. 세션 복원 오케스트레이터 (Batch 1 신규 컴포넌트)
+    // WHY: M-A4 — tokenMonitor/agentSpawner/ragSearcher 주입으로
+    //      RAG fallback + 새 세션 spawn + 토큰 한도 복원을 활성화한다
     const sessionRestoreOrchestrator = new SessionRestoreOrchestrator({
       sessionSnapshotStore,
       logger,
       authProvider: this.authProvider,
+      ragSearcher: this.ragSearcher,
+      agentSpawner,
+      tokenMonitor,
     });
 
     // 7. 디스크 IPC 폴러 (Batch 1 신규 컴포넌트)
@@ -219,7 +289,8 @@ export class Layer2Bootstrap {
     // 10. Layer1 검증기 — VERIFY Phase에서 스펙 의도 검증에 사용
     // WHY: layer1Verifier 미주입 시 auto-pass로 검증이 skip되므로 반드시 주입한다
     const claudeApi = new ClaudeApi(this.authProvider, logger);
-    const layer1Verifier = new Layer1Verifier(logger, claudeApi);
+    // WHY: PI-011 — verificationConfig 주입으로 §15 4중 검증 비용 최적화
+    const layer1Verifier = new Layer1Verifier(logger, claudeApi, this.verificationConfig);
 
     // 11. 의존성 묶음 구성
     const deps: TeamLeaderDeps = {
@@ -242,6 +313,18 @@ export class Layer2Bootstrap {
       parallelCoderRunner,
       gitBranchManager,
       layer1Verifier,
+      userCheckpoint: this.userCheckpoint,
+      userInputProvider: this.userInputProvider,
+      // WHY: CR-001 — projectPath 미주입으로 통합 테스트가 항상 스킵됨
+      //      projectCwd를 projectPath로 주입하여 실제 통합 테스트 실행 가능하게 함
+      projectPath: this.projectCwd,
+      // WHY: CR-001 — 초기값 빈 배열, CODE Phase 완료 후 업데이트
+      modifiedFiles: { paths: [] },
+      // WHY: H-004 — ragSearcher 미주입으로 LanceDB RAG 컨텍스트 비활성 상태
+      //      외부에서 주입받은 RagSearcher를 전달하여 에이전트들이 과거 이력 참조 가능하게 함
+      ragSearcher: this.ragSearcher,
+      // WHY: H-A1 — DESIGN Phase에서 executeDesignPhaseWithMonitoring()이 V2SessionExecutor를 직접 사용
+      sessionExecutor: executor,
     };
 
     return new TeamLeader(deps);

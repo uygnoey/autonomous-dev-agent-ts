@@ -19,7 +19,7 @@ import {
 import type { HandoffPackage } from '../../layer1/types.js';
 import type { ChatUi } from '../tui/chat.js';
 import { generateHandoffDocs } from './start-handoff-docs.js';
-import { generateAgentMds, runLayer2, runLayer3 } from './start-execution.js';
+import { generateAgentMds, generateSkillMds, runLayer2, runLayer3 } from './start-execution.js';
 import type { Layer1SessionState } from './start-types.js';
 
 /**
@@ -55,9 +55,7 @@ export async function handleContractPostProcess(
   chat.showContractComplete(contractPath);
 
   // AgentMd 생성 확인
-  chat.system(
-    'AI로 에이전트 가이드 문서(.adev/agents/*.md)를 생성하려면 "yes"를 입력하세요.',
-  );
+  chat.system('AI로 에이전트 가이드 문서(.adev/agents/*.md)를 생성하려면 "yes"를 입력하세요.');
   const agentMdEvent = await chat.waitForInput();
   if (
     agentMdEvent.type === 'message' &&
@@ -66,13 +64,14 @@ export async function handleContractPostProcess(
     await generateAgentMds(session, handoff, chat, logger);
   }
 
+  // WHY: PI-004 — §7.4 SKILL.md 자동 생성 파이프라인 (AgentMd 생성 후 실행)
+  await generateSkillMds(session, handoff, chat, logger);
+
   // WHY: CV-002 — completenessScore < 1.0 시 부족한 항목을 명시하고
   //      유저가 대화를 이어가 개선할 수 있도록 안내한다 (스펙 §6.7).
   const matrix = handoff.contract.verificationMatrix;
   const hasQualityIssues =
-    matrix.completenessScore < 1.0 ||
-    !matrix.allIODefined ||
-    !matrix.allFeaturesHaveCriteria;
+    matrix.completenessScore < 1.0 || !matrix.allIODefined || !matrix.allFeaturesHaveCriteria;
 
   if (hasQualityIssues) {
     const missing: string[] = [];

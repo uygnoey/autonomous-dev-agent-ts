@@ -16,16 +16,33 @@ import type {
   SampleTest,
   TestCategory,
   TestRatios,
+  TestTargetCounts,
   TestTypeDefinition,
 } from 'layer1/types.js';
 
 // ── 상수 / Constants ────────────────────────────────────────────
+
+/** 최소 edge case 비율 / Minimum edge case ratio */
+const MIN_EDGE_RATIO = 0.8;
 
 /** 기본 테스트 비율 / Default test ratios */
 const DEFAULT_RATIOS: TestRatios = {
   unit: 0.6,
   module: 0.25,
   e2e: 0.15,
+};
+
+/**
+ * 기본 목표 수량 / Default target counts
+ *
+ * @description
+ * KR: 스펙 §6.6 기준 유형별 목표 테스트 수량.
+ * EN: Target test counts per type, per spec §6.6.
+ */
+const DEFAULT_TARGET_COUNTS: TestTargetCounts = {
+  unit: 10_000,
+  module: 10_000,
+  e2e: 100_000,
 };
 
 /** 기본 테스트 규칙 / Default test rules */
@@ -90,6 +107,24 @@ export class TestTypeDesigner {
     });
 
     return ok(definitions);
+  }
+
+  /**
+   * 목표 수량 설정 반환 / Get target counts for test types
+   *
+   * @description
+   * KR: 유형별 목표 테스트 수량을 반환한다. 커스텀 수량을 지정하면 기본값을 덮어쓴다.
+   * EN: Returns target test counts per type. Custom counts override defaults.
+   *
+   * @param customCounts - 커스텀 목표 수량 (선택) / Custom target counts (optional)
+   * @returns 목표 수량 / Target counts
+   */
+  getTargetCounts(customCounts?: Partial<TestTargetCounts>): TestTargetCounts {
+    return {
+      unit: customCounts?.unit ?? DEFAULT_TARGET_COUNTS.unit,
+      module: customCounts?.module ?? DEFAULT_TARGET_COUNTS.module,
+      e2e: customCounts?.e2e ?? DEFAULT_TARGET_COUNTS.e2e,
+    };
   }
 
   /**
@@ -181,31 +216,172 @@ function buildCategories(feature: FeatureSpec): TestCategory[] {
 
 /**
  * 샘플 테스트 생성 / Build sample tests from feature and categories
+ *
+ * @description
+ * KR: 카테고리별 10~20개의 샘플 테스트를 생성한다.
+ *     normal case 20% + edge/boundary case 80% 비율을 준수한다.
+ * EN: Generates 10~20 sample tests per category.
+ *     Maintains ratio of 20% normal cases + 80% edge/boundary cases.
  */
 function buildSampleTests(feature: FeatureSpec, categories: readonly TestCategory[]): SampleTest[] {
   const sampleTests: SampleTest[] = [];
 
   for (const category of categories) {
-    sampleTests.push({
-      category: category.name,
-      description:
-        `${feature.name}의 ${category.name} 정상 동작 테스트 / ` +
-        `Test normal behavior of ${category.name} in ${feature.name}`,
-      expectedBehavior:
-        `${category.name} 카테고리 기능이 정상 동작한다 / ` +
-        `${category.name} category functions correctly`,
-    });
-
-    // WHY: edge case 테스트 비중이 높으므로 edge case 샘플도 추가
-    sampleTests.push({
-      category: category.name,
-      description:
-        `${feature.name}의 ${category.name} 엣지 케이스 테스트 / ` +
-        `Test edge cases of ${category.name} in ${feature.name}`,
-      expectedBehavior:
-        '경계 조건에서 올바르게 처리한다 / ' + 'Handles boundary conditions correctly',
-    });
+    const templates = getSampleTestTemplates(feature.name, category.name);
+    for (const template of templates) {
+      sampleTests.push(template);
+    }
   }
 
-  return sampleTests;
+  return enforceEdgeCaseRatio(sampleTests);
+}
+
+/**
+ * 테스트 케이스 비율을 검증하고 조정한다 / Validates and adjusts test case ratio
+ *
+ * @description
+ * KR: PI-011 — edge/boundary case 비율이 80% 미만이면 자동으로 edge case를 추가한다.
+ *     normal case는 description에 '정상 동작' 또는 'Normal behavior'를 포함하는 케이스로 판별한다.
+ * EN: PI-011 — auto-adds edge cases when edge/boundary ratio drops below 80%.
+ *     Normal cases are identified by description containing 'Normal behavior' or '정상 동작'.
+ *
+ * @param templates - 검증할 샘플 테스트 목록 / Sample tests to validate
+ * @returns 비율이 보장된 샘플 테스트 목록 / Sample tests with guaranteed ratio
+ */
+function enforceEdgeCaseRatio(templates: readonly SampleTest[]): SampleTest[] {
+  const total = templates.length;
+  if (total === 0) return [...templates];
+
+  // WHY: normal case 판별 — '정상 동작' 또는 'Normal behavior' 키워드 매칭
+  const normalPattern = /정상 동작|Normal behavior|일반 사용|Common usage/i;
+  const normalCount = templates.filter((t) => normalPattern.test(t.description)).length;
+  const edgeCount = total - normalCount;
+  const currentRatio = edgeCount / total;
+
+  if (currentRatio >= MIN_EDGE_RATIO) return [...templates];
+
+  // WHY: PI-011 — 80% 미만이면 edge case 추가 생성하여 비율 충족
+  const needed =
+    (Math.ceil((total * MIN_EDGE_RATIO) / (1 - MIN_EDGE_RATIO)) * (1 - currentRatio)) | 0;
+  const deficit = Math.max(1, Math.ceil(MIN_EDGE_RATIO * (total + needed) - edgeCount));
+  const additionalEdge: SampleTest[] = Array.from({ length: deficit }, (_, i) => ({
+    category: templates[0]?.category ?? 'edge_case',
+    description: `자동 보강 엣지 케이스 ${i + 1} / Auto-generated edge case ${i + 1}`,
+    expectedBehavior: '비정상 입력에 대해 안전하게 처리한다 / Safely handles abnormal input',
+  }));
+
+  const result = [...templates, ...additionalEdge];
+
+  // WHY: 추가 후에도 비율 미달이면 재귀적으로 보정하지 않고 한 번에 정확히 맞춤
+  const finalEdge = result.length - normalCount;
+  const finalRatio = finalEdge / result.length;
+  if (finalRatio < MIN_EDGE_RATIO) {
+    // WHY: 정밀 보정 — 한 개씩 추가
+    while ((result.length - normalCount) / result.length < MIN_EDGE_RATIO) {
+      result.push({
+        category: templates[0]?.category ?? 'edge_case',
+        description: `추가 보정 엣지 케이스 ${result.length} / Supplementary edge case ${result.length}`,
+        expectedBehavior:
+          '경계 조건에서 올바르게 동작한다 / Operates correctly at boundary conditions',
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 카테고리별 샘플 테스트 템플릿 / Sample test templates per category
+ *
+ * @description
+ * KR: normal 20% + edge/boundary 80% 비율로 10~20개의 샘플을 생성한다.
+ *     입력 검증, 경계값, 에러 처리, 동시성, 성능 등 다양한 관점의 테스트를 포함한다.
+ * EN: Generates 10~20 samples with 20% normal + 80% edge/boundary ratio.
+ *     Includes tests for input validation, boundaries, error handling, concurrency, performance.
+ */
+function getSampleTestTemplates(featureName: string, categoryName: string): SampleTest[] {
+  // WHY: normal case 20% (2~4개) + edge/boundary case 80% (8~16개) = 10~20개
+  return [
+    // ── Normal cases (20%) ──────────────────────────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 기본 정상 동작 / Normal behavior of ${categoryName} in ${featureName}`,
+      expectedBehavior:
+        '유효한 입력에 대해 정상 결과를 반환한다 / Returns correct result for valid input',
+    },
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 일반 사용 시나리오 / Common usage scenario of ${categoryName} in ${featureName}`,
+      expectedBehavior:
+        '일반적인 사용 패턴에서 기대한 동작을 수행한다 / Performs as expected in common usage patterns',
+    },
+    // ── Edge cases — 빈 입력 / Empty input (80%) ────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 빈 입력 처리 / Empty input handling in ${categoryName}`,
+      expectedBehavior:
+        '빈 입력에 대해 적절한 에러 또는 기본값을 반환한다 / Returns appropriate error or default for empty input',
+    },
+    // ── Edge cases — null/undefined ──────────────────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} null/undefined 입력 / Null/undefined input in ${categoryName}`,
+      expectedBehavior:
+        'null/undefined 입력을 안전하게 처리한다 / Safely handles null/undefined input',
+    },
+    // ── Edge cases — 경계값 최솟값 / Boundary min ────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 최솟값 경계 테스트 / Minimum boundary test for ${categoryName}`,
+      expectedBehavior: '최솟값 경계에서 올바르게 처리한다 / Handles minimum boundary correctly',
+    },
+    // ── Edge cases — 경계값 최댓값 / Boundary max ────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 최댓값 경계 테스트 / Maximum boundary test for ${categoryName}`,
+      expectedBehavior: '최댓값 경계에서 올바르게 처리한다 / Handles maximum boundary correctly',
+    },
+    // ── Edge cases — 대량 데이터 / Large data ────────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 대량 데이터 처리 / Large data handling in ${categoryName}`,
+      expectedBehavior:
+        '대량 데이터에서도 성능 저하 없이 처리한다 / Processes large data without performance degradation',
+    },
+    // ── Edge cases — 중복 입력 / Duplicate input ─────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 중복 입력 처리 / Duplicate input handling in ${categoryName}`,
+      expectedBehavior:
+        '중복 입력을 적절히 처리한다 (무시/병합/에러) / Handles duplicate input appropriately',
+    },
+    // ── Edge cases — 잘못된 타입 / Invalid type ──────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 잘못된 타입 입력 / Invalid type input in ${categoryName}`,
+      expectedBehavior:
+        '타입이 맞지 않는 입력에 대해 명확한 에러를 반환한다 / Returns clear error for type-mismatched input',
+    },
+    // ── Edge cases — 동시 호출 / Concurrent calls ────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 동시 호출 처리 / Concurrent call handling in ${categoryName}`,
+      expectedBehavior:
+        '동시 호출 시 데이터 정합성을 유지한다 / Maintains data integrity under concurrent calls',
+    },
+    // ── Edge cases — 타임아웃 / Timeout ──────────────
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 타임아웃 처리 / Timeout handling in ${categoryName}`,
+      expectedBehavior:
+        '타임아웃 시 적절한 에러를 반환하고 리소스를 정리한다 / Returns appropriate error and cleans up resources on timeout',
+    },
+    // ── Edge cases — 특수 문자 / Special characters ──
+    {
+      category: categoryName,
+      description: `${featureName}의 ${categoryName} 특수 문자 입력 / Special character input in ${categoryName}`,
+      expectedBehavior:
+        '특수 문자, 유니코드, 이모지를 올바르게 처리한다 / Correctly handles special characters, unicode, and emojis',
+    },
+  ];
 }

@@ -131,6 +131,10 @@ export class GitBranchManager {
       return;
     }
 
+    // WHY: M-003 — checkout 실패 메시지에서 dirty working tree 감지 시 경고 로그
+    //      별도 git status 호출 없이 기존 흐름을 변경하지 않는다
+    this.warnIfDirtyWorkingTree(createResult.error.message, branchName);
+
     // WHY: 이미 존재하는 브랜치이므로 checkout 재시도
     this.logger.debug('브랜치 이미 존재 — checkout 재시도', {
       branchName,
@@ -144,6 +148,9 @@ export class GitBranchManager {
       yield createEvent('message', `브랜치 체크아웃 완료: ${branchName}`);
       return;
     }
+
+    // WHY: M-003 — 두 번째 checkout도 dirty tree일 수 있으므로 재확인
+    this.warnIfDirtyWorkingTree(checkoutResult.error.message, branchName);
 
     // WHY: 재시도도 실패 → error event yield 후 종료
     this.logger.error('브랜치 셋업 실패', {
@@ -215,7 +222,46 @@ export class GitBranchManager {
       this.logger.debug('MERGE_HEAD 없음 — abort 생략');
     }
 
-    yield createEvent('error', `병합 충돌: ${branchName} — 충돌 파일: [${fileList}]`);
+    // WHY: PI-004 — 충돌 해결을 위한 팀 논의 프롬프트를 함께 반환한다.
+    //      상위 계층(ParallelCoderRunner/executeCodePhase)에서 이 프롬프트를 에이전트에 전달할 수 있다.
+    const conflictPrompt = this.buildConflictResolutionPrompt(branchName, conflictedFiles, '');
+    yield {
+      type: 'error',
+      agentName: 'architect',
+      content: `병합 충돌: ${branchName} — 충돌 파일: [${fileList}]`,
+      timestamp: new Date(),
+      metadata: {
+        conflictedFiles,
+        conflictResolutionPrompt: conflictPrompt,
+      },
+    };
+  }
+
+  /**
+   * 병합 충돌 해결을 위한 팀 논의 프롬프트를 생성한다 / Builds conflict resolution prompt for team discussion
+   *
+   * @description
+   * KR: 충돌 파일 목록과 참여 에이전트 역할을 포함한 프롬프트를 생성한다.
+   *     실제 에이전트 spawn은 상위 계층(ParallelCoderRunner/executeCodePhase)에서 수행한다.
+   * EN: Generates a prompt containing conflicted files and participating agent roles.
+   *     Actual agent spawning is handled by the upper layer (ParallelCoderRunner/executeCodePhase).
+   *
+   * @param branchName - 충돌이 발생한 브랜치 이름 / Branch name with conflicts
+   * @param conflictedFiles - 충돌 파일 목록 / List of conflicted files
+   * @param featureId - 기능 ID / Feature ID
+   * @returns 충돌 해결 프롬프트 / Conflict resolution prompt
+   */
+  buildConflictResolutionPrompt(
+    branchName: string,
+    conflictedFiles: readonly string[],
+    featureId: string,
+  ): string {
+    return [
+      `[충돌 해결 요청] featureId=${featureId}, branch=${branchName}`,
+      `충돌 파일: ${conflictedFiles.join(', ')}`,
+      '참여 에이전트: architect(설계 준수), coder(구현), qa(품질), qc(원인분석), reviewer(최종확인)',
+      '각 충돌 파일에 대해 어느 변경사항을 채택할지 합의하여 해결 방안을 제시하라.',
+    ].join('\n');
   }
 
   /**
@@ -258,6 +304,61 @@ export class GitBranchManager {
 
     this.logger.info('커밋 완료', { message });
     yield createEvent('message', `커밋 완료: ${message}`);
+  }
+
+  /**
+   * checkout 실패 메시지에서 dirty working tree를 감지하여 경고 로그를 남긴다
+   * Warns if checkout failure message indicates dirty working tree
+   *
+   * @description
+   * KR: M-003 — 별도 git status 호출 없이 에러 메시지 분석으로 uncommitted changes를 감지한다.
+   *     git checkout은 dirty tree일 때 "Your local changes to the following files would be overwritten"
+   *     또는 "Please commit your changes or stash them" 메시지를 반환한다.
+   * EN: M-003 — Detects uncommitted changes from error message without extra git status call.
+   *
+   * @param errorMessage - checkout 실패 에러 메시지 / Checkout failure error message
+   * @param branchName - 브랜치 이름 / Branch name
+   */
+  private warnIfDirtyWorkingTree(errorMessage: string, branchName: string): void {
+    const dirtyIndicators = [
+      'local changes',
+      'would be overwritten',
+      'please commit your changes',
+      'stash them',
+      'uncommitted changes',
+    ];
+    const lowerMsg = errorMessage.toLowerCase();
+    if (dirtyIndicators.some((indicator) => lowerMsg.includes(indicator))) {
+      this.logger.warn('브랜치 전환 실패 — uncommitted changes 감지', {
+        branch: branchName,
+        hint: errorMessage.slice(0, 200),
+      });
+    }
+  }
+
+  /**
+   * CODE Phase 이후 수정된 파일 목록을 반환한다 / Returns list of modified files after CODE phase
+   *
+   * @description
+   * KR: M-A2 — `git diff --name-only HEAD~1`로 직전 커밋 대비 변경 파일 목록을 수집한다.
+   *     계단식 차등 테스트에서 수정된 파일만 대상으로 테스트하기 위해 사용된다.
+   * EN: M-A2 — Collects changed file list via `git diff --name-only HEAD~1`.
+   *     Used for staircase differential testing targeting only modified files.
+   *
+   * @returns 수정된 파일 경로 배열 / Array of modified file paths
+   */
+  async getModifiedFiles(): Promise<Result<string[], AdevError>> {
+    const result = await this.git(['diff', '--name-only', 'HEAD~1']);
+    if (!result.ok) {
+      this.logger.warn('수정 파일 목록 조회 실패 — 빈 배열 반환', { error: result.error.message });
+      // WHY: diff 실패 시에도 빈 배열로 정상 반환 — 테스트 전체 실행으로 fallback
+      return { ok: true, value: [] };
+    }
+    const paths = result.value
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    return { ok: true, value: paths };
   }
 
   /**

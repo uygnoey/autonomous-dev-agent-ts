@@ -80,3 +80,36 @@ export function createAuthProvider(logger: Logger): Result<AuthProvider, AuthErr
     }
   }
 }
+
+/**
+ * 401 응답 처리 — 재인증 안내 메시지 생성 / Handle 401 response — generate re-auth guidance
+ *
+ * @description
+ * KR: API 호출에서 401 Unauthorized 수신 시 인증 방식에 맞는 재인증 안내를 반환한다.
+ *     Subscription 모드는 setup-token 재실행, API key 모드는 키 재확인 안내.
+ * EN: Returns re-authentication guidance based on auth mode when receiving 401 Unauthorized.
+ *
+ * @param statusCode - HTTP 상태 코드 / HTTP status code
+ * @param authMode - 현재 인증 방식 / Current auth mode
+ * @returns 401인 경우 안내 메시지, 아닌 경우 null / Guidance message for 401, null otherwise
+ */
+export function getAuthErrorGuidance(
+  statusCode: number,
+  authMode: 'api-key' | 'oauth-token',
+): string | null {
+  if (statusCode !== 401) return null;
+
+  if (authMode === 'oauth-token') {
+    return (
+      '인증 토큰이 만료되었거나 유효하지 않습니다.\n' +
+      '  → claude setup-token 명령어를 재실행하여 토큰을 갱신하세요.\n' +
+      '  → 갱신 후: adev auth 또는 adev init --auth subscription'
+    );
+  }
+
+  return (
+    'API 키가 유효하지 않습니다.\n' +
+    '  → https://console.anthropic.com/settings/keys 에서 키를 확인하세요.\n' +
+    '  → 갱신 후: adev auth 또는 환경변수 ANTHROPIC_API_KEY 재설정'
+  );
+}

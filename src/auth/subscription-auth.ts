@@ -32,11 +32,14 @@ const ROLLING_WINDOW_MS = 5 * 60 * 60 * 1_000;
  * WHY: Anthropic은 구독 플랜별 정확한 한도를 API로 제공하지 않으므로
  *      공개된 추정치를 사용한다.
  */
-const ESTIMATED_LIMITS = {
+export const ESTIMATED_LIMITS = {
   pro: 45,
   max5x: 225,
   max20x: 900,
 } as const;
+
+/** 구독 플랜 타입 / Subscription plan type */
+export type SubscriptionPlan = keyof typeof ESTIMATED_LIMITS;
 
 /** 기본 추정 한도 (Pro 플랜 기준) / Default estimated limit (Pro plan) */
 const DEFAULT_ESTIMATED_LIMIT = ESTIMATED_LIMITS.pro;
@@ -83,6 +86,9 @@ export class SubscriptionAuth implements AuthProvider {
   private readonly nowFn: () => number;
   private readonly expiryChecker: OAuthExpiryChecker;
 
+  // WHY: PI-003 — 401 응답에서 토큰 만료 감지 시 플래그 설정, 상위에서 재인증 요청 가능
+  private _tokenExpired = false;
+
   constructor(
     private readonly oauthToken: string,
     logger: Logger,
@@ -95,6 +101,15 @@ export class SubscriptionAuth implements AuthProvider {
     this.nowFn = nowFn;
     // WHY: 선택 주입 — 테스트 시 커스텀 checker 주입 가능, 미주입 시 내부 생성
     this.expiryChecker = expiryChecker ?? new OAuthExpiryChecker(nowFn);
+  }
+
+  /**
+   * 401 응답으로 인한 토큰 만료 여부를 반환한다 / Returns whether token was marked expired by 401 response
+   *
+   * @returns 토큰 만료 플래그 / Token expired flag
+   */
+  get tokenExpired(): boolean {
+    return this._tokenExpired;
   }
 
   /**
@@ -142,6 +157,10 @@ export class SubscriptionAuth implements AuthProvider {
     responseBody?: unknown,
   ): Result<void> {
     if (!isUsageResponseBody(responseBody)) {
+      // WHY: PI-014 — V2 Session API 이벤트에서 usage 필드가 다른 위치에 있을 수 있음
+      if (isV2SessionUsage(responseBody)) {
+        this.addUsage(responseBody.usage.input_tokens, responseBody.usage.output_tokens);
+      }
       return ok(undefined);
     }
 
@@ -151,22 +170,7 @@ export class SubscriptionAuth implements AuthProvider {
     const outputTokens =
       typeof usage.output_tokens === 'number' && usage.output_tokens >= 0 ? usage.output_tokens : 0;
 
-    this.usageHistory.push({
-      timestamp: this.nowFn(),
-      inputTokens,
-      outputTokens,
-    });
-
-    this.pruneExpiredEntries();
-
-    const messageCount = this.usageHistory.length;
-    if (messageCount >= this.estimatedLimit * LIMIT_APPROACHING_THRESHOLD) {
-      this.logger.warn('구독 사용량 한도 접근 중 / Subscription usage limit approaching', {
-        messageCount,
-        estimatedLimit: this.estimatedLimit,
-        usagePercent: Math.round((messageCount / this.estimatedLimit) * 100),
-      });
-    }
+    this.addUsage(inputTokens, outputTokens);
 
     return ok(undefined);
   }
@@ -200,6 +204,101 @@ export class SubscriptionAuth implements AuthProvider {
    */
   getExpiryInfo(token: string): OAuthExpiryInfo {
     return this.expiryChecker.check(token);
+  }
+
+  /**
+   * HTTP 응답 상태 코드로 401 에러를 분류 처리한다 / Classifies and handles 401 errors from HTTP response
+   *
+   * @description
+   * KR: PI-003 — §11.2 Subscription 401 에러 처리.
+   *     토큰 만료(JWT exp 지남): setup-token 재실행 안내.
+   *     rate limit으로 인한 401: 대기 후 재시도 안내.
+   * EN: PI-003 — §11.2 Subscription 401 error handling.
+   *     Token expired (JWT exp passed): guide to re-run setup-token.
+   *     Rate-limit 401: advise retry after wait.
+   *
+   * @param status - HTTP 상태 코드 / HTTP status code
+   * @param wwwAuthenticate - WWW-Authenticate 헤더 값 / WWW-Authenticate header value
+   */
+  handleHttpStatus(status: number, wwwAuthenticate?: string): void {
+    if (status !== 401) {
+      return;
+    }
+
+    const errorType = this.classify401Error(wwwAuthenticate);
+    if (errorType === 'token_expired') {
+      this.logger.error('OAuth 토큰 만료 — adev setup-token 재실행 필요', {
+        guidance: 'adev auth --renew 또는 adev setup-token 명령어 실행',
+      });
+      // WHY: 만료 플래그 설정으로 상위에서 재인증 요청 가능
+      this._tokenExpired = true;
+    } else {
+      this.logger.warn('401 에러 (rate limit) — 잠시 후 재시도', {});
+    }
+  }
+
+  /**
+   * 401 에러 원인을 분류한다 / Classifies the cause of a 401 error
+   *
+   * @param wwwAuthenticate - WWW-Authenticate 헤더 값 / WWW-Authenticate header value
+   * @returns 'token_expired' 또는 'rate_limit' / 'token_expired' or 'rate_limit'
+   */
+  private classify401Error(wwwAuthenticate?: string): 'token_expired' | 'rate_limit' {
+    // WHY: WWW-Authenticate 헤더에서 만료/무효 토큰 키워드 감지
+    const header = wwwAuthenticate ?? '';
+    if (header.includes('expired') || header.includes('invalid_token')) {
+      return 'token_expired';
+    }
+    return 'rate_limit';
+  }
+
+  /**
+   * 5시간 롤링 윈도우 시작 시각을 반환한다 / Returns the start time of the 5-hour rolling window
+   *
+   * @description
+   * KR: PI-016 — 가장 오래된 사용량 기록의 타임스탬프를 반환한다.
+   *     사용량 기록이 없으면 null을 반환한다.
+   *     리셋 예상 시각 = windowStartTime + 5h.
+   * EN: PI-016 — Returns timestamp of the oldest usage entry.
+   *     Returns null if no usage history exists.
+   *     Estimated reset time = windowStartTime + 5h.
+   *
+   * @returns 윈도우 시작 시각 (밀리초) 또는 null / Window start time (ms) or null
+   */
+  getWindowStartTime(): number | null {
+    this.pruneExpiredEntries();
+    if (this.usageHistory.length === 0) return null;
+    // WHY: 가장 오래된 기록이 윈도우 시작 시각
+    return this.usageHistory[0]!.timestamp;
+  }
+
+  /**
+   * 사용량을 기록한다 / Records usage
+   *
+   * @description
+   * KR: PI-014 — V2 Session API와 Messages API 양쪽에서 호출 가능한 공통 사용량 기록 메서드.
+   * EN: PI-014 — Common usage recording method callable from both V2 Session and Messages API paths.
+   *
+   * @param inputTokens - 입력 토큰 수 / Input token count
+   * @param outputTokens - 출력 토큰 수 / Output token count
+   */
+  private addUsage(inputTokens: number, outputTokens: number): void {
+    this.usageHistory.push({
+      timestamp: this.nowFn(),
+      inputTokens,
+      outputTokens,
+    });
+
+    this.pruneExpiredEntries();
+
+    const messageCount = this.usageHistory.length;
+    if (messageCount >= this.estimatedLimit * LIMIT_APPROACHING_THRESHOLD) {
+      this.logger.warn('구독 사용량 한도 접근 중 / Subscription usage limit approaching', {
+        messageCount,
+        estimatedLimit: this.estimatedLimit,
+        usagePercent: Math.round((messageCount / this.estimatedLimit) * 100),
+      });
+    }
   }
 
   /**
@@ -242,4 +341,26 @@ function isUsageResponseBody(
     return false;
   }
   return true;
+}
+
+/**
+ * V2 Session API 이벤트의 usage 구조를 확인하는 타입 가드 / Type guard for V2 Session API usage structure
+ *
+ * @description
+ * KR: PI-014 — V2 Session API stream() 이벤트는 Messages API와 다른 구조로 usage를 제공할 수 있다.
+ *     input_tokens와 output_tokens가 모두 숫자인 경우에만 true를 반환한다.
+ * EN: PI-014 — V2 Session API stream events may provide usage in a different structure.
+ *     Returns true only when both input_tokens and output_tokens are numbers.
+ *
+ * @param body - 검사할 응답 본문 / Response body to check
+ * @returns V2 usage 구조가 맞으면 true / true if V2 usage structure matches
+ */
+function isV2SessionUsage(
+  body: unknown,
+): body is { usage: { input_tokens: number; output_tokens: number } } {
+  if (typeof body !== 'object' || body === null) return false;
+  const obj = body as Record<string, unknown>;
+  if (typeof obj.usage !== 'object' || obj.usage === null) return false;
+  const usage = obj.usage as Record<string, unknown>;
+  return typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number';
 }

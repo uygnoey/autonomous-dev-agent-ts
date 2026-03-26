@@ -25,6 +25,9 @@ export interface EmbeddingConfig {
   readonly voyageApiKey: string | null;
 }
 
+/** 클린 환경 유형 / Clean environment type */
+export type CleanEnvType = 'local' | 'cloud';
+
 /** 테스트 수량 설정 / Testing configuration */
 export interface TestingConfig {
   readonly unitCount: number;
@@ -33,6 +36,10 @@ export interface TestingConfig {
   readonly integrationE2eCount: number;
   readonly parallelWorkers: number | 'auto';
   readonly e2eTimeoutSeconds: number;
+  // WHY: PI-006 — §8.5 클라우드 환경 선택 지원. 현재는 로컬만 구현
+  readonly cleanEnvType: CleanEnvType;
+  /** 워커 메모리 한도 (MB) / Total memory limit for worker resolver (MB) */
+  readonly totalMemoryMb: number;
 }
 
 /** 4중 검증 모델 설정 / Verification model configuration */
@@ -47,12 +54,19 @@ export interface LogConfig {
   readonly level: 'debug' | 'info' | 'warn' | 'error';
 }
 
+/** 인증 설정 / Authentication configuration */
+export interface AuthConfig {
+  /** 구독 플랜 (PI-006 — §11.1 플랜별 추정 한도) / Subscription plan */
+  readonly subscriptionPlan?: 'pro' | 'max5x' | 'max20x';
+}
+
 /** 전체 설정 스키마 / Full configuration schema */
 export interface ConfigSchema {
   readonly embedding: EmbeddingConfig;
   readonly testing: TestingConfig;
   readonly verification: VerificationConfig;
   readonly log: LogConfig;
+  readonly auth?: AuthConfig;
 }
 
 /** 깊은 Partial 타입 / Deep partial type */
@@ -76,6 +90,8 @@ export const DEFAULT_CONFIG: ConfigSchema = {
     integrationE2eCount: 1_000_000,
     parallelWorkers: 'auto',
     e2eTimeoutSeconds: 300,
+    cleanEnvType: 'local',
+    totalMemoryMb: 4096,
   },
   verification: {
     layer1Model: 'opus',

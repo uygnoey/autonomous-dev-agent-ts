@@ -17,6 +17,7 @@ import { ContractError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
+import type { ContractVerifier } from 'layer1/contract-verifier.js';
 import type { ContractSchema, HandoffPackage } from 'layer1/types.js';
 
 /**
@@ -38,12 +39,15 @@ const MIN_COMPLETENESS_SCORE = 0.8;
  */
 export class HandoffReceiver {
   private readonly logger: Logger;
+  private readonly contractVerifier: ContractVerifier | null;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param contractVerifier - Contract AI 검증기 (선택) / Contract AI verifier (optional)
    */
-  constructor(logger: Logger) {
+  constructor(logger: Logger, contractVerifier?: ContractVerifier) {
     this.logger = logger.child({ module: 'handoff-receiver' });
+    this.contractVerifier = contractVerifier ?? null;
   }
 
   /**
@@ -96,6 +100,59 @@ export class HandoffReceiver {
    */
   validateConsistency(contract: ContractSchema): Result<string[]> {
     return ok(this.validateConsistencyInternal(contract));
+  }
+
+  /**
+   * 에이전트 기반 정합성 검증 포함 수신 / Receive with agent-based consistency verification
+   *
+   * @description
+   * KR: 기본 구조/일관성 검증 후 architect+qa AI 에이전트로 정합성을 추가 검증한다.
+   * EN: After basic structure/consistency validation, runs architect+qa AI agent consistency verification.
+   *
+   * @param handoffPackage - layer1 인수 패키지 / Handoff package from layer1
+   * @returns 성공 시 ok, 검증 실패 시 ContractError / ok on success, ContractError on failure
+   */
+  async receiveWithAgentVerification(handoffPackage: HandoffPackage): Promise<Result<void>> {
+    // WHY: 기본 구조 검증을 먼저 수행하여 AI 호출 비용을 절감
+    const baseResult = this.receive(handoffPackage);
+    if (!baseResult.ok) {
+      return baseResult;
+    }
+
+    if (!this.contractVerifier) {
+      this.logger.warn('ContractVerifier 미설정 — 에이전트 기반 검증 생략', {
+        packageId: handoffPackage.id,
+      });
+      return ok(undefined);
+    }
+
+    this.logger.info('에이전트 기반 정합성 검증 시작', { packageId: handoffPackage.id });
+
+    const agentResult = await this.contractVerifier.verifyWithAgents(handoffPackage);
+    if (!agentResult.ok) {
+      return err(
+        new ContractError(
+          'contract_agent_verification_error',
+          `에이전트 기반 정합성 검증 실패: ${agentResult.error.message}`,
+        ),
+      );
+    }
+
+    if (!agentResult.value.passed) {
+      this.logger.warn('에이전트 기반 정합성 검증 미통과', {
+        packageId: handoffPackage.id,
+        issues: agentResult.value.issues,
+      });
+      return err(
+        new ContractError(
+          'contract_agent_verification_failed',
+          `Contract 정합성 검증 실패: ${agentResult.value.feedback}`,
+        ),
+      );
+    }
+
+    this.logger.info('에이전트 기반 정합성 검증 통과', { packageId: handoffPackage.id });
+    return ok(undefined);
   }
 
   /**

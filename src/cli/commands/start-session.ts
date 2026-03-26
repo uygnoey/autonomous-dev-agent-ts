@@ -17,6 +17,7 @@ import type { Result } from '../../core/types.js';
 import { ClaudeApi } from '../../layer1/claude-api.js';
 import { ContractBuilder } from '../../layer1/contract-builder.js';
 import { ContractVerifier } from '../../layer1/contract-verifier.js';
+import { ConversationFsm } from '../../layer1/conversation-fsm.js';
 import { ConversationManager } from '../../layer1/conversation.js';
 import { Designer } from '../../layer1/designer.js';
 import { Planner } from '../../layer1/planner.js';
@@ -167,6 +168,8 @@ export async function initializeLayer1Session(
 
     // 대화 관리자 + Layer1 파이프라인 컴포넌트 생성
     const conversationManager = new ConversationManager(memoryRepo, logger);
+    // WHY: NI-001 — ConversationFsm을 세션에 주입하여 대화 루프에서 Phase 전환 제어
+    const conversationFsm = new ConversationFsm(logger);
     const contractBuilder = new ContractBuilder(logger);
     const contractVerifier = new ContractVerifier(claudeApi, logger);
     const planner = new Planner(logger);
@@ -183,6 +186,7 @@ export async function initializeLayer1Session(
       authProvider: authResult.value,
       claudeApi,
       conversationManager,
+      conversationFsm,
       contractBuilder,
       contractVerifier,
       planner,

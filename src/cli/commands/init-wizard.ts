@@ -156,6 +156,30 @@ export async function promptAndSaveToken(
     break;
   }
 
+  // WHY: PI-010 — 스펙은 'credential 미저장' 원칙이나 편의를 위해 로컬 저장 제공
+  //      유저에게 이 저장이 선택 사항임을 명시
+  logger.warn(
+    '인증 토큰을 ~/.adev/.env에 저장합니다. 공유 환경에서는 환경변수 직접 설정을 권장합니다.',
+  );
+  process.stdout.write(
+    '토큰을 파일에 저장하시겠습니까? (추천: 개인 환경. 공유 서버는 환경변수 권장) [Y/n]: ',
+  );
+
+  const confirmRl = createInterface({ input: process.stdin, output: process.stdout });
+  const confirmInput = await new Promise<string>((resolve) => {
+    confirmRl.once('line', (line) => {
+      confirmRl.close();
+      resolve(line.trim().toLowerCase());
+    });
+  });
+
+  if (confirmInput === 'n' || confirmInput === 'no') {
+    process.stdout.write(
+      `\n⚠️  파일 저장을 건너뜁니다. 환경변수로 직접 설정하세요:\n  export ${envVar}=${token}\n\n`,
+    );
+    return ok(undefined);
+  }
+
   try {
     const adevDir = join(homedir(), '.adev');
     const envFile = join(adevDir, '.env');

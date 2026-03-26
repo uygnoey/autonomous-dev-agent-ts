@@ -222,6 +222,8 @@ export async function runCollaborationPipeline(
   }
 
   // 2. Layer2 상세 작성 또는 조각 병합 fallback
+  // WHY: §9.2 — "2계층 documenter: 구현 상세 채워넣기 (코드/테스트를 아니까) → 기술적 내용 작성"
+  let details: string;
   let finalContent: string;
   if (spawner) {
     const l2Result = await callLayer2(spawner, {
@@ -231,30 +233,41 @@ export async function runCollaborationPipeline(
     });
 
     if (l2Result.ok) {
+      details = l2Result.value.content;
+
+      // WHY: §9.2 — "1계층: 최종 검토 + 다듬기 → 완성"
       if (claudeApi) {
         const l1RefineResult = await callLayer1(claudeApi, {
           type: 'review-and-refine',
           docType: options.type,
           context: structure,
-          layer2Details: l2Result.value.content,
+          layer2Details: details,
         });
-        finalContent = l1RefineResult.ok ? l1RefineResult.value.content : l2Result.value.content;
+        finalContent = l1RefineResult.ok ? l1RefineResult.value.content : details;
       } else {
-        finalContent = l2Result.value.content;
+        finalContent = details;
       }
     } else {
+      details = '';
       finalContent = structure;
     }
   } else {
     // WHY: spawner 없을 때 조각 내용을 직접 병합
     const fragContent = options.layer2Fragments.map((f) => f.content).join('\n\n');
+    details = fragContent;
     finalContent = fragContent ? `${structure}\n\n---\n\n${fragContent}` : structure;
   }
 
-  // WHY: review 단계와 finalContent 설정 후 complete() 호출 가능
+  // WHY: detail 단계 상태에 details 필드 추가 후 review 단계로 전환
   const afterDetail = stateStore.get(docId);
   if (afterDetail) {
-    stateStore.set(docId, { ...afterDetail, phase: 'review', finalContent, updatedAt: new Date() });
+    stateStore.set(docId, {
+      ...afterDetail,
+      details,
+      phase: 'review',
+      finalContent,
+      updatedAt: new Date(),
+    });
   }
 
   logger.info('협업 파이프라인 완료', { docId, finalContentLength: finalContent.length });

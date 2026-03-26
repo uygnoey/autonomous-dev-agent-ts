@@ -129,4 +129,25 @@ export interface IDocCollaborator {
    * EN: Automatically advances through start → L1 structure → L2 details → L1 review → complete.
    */
   runCollaboration(options: CollaborativeDocOptions): Promise<Result<CollaborativeDocResult>>;
+
+  /**
+   * 3단계 협업 문서를 생성한다 / Generate collaborative document via 3-step pipeline
+   *
+   * @description
+   * KR: §9.2 — 명시적 3단계 협업:
+   *     Step 1: Layer1 구조/방향/톤 결정 → 뼈대 생성
+   *     Step 2: documenter 기술 상세 채움
+   *     Step 3: Layer1 최종 검토 → 완성 문서 반환
+   * EN: §9.2 — Explicit 3-step collaboration:
+   *     Step 1: L1 structure/direction/tone → skeleton
+   *     Step 2: documenter fills technical details
+   *     Step 3: L1 final review → return completed document
+   */
+  generateCollaborativeDoc(
+    projectId: string,
+    docType: ProjectDocumentType | BusinessDeliverableType,
+    context: string,
+    fragments: readonly DocumentFragment[],
+    outputPath: string,
+  ): Promise<Result<CollaborativeDocResult>>;
 }

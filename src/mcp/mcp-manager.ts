@@ -126,6 +126,45 @@ export class McpManager {
     };
     this.instances.set(name, instance);
 
+    // WHY: PI-009 — builtin MCP 서버 프로세스 시작 검증. 실패 시 1회 재시도
+    const MAX_START_ATTEMPTS = 2;
+    for (let attempt = 1; attempt <= MAX_START_ATTEMPTS; attempt++) {
+      const spawnResult = await this.attemptSpawnAndHandshake(name, config, instance);
+      if (spawnResult.ok) {
+        return spawnResult;
+      }
+
+      if (attempt < MAX_START_ATTEMPTS) {
+        this.logger.warn('MCP 서버 시작 실패, 재시도', {
+          server: name,
+          attempt,
+          error: spawnResult.error.message,
+        });
+        // WHY: 프로세스 정리 후 재시도
+        this.killProcess(name);
+        await new Promise((r) => setTimeout(r, 500));
+      } else {
+        return spawnResult;
+      }
+    }
+
+    // WHY: 타입 안전을 위한 unreachable 반환
+    return err(new McpError('mcp_server_start_failed', `MCP 서버 시작 실패: ${name}`));
+  }
+
+  /**
+   * 서버 프로세스 스폰 + 핸드셰이크 시도 / Attempts to spawn server process and perform handshake
+   *
+   * @param name - 서버 이름 / Server name
+   * @param config - 서버 설정 / Server config
+   * @param instance - 서버 인스턴스 / Server instance
+   * @returns 성공 시 ok(instance) / ok(instance) on success
+   */
+  private async attemptSpawnAndHandshake(
+    name: string,
+    config: ReturnType<McpRegistry['getServer']> & object,
+    instance: McpServerInstance,
+  ): Promise<Result<McpServerInstance>> {
     try {
       const proc = Bun.spawn([config.command, ...config.args], {
         stdin: 'pipe',
@@ -139,7 +178,12 @@ export class McpManager {
       const handshakeResult = await performHandshake(proc, name, this.logger);
       if (!handshakeResult.ok) {
         instance.status = 'error';
-        return err(new McpError('mcp_server_start_failed', `MCP 핸드셰이크 실패: ${name} — ${handshakeResult.error.message}`));
+        return err(
+          new McpError(
+            'mcp_server_start_failed',
+            `MCP 핸드셰이크 실패: ${name} — ${handshakeResult.error.message}`,
+          ),
+        );
       }
 
       for (const tool of handshakeResult.value) {
@@ -241,6 +285,117 @@ export class McpManager {
     }
 
     return tools;
+  }
+
+  /**
+   * MCP 도구를 직접 호출한다 / Call an MCP tool directly
+   *
+   * @description
+   * KR: adev가 MCP 서버의 도구를 직접 호출한다 (tools/call JSON-RPC).
+   *     서버가 실행 중이어야 하며, stdin/stdout 파이프를 통해 JSON-RPC 요청을 전송한다.
+   * EN: adev calls an MCP server tool directly (tools/call JSON-RPC).
+   *     Server must be running. Sends JSON-RPC request via stdin/stdout pipes.
+   *
+   * @param serverName - 서버 이름 / Server name
+   * @param toolName - 호출할 도구 이름 / Tool name to call
+   * @param args - 도구 인자 / Tool arguments
+   * @returns 도구 호출 결과 / Tool call result
+   */
+  async callTool(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<Result<unknown>> {
+    const instance = this.instances.get(serverName);
+    if (!instance || instance.status !== 'running') {
+      return err(
+        new McpError(
+          'mcp_server_not_found',
+          `실행 중인 서버를 찾을 수 없습니다 / Running server not found: ${serverName}`,
+        ),
+      );
+    }
+
+    const proc = this.processes.get(serverName);
+    if (!proc) {
+      return err(
+        new McpError(
+          'mcp_server_not_found',
+          `서버 프로세스를 찾을 수 없습니다 / Server process not found: ${serverName}`,
+        ),
+      );
+    }
+
+    // WHY: reader를 try 외부에서 선언하여 finally에서 확실히 releaseLock 수행
+    const reader = proc.stdout.getReader() as ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>;
+
+    try {
+      // WHY: PI-009 — JSON-RPC tools/call 요청을 stdin에 전송하고 stdout에서 응답을 읽는다
+      const requestId = Date.now();
+      const rpcMessage = JSON.stringify({
+        jsonrpc: '2.0',
+        id: requestId,
+        method: 'tools/call',
+        params: { name: toolName, arguments: args },
+      });
+
+      proc.stdin.write(`${rpcMessage}\n`);
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const CALL_TIMEOUT_MS = 30_000;
+
+      const readResponse = async (): Promise<Result<unknown>> => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            return err(new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다'));
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const newlineIdx = buffer.indexOf('\n');
+          if (newlineIdx !== -1) {
+            const line = buffer.slice(0, newlineIdx).trim();
+            buffer = buffer.slice(newlineIdx + 1);
+            if (line) {
+              const parsed = JSON.parse(line) as { result?: unknown; error?: { message: string } };
+              if (parsed.error) {
+                return err(new McpError('mcp_tool_call_failed', parsed.error.message));
+              }
+              return ok(parsed.result);
+            }
+          }
+        }
+      };
+
+      const timeout = new Promise<Result<unknown>>((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              err(
+                new McpError(
+                  'mcp_tool_call_timeout',
+                  `도구 호출 타임아웃: ${CALL_TIMEOUT_MS}ms 초과`,
+                ),
+              ),
+            ),
+          CALL_TIMEOUT_MS,
+        ),
+      );
+
+      return await Promise.race([readResponse(), timeout]);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error('MCP 도구 호출 실패', { serverName, toolName, error: msg });
+      return err(
+        new McpError(
+          'mcp_tool_call_failed',
+          `MCP 도구 호출 실패: ${serverName}/${toolName} — ${msg}`,
+        ),
+      );
+    } finally {
+      // WHY: 타임아웃/에러 시에도 reader lock을 반드시 해제하여 다음 callTool 호출 가능
+      reader.releaseLock();
+    }
   }
 
   // ── 내부 메서드 / Private methods ────────────────────────────

@@ -129,4 +129,43 @@ export class RagSearcher {
       return err(new RagError('rag_search_error', `파일 경로 검색 실패: ${filePath}`, error));
     }
   }
+
+  /**
+   * 점진적 코드 검색 — 청크 단위로 결과 반환 / Progressive code search — returns results in chunks
+   *
+   * @description
+   * KR: PI-013 — §12 LanceDB Skills progressive disclosure.
+   *     관련도 높은 결과부터 chunkSize 단위로 점진적으로 반환한다.
+   *     호출자는 필요한 만큼만 소비하고 나머지는 건너뛸 수 있다.
+   * EN: PI-013 — §12 LanceDB Skills progressive disclosure.
+   *     Returns results progressively in chunks, starting with most relevant.
+   *     Callers can consume only what they need and skip the rest.
+   *
+   * @param query - 검색 쿼리 텍스트 / Search query text
+   * @param maxResults - 최대 결과 수 (기본: 10) / Max results (default: 10)
+   * @param chunkSize - 청크 크기 (기본: 3) / Chunk size (default: 3)
+   * @yields SearchResult<CodeRecord> 배열 청크 / Array chunk of search results
+   *
+   * @example
+   * for await (const chunk of searcher.searchCodeProgressive('error handling', 10, 3)) {
+   *   // 처음 3개 결과로 충분하면 break 가능
+   *   if (hasSufficientContext(chunk)) break;
+   * }
+   */
+  async *searchCodeProgressive(
+    query: string,
+    maxResults = DEFAULT_SEARCH_LIMIT,
+    chunkSize = 3,
+  ): AsyncGenerator<SearchResult<CodeRecord>[]> {
+    const allResults = await this.searchCode(query, maxResults);
+    if (!allResults.ok) {
+      this.logger.warn('progressive 검색 실패', { query, error: allResults.error.message });
+      return;
+    }
+
+    // WHY: 청크 단위로 점진적 반환 — 호출자가 필요한 만큼만 소비
+    for (let i = 0; i < allResults.value.length; i += chunkSize) {
+      yield allResults.value.slice(i, i + chunkSize);
+    }
+  }
 }

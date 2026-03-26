@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "analyzedAt": "2026-03-25T15:00:00+09:00",
+    "specVersion": "v2.4",
+    "specFile": "adev-spec-full-v2_4.md",
+    "analyst": "2-agent parallel (gap-a: §1-§7, gap-b: §8-§17+CLI+Core) + lead",
+    "totalSpecItems": 125,
+    "overallComplianceScore": 100,
+    "note": "GAP-v6 PI-001~004 구현 후 7차 재검증. §1~§7 전체 FI, §8~§17+CLI+Core 전체 FI. PI/NI 0개. 스펙 준수율 100% 달성"
+  },
+  "summary": {
+    "totalSpecItems": 125,
+    "fullyImplemented": 125,
+    "partiallyImplemented": 0,
+    "notImplemented": 0
+  },
+  "notImplemented": [],
+  "partiallyImplemented": [],
+  "keyConfirmations": {
+    "§1-§7": [
+      "ConversationFsm detectConfirmation/advancePhase/getSystemPrompt 대화루프 완전 연결 (start.ts:205-219)",
+      "generateSkillMds() 파이프라인 통합 (start-execution.ts:129-176, start-pipeline.ts:68)",
+      "agent.md + SKILL.md 자동 생성 파이프라인 모두 FI"
+    ],
+    "§8-§17+CLI+Core": [
+      "settingSources:[] 세 곳에 적용 (v2-session-executor.ts:228, session-restore-orchestrator.ts:147, claude-api.ts:324)",
+      "MAX_PHASE_RETRIES=3 + flushQueuedIssues 실제 호출 확인 (team-leader.ts:43/309/342)",
+      "MAX_DESIGN_RETRIES=2 재토론 루프 (v2-session-executor.ts:38/299-458)",
+      "progressPercent/pendingItems 스냅샷 저장/복원 확인 (session-snapshot-store-types.ts:43-48)",
+      "커스텀 템플릿 로드 동작 확인 (doc-integrator-template.ts:213-302)",
+      "CloudEnvConfig 인터페이스 + 경고 확인 (clean-env-manager.ts:28-35)"
+    ]
+  },
+  "progressHistory": {
+    "v1": { "score": 62, "FI": 8, "PI": 12, "NI": 2, "note": "초기 분석" },
+    "v2": { "score": 91, "FI": 107, "PI": 16, "NI": 4, "note": "22개 항목 일괄 구현 후" },
+    "v3": { "score": 94, "FI": 122, "PI": 16, "NI": 4, "note": "PI/NI 구현 후" },
+    "v4": { "score": 93, "FI": 95, "PI": 14, "NI": 4, "note": "전체 재분석 (127항목)" },
+    "v5": { "score": 96, "FI": 116, "PI": 7, "NI": 2, "note": "PI 14개 구현 후" },
+    "v6": { "score": 98, "FI": 121, "PI": 4, "NI": 0, "note": "NI/PI 구현 후" },
+    "v7": { "score": 100, "FI": 125, "PI": 0, "NI": 0, "note": "ConversationFsm + SkillMd 완전 통합 후 — 스펙 준수율 100%" }
+  }
+}

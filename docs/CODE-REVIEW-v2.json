@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "reviewedAt": "2026-03-25T15:30:00+09:00",
+    "reviewers": ["architect", "reviewer", "qa", "qc"],
+    "totalIssues": 14,
+    "critical": 2, "high": 4, "medium": 5, "low": 3
+  },
+  "critical": [
+    {
+      "id": "CR-001",
+      "source": "architect",
+      "title": "Layer2Bootstrap projectPath 미주입 — 통합 테스트 항상 스킵",
+      "file": "src/layer2/layer2-bootstrap.ts",
+      "detail": "createTeamLeader()에서 projectPath/modifiedFiles 미주입. team-leader-verify.ts:234 if(!deps.projectPath) 조건에 걸려 통합 검증이 항상 auto-pass됨. 4중 검증 무효화.",
+      "fix": "layer2-bootstrap.ts에서 this.projectCwd를 projectPath로 주입"
+    },
+    {
+      "id": "CR-002",
+      "source": "qc",
+      "title": "callTool 타임아웃 후 pending read 미취소",
+      "file": "src/mcp/mcp-manager.ts:330-398",
+      "detail": "Promise.race 타임아웃 시 readResponse의 pending read가 취소되지 않아 다음 callTool 호출 시 Reader 충돌 가능",
+      "fix": "ReadableStream controller.cancel() 또는 별도 AbortController 사용"
+    }
+  ],
+  "high": [
+    {
+      "id": "H-001",
+      "source": "qc",
+      "title": "DESIGN Phase 재토론 루프에서 세션 누수",
+      "file": "src/layer2/v2-session-executor.ts",
+      "detail": "done 이벤트 없이 스트림 종료 시 session.close() 미호출로 activeSessions에 세션 누적",
+      "fix": "finally 블록에서 session.close() + activeSessions.delete() 보장"
+    },
+    {
+      "id": "H-002",
+      "source": "qa+reviewer",
+      "title": "progressPercent 0% 데이터 손실 버그",
+      "file": "src/layer2/session-snapshot-store-types.ts:147",
+      "detail": "progressPercent: f.progressPercent || undefined — 0이 falsy로 처리되어 0% 손실",
+      "fix": "f.progressPercent ?? undefined 로 변경"
+    },
+    {
+      "id": "H-003",
+      "source": "qc",
+      "title": "supervision 키워드 오탐으로 불필요한 coder 재실행",
+      "file": "src/layer2/parallel-coder-supervision.ts:234-275",
+      "detail": "REWORK 키워드가 문맥 없이 매칭되어 합격 출력에서 불합격 판정 가능",
+      "fix": "키워드 앞뒤 문맥(부정어, 과거형) 체크 추가"
+    },
+    {
+      "id": "H-004",
+      "source": "architect",
+      "title": "Layer2Bootstrap ragSearcher 미주입 — RAG 컨텍스트 비활성",
+      "file": "src/layer2/layer2-bootstrap.ts",
+      "detail": "RagSearcher 인스턴스 생성/주입 없어 에이전트들이 LanceDB 과거 이력 참조 불가",
+      "fix": "bootstrap에서 RagSearcher 인스턴스 생성 후 deps에 주입"
+    }
+  ],
+  "medium": [
+    {
+      "id": "M-001",
+      "source": "architect",
+      "title": "Phase 경계 documenter spawn 미연동",
+      "file": "src/layer2/team-leader-phase.ts + team-leader.ts",
+      "detail": "spawnDocumenterOnPhaseBoundary()가 정의됐으나 Phase 전환 시 호출 안 됨",
+      "fix": "team-leader.ts advancePhase 후 spawnDocumenterOnPhaseBoundary() 호출"
+    },
+    {
+      "id": "M-002",
+      "source": "qc",
+      "title": "coder 재실행 시 감독 피드백 미전달",
+      "file": "src/layer2/parallel-coder-runner.ts:136-160",
+      "detail": "supervision 불합격 피드백이 재실행 coder에 전달 안 됨 — 동일 코드 반복 생성 가능",
+      "fix": "retryResults = await this.runInBatches(allocations, handoffWithFeedback)"
+    },
+    {
+      "id": "M-003",
+      "source": "qc",
+      "title": "setupBranch dirty working tree 미검사",
+      "file": "src/layer2/git-branch-manager.ts:116-154",
+      "detail": "uncommitted changes 있을 때 브랜치 재사용 시 checkout 실패 가능",
+      "fix": "git status --porcelain 체크 후 stash 또는 경고"
+    },
+    {
+      "id": "M-004",
+      "source": "qa",
+      "title": "JSON 탐욕적 매칭으로 모듈 파싱 실패",
+      "file": "src/layer2/parallel-coder-runner-helpers.ts:97",
+      "detail": "content.match(/\\[[\\s\\S]*\\]/) 탐욕적 매칭으로 복수 배열 포함 시 잘못된 파싱",
+      "fix": "non-greedy /\\[[\\s\\S]*?\\]/ 또는 /\\[[^\\]]*\\]/ 사용"
+    },
+    {
+      "id": "M-005",
+      "source": "qc",
+      "title": "RAG fallback이 안내만 제공, 실제 복원 없음",
+      "file": "src/layer2/session-restore-orchestrator.ts:211-267",
+      "detail": "fallbackWithRagContext()가 메시지만 yield하고 실제 새 세션 시작 로직 없음",
+      "fix": "fallback 후 상위에 재시작 신호 전달 또는 직접 새 세션 spawn"
+    }
+  ],
+  "low": [
+    {
+      "id": "L-001",
+      "source": "architect",
+      "title": "biasDetector 주입만 되고 미사용",
+      "file": "src/layer2/team-leader.ts:90,120",
+      "detail": "biasDetector 저장되나 analyze() 미호출, streamMonitor만 사용",
+      "fix": "Phase 루프에서 biasDetector.analyze() 호출 추가 또는 의존성 제거"
+    },
+    {
+      "id": "L-002",
+      "source": "qa",
+      "title": "기본 템플릿 templatePath 정리 필요",
+      "file": "src/layer3/doc-integrator-template.ts:57",
+      "detail": "존재하지 않는 .hbs 파일 경로 설정, fallback으로 동작하나 설계 의도 불명확",
+      "fix": "templatePath 제거하거나 실제 .hbs 파일 생성"
+    },
+    {
+      "id": "L-003",
+      "source": "reviewer",
+      "title": "team-leader-helpers.ts 934줄 초과",
+      "file": "src/layer2/team-leader-helpers.ts",
+      "detail": "300줄 규칙 3배 초과, Phase별 파일 분리 필요",
+      "fix": "executeTestPhase → team-leader-test-phase.ts 등으로 분리"
+    }
+  ]
+}

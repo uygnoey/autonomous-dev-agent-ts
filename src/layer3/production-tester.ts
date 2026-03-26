@@ -5,8 +5,11 @@ import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
+import type { IBugEscalator } from 'layer3/bug-escalator-types.js';
+import type { ContinuousE2EResult } from 'layer3/bug-escalator-types.js';
 import { executeE2E, getFailureRate, isHealthy, runE2E } from 'layer3/e2e-runner.js';
 import { executeOnce } from 'layer3/production-tester-session.js';
+import type { OnE2EFailureCallback } from 'layer3/production-tester-session.js';
 import type {
   ContinuousE2EConfig,
   ContinuousE2ESession,
@@ -30,26 +33,42 @@ const DEFAULT_FAIL_FAST = true;
 /**
  * ProductionTester - 지속적 E2E 실행 세션 관리 구현 / Manages continuous E2E sessions.
  *
+ * @description
+ * KR: 지속 E2E 실행 중 실패 감지 시 BugEscalator를 통해 2계층 전체 루프 재실행을 트리거한다.
+ *     스펙 §9.3: "1개 실패 → 즉시 중단 → 2계층 전체 루프 재실행 (architect부터)"
+ * EN: On failure detection during continuous E2E, triggers Layer 2 full loop re-execution via BugEscalator.
+ *     Spec §9.3: "1 failure → immediate stop → Layer 2 full loop re-execution (from architect)"
+ *
  * @example
- * const tester = new ProductionTester(integrationTester, logger);
+ * const tester = new ProductionTester(integrationTester, logger, bugEscalator);
  * const result = await tester.start({ projectId: 'proj-1', testPath: './tests/e2e' });
  */
 export class ProductionTester implements IProductionTester {
   private readonly logger: Logger;
-  private readonly integrationTester: IntegrationTester;
+  private readonly integrationTester: IntegrationTester | null;
+  private readonly bugEscalator: IBugEscalator | null;
   private readonly sessions: Map<string, ContinuousE2ESession>;
   private readonly timers: Map<string, Timer>;
 
-  /** @param integrationTester - Layer2 통합 테스터 또는 Logger (간단 API) */
-  constructor(integrationTester: IntegrationTester | Logger, logger?: Logger) {
+  /**
+   * @param integrationTester - Layer2 통합 테스터 또는 Logger (간단 API) / Layer2 integration tester or Logger (simple API)
+   * @param logger - 로거 (전체 API) / Logger (full API)
+   * @param bugEscalator - 버그 에스컬레이터 (선택) / Bug escalator (optional)
+   */
+  constructor(
+    integrationTester: IntegrationTester | Logger,
+    logger?: Logger,
+    bugEscalator?: IBugEscalator,
+  ) {
     // WHY: 간단한 API 지원 - logger만 전달하는 경우
     if (!logger) {
       this.logger = (integrationTester as Logger).child({ module: 'production-tester' });
-      // @ts-expect-error - 간단한 API 사용 시 integrationTester는 사용되지 않음
       this.integrationTester = null;
+      this.bugEscalator = null;
     } else {
       this.integrationTester = integrationTester as IntegrationTester;
       this.logger = logger.child({ module: 'production-tester' });
+      this.bugEscalator = bugEscalator ?? null;
     }
     this.sessions = new Map();
     this.timers = new Map();
@@ -255,6 +274,53 @@ export class ProductionTester implements IProductionTester {
     return getFailureRate(runs);
   }
 
+  /**
+   * E2E 실패 시 BugEscalator를 통한 에스컬레이션 콜백을 생성한다.
+   * Creates escalation callback via BugEscalator for E2E failure.
+   *
+   * @description
+   * KR: §9.4 — "버그 발견 → qc 근본 원인 분석 → 2계층 전체 루프 재실행"
+   * EN: §9.4 — "Bug found → qc root cause analysis → Layer 2 full loop re-execution"
+   */
+  private createOnFailureCallback(sessionId: string): OnE2EFailureCallback | undefined {
+    if (!this.bugEscalator) return undefined;
+
+    const escalator = this.bugEscalator;
+    const logger = this.logger;
+    const session = this.sessions.get(sessionId);
+
+    return async (failedResult: ContinuousE2EResult) => {
+      logger.info('BugEscalator 에스컬레이션 시작', {
+        sessionId,
+        projectId: failedResult.projectId,
+        errorMessage: failedResult.errorMessage,
+      });
+
+      const escalationResult = await escalator.escalateAsync({
+        projectId: failedResult.projectId,
+        projectPath: session?.projectPath ?? '',
+        featureId: failedResult.featureId,
+        failedTest: failedResult,
+        context: `지속 E2E 세션 ${sessionId}에서 감지된 실패`,
+      });
+
+      if (escalationResult.ok) {
+        logger.info('BugEscalator 에스컬레이션 완료', {
+          sessionId,
+          bugId: escalationResult.value.id,
+          status: escalationResult.value.status,
+          userApproved: escalationResult.value.userApproved,
+        });
+      } else {
+        logger.error('BugEscalator 에스컬레이션 실패', {
+          sessionId,
+          errorCode: escalationResult.error.code,
+          errorMessage: escalationResult.error.message,
+        });
+      }
+    };
+  }
+
   /** @internal 세션 단일 실행 위임 / Delegate single-run to extracted helper */
   private async _runOnce(sessionId: string): Promise<void> {
     await executeOnce(
@@ -266,6 +332,7 @@ export class ProductionTester implements IProductionTester {
       async (sid) => {
         await this.stop(sid);
       },
+      this.createOnFailureCallback(sessionId),
     );
   }
 }

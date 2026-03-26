@@ -8,6 +8,7 @@
 
 import { join } from 'node:path';
 import { RagError } from 'core/errors.js';
+import { guardAndSplitIfNeeded } from 'core/file-size-guard.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { CodeRecord, Result } from 'core/types.js';
@@ -73,6 +74,32 @@ export class CodeIndexer {
   ): Promise<Result<number, RagError>> {
     try {
       this.logger.debug('파일 인덱싱 시작', { filePath });
+
+      // WHY: PI-008 — 파일 크기 검사 + 대용량 파일 자동 분할
+      const sizeCheckResult = await guardAndSplitIfNeeded(filePath);
+      if (!sizeCheckResult.ok) {
+        this.logger.warn('파일 크기 검사 실패 — 스킵', {
+          filePath,
+          error: sizeCheckResult.error.message,
+        });
+        return err(new RagError('rag_file_too_large', `파일 크기 검사 실패: ${filePath}`));
+      }
+      if (sizeCheckResult.value.split) {
+        // WHY: 대용량 파일은 청크 파일들을 순차적으로 인덱싱
+        let totalChunkCount = 0;
+        for (const chunkPath of sizeCheckResult.value.chunks) {
+          const chunkResult = await this.indexFile(chunkPath, projectId);
+          if (chunkResult.ok) {
+            totalChunkCount += chunkResult.value;
+          }
+        }
+        this.logger.info('대용량 파일 분할 인덱싱 완료', {
+          filePath,
+          chunkFiles: sizeCheckResult.value.chunks.length,
+          totalChunkCount,
+        });
+        return ok(totalChunkCount);
+      }
 
       // 1. 파일 읽기 / Read file
       const file = Bun.file(filePath);

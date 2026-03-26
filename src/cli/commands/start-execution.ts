@@ -8,17 +8,24 @@
 
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import type { VerificationConfig } from '../../core/config-schema.js';
 import { AdevError } from '../../core/errors.js';
 import type { Logger } from '../../core/logger.js';
-import { ProcessExecutor } from '../../core/process-executor.js';
 import { err, ok } from '../../core/types.js';
 import type { Result } from '../../core/types.js';
 import { AgentMdGenerator } from '../../layer1/agent-md-generator.js';
 import type { AgentMdGeneratorConfig } from '../../layer1/agent-md-generator.js';
+import { AgentMdReviewer } from '../../layer1/agent-md-reviewer.js';
+import type { AgentMdReviewInput } from '../../layer1/agent-md-reviewer.js';
+import { SkillMdGenerator } from '../../layer1/skill-md-generator.js';
+import type { SkillMdGeneratorConfig } from '../../layer1/skill-md-generator.js';
 import type { HandoffPackage } from '../../layer1/types.js';
-import { CleanEnvManager } from '../../layer2/clean-env-manager.js';
-import { IntegrationTester } from '../../layer2/integration-tester.js';
-import { Layer2Bootstrap } from '../../layer2/layer2-bootstrap.js';
+import {
+  createLayer2Bootstrap,
+  createIntegrationTester,
+  createUserCheckpoint,
+} from '../layer2-runner.js';
+import type { UserInputProvider } from '../layer2-runner.js';
 import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
@@ -68,19 +75,102 @@ export async function generateAgentMds(
       return ok(undefined);
     }
 
-    const saveResult = await generator.saveDrafts(session.projectInfo.path, draftsResult.value);
+    chat.succeedSpinner('에이전트 문서 초안 생성 완료');
+
+    // WHY: §7.4 Step 2 — 유저 검토/수정 인터랙션
+    //      ChatUi를 AgentMdReviewInput 어댑터로 변환하여 검토 수행
+    const reviewInput: AgentMdReviewInput = {
+      system: (msg: string) => chat.system(msg),
+      success: (msg: string) => chat.success(msg),
+      waitForInput: async () => {
+        const event = await chat.waitForInput();
+        return { type: event.type, text: 'text' in event ? event.text : undefined };
+      },
+    };
+
+    const reviewer = new AgentMdReviewer(logger);
+    const confirmed = await reviewer.reviewAll(draftsResult.value, reviewInput);
+
+    // WHY: §7.4 Step 3 — 확정된 .md를 저장
+    chat.startSpinner('에이전트 문서 저장 중...');
+
+    const saveResult = await generator.saveDrafts(session.projectInfo.path, confirmed);
     if (!saveResult.ok) {
       chat.failSpinner('에이전트 문서 저장 실패 (건너뜀)');
       logger.warn('에이전트 .md 초안 저장 실패, 건너뜀', { error: saveResult.error.message });
       return ok(undefined);
     }
 
-    chat.succeedSpinner(`에이전트 문서 생성 완료 (${agentsDir})`);
-    logger.info('에이전트 .md 초안 저장 완료', { agentsDir });
+    chat.succeedSpinner(`에이전트 문서 저장 완료 (${agentsDir})`);
+    logger.info('에이전트 .md 검토 후 저장 완료', { agentsDir });
 
     return ok(undefined);
   } catch (error: unknown) {
     logger.warn('에이전트 .md 생성 예외 발생, 건너뜀', { error: String(error) });
+    return ok(undefined);
+  }
+}
+
+/**
+ * SKILL.md 초안 생성 / Generate SKILL.md drafts
+ *
+ * @description
+ * KR: PI-004 — §7.4 SKILL.md 자동 생성 파이프라인 통합.
+ *     HandoffPackage의 specDocument를 분석하여 프로젝트에 필요한 Skill을 추출하고,
+ *     각 Skill의 SKILL.md 초안을 .adev/skills/{skillName}/SKILL.md에 저장한다.
+ * EN: PI-004 — Integrates SKILL.md auto-generation pipeline.
+ *
+ * @param session - Layer1 세션 상태 / Layer1 session state
+ * @param handoff - HandoffPackage
+ * @param chat - TUI 채팅 인터페이스 / TUI chat interface
+ * @param logger - 로거 인스턴스 / Logger instance
+ * @returns 항상 ok(void) — 실패 시 warn 로그만 / Always ok(void) — warns on failure
+ */
+export async function generateSkillMds(
+  session: Layer1SessionState,
+  handoff: HandoffPackage,
+  chat: ChatUi,
+  logger: Logger,
+): Promise<Result<void, AdevError>> {
+  try {
+    chat.startSpinner('SKILL.md 자동 생성 중...');
+
+    const config: SkillMdGeneratorConfig = {
+      projectPath: session.projectInfo.path,
+      projectName: session.projectInfo.name,
+      projectType: handoff.contract.projectType,
+      techStack: 'TypeScript, Bun',
+      conventions: 'ES Modules, strict TypeScript, Result<T,E> pattern, kebab-case files',
+      language: 'Korean',
+    };
+
+    const generator = new SkillMdGenerator(session.claudeApi, logger);
+    const skillsResult = await generator.generate(config, handoff.specDocument);
+
+    if (!skillsResult.ok) {
+      chat.failSpinner('SKILL.md 생성 실패 (건너뜀)');
+      logger.warn('SKILL.md 생성 실패, 건너뜀', { error: skillsResult.error.message });
+      return ok(undefined);
+    }
+
+    if (skillsResult.value.size === 0) {
+      chat.succeedSpinner('SKILL.md 생성 완료 (추출된 Skill 없음)');
+      return ok(undefined);
+    }
+
+    const saveResult = await generator.save(skillsResult.value, session.projectInfo.path);
+    if (!saveResult.ok) {
+      chat.failSpinner('SKILL.md 저장 실패 (건너뜀)');
+      logger.warn('SKILL.md 저장 실패, 건너뜀', { error: saveResult.error.message });
+      return ok(undefined);
+    }
+
+    chat.succeedSpinner(`SKILL.md ${skillsResult.value.size}개 생성 완료`);
+    logger.info('SKILL.md 생성 및 저장 완료', { count: skillsResult.value.size });
+
+    return ok(undefined);
+  } catch (error: unknown) {
+    logger.warn('SKILL.md 생성 중 예외, 건너뜀', { error: String(error) });
     return ok(undefined);
   }
 }
@@ -104,14 +194,30 @@ export async function runLayer2(
   handoff: HandoffPackage,
   chat: ChatUi,
   logger: Logger,
+  verificationConfig?: VerificationConfig,
 ): Promise<Result<void, AdevError>> {
   try {
     chat.system('Layer2 자율 개발 시작 중...');
 
-    const bootstrap = new Layer2Bootstrap({
+    // WHY: PI-014 — ChatUi를 UserInputProvider로 래핑하여 유저 체크포인트 CLI 연결
+    const userInputProvider: UserInputProvider = {
+      system: (msg: string) => chat.system(msg),
+      success: (msg: string) => chat.success(msg),
+      waitForInput: async () => {
+        const event = await chat.waitForInput();
+        return { type: event.type, text: 'text' in event ? event.text : undefined };
+      },
+    };
+    const userCheckpoint = createUserCheckpoint(logger);
+
+    const bootstrap = createLayer2Bootstrap({
       authProvider: session.authProvider,
       logger,
       projectCwd: session.projectInfo.path,
+      userCheckpoint,
+      userInputProvider,
+      // WHY: PI-011 — §15 4중 검증 비용 최적화 설정을 TeamLeader까지 전달
+      verificationConfig,
     });
 
     const teamLeader = await bootstrap.createTeamLeader();
@@ -185,10 +291,8 @@ export async function runLayer3(
       projectPath: session.projectInfo.path,
     });
 
-    // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성
-    const processExecutor = new ProcessExecutor(logger);
-    const cleanEnvManager = new CleanEnvManager(logger);
-    const integrationTester = new IntegrationTester(logger, processExecutor, cleanEnvManager);
+    // WHY: Layer2와 동일한 방식으로 IntegrationTester 생성 (facade 경유)
+    const integrationTester = createIntegrationTester(logger);
 
     // WHY: 4단계 계단식 통합 검증으로 Layer2 결과물을 종합 검증한다
     const verifyResult = await runStepwiseVerification(

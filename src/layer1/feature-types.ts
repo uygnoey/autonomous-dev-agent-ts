@@ -149,3 +149,21 @@ export interface TestRatios {
   /** E2E 테스트 비율 / E2E test ratio */
   readonly e2e: number;
 }
+
+/**
+ * 테스트 목표 수량 / Target test counts per type
+ *
+ * @description
+ * KR: 유형별 목표 테스트 수량. 스펙 §6.6 기준.
+ * EN: Target test counts by type, per spec §6.6.
+ */
+export interface TestTargetCounts {
+  /** 단위 테스트 목표 수 / Unit test target count */
+  readonly unit: number;
+
+  /** 모듈 테스트 목표 수 / Module test target count */
+  readonly module: number;
+
+  /** E2E 테스트 목표 수 / E2E test target count */
+  readonly e2e: number;
+}

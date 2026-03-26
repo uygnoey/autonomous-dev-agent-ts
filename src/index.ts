@@ -22,6 +22,7 @@ import { ConfigCommand } from 'cli/commands/config.js';
 import { InitCommand } from 'cli/commands/init.js';
 import { ProjectCommand } from 'cli/commands/project.js';
 import { StartCommand } from 'cli/commands/start.js';
+import { StatusCommand } from 'cli/commands/status.js';
 import { CliApp } from 'cli/index.js';
 import type { CliCommandHandler, CliResult } from 'cli/types.js';
 import { ConsoleLogger } from 'core/logger.js';
@@ -216,6 +217,19 @@ async function main(): Promise<void> {
     help: () => 'adev project <sub> - Manage projects (add/remove/list/switch/update)',
   } satisfies CliCommandHandler);
 
+  const statusCmd = new StatusCommand(logger);
+  app.registerCommand('status', {
+    execute: async (options) => {
+      const parsed = options as Record<string, unknown>;
+      const result = await statusCmd.execute([], parsed);
+      if (result.ok) {
+        return { success: true, message: '', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => statusCmd.help(),
+  } satisfies CliCommandHandler);
+
   const authCmd = new AuthCommand(logger);
   const authHandler: CliCommandHandler = {
     execute: async (options) => {
@@ -229,6 +243,20 @@ async function main(): Promise<void> {
     help: () => authCmd.help(),
   };
   app.registerCommand('auth', authHandler);
+
+  // WHY: PI-007 — 'setup-token' 독립 서브커맨드. 기존 auth 대화형 설정(OAuth) 재사용
+  app.registerCommand('setup-token', {
+    execute: async () => {
+      // WHY: setup-token은 OAuth 토큰 재설정을 바로 실행하는 단축 명령어
+      const result = await authCmd.execute([], {});
+      if (result.ok) {
+        return { success: true, message: 'Token setup completed.', exitCode: 0 };
+      }
+      return { success: false, message: result.error.message, exitCode: 1 };
+    },
+    help: () => 'adev setup-token — Renew Claude OAuth token (shortcut for auth)',
+  } satisfies CliCommandHandler);
+
   // WHY: 'setting'은 'config'의 별칭 — 직관적인 이름 제공
   app.registerCommand('setting', {
     execute: async (options) => {

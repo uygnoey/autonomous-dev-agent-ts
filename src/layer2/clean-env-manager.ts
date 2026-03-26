@@ -12,10 +12,27 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { CleanEnvType } from 'core/config-schema.js';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
+
+/**
+ * 클라우드 환경 설정 인터페이스 / Cloud environment configuration interface
+ *
+ * @description
+ * KR: NI-002 — §8.5 클라우드 환경 설정 인터페이스 (실제 연결은 추후 구현)
+ * EN: NI-002 — §8.5 Cloud environment configuration interface (actual connection TBD)
+ */
+export interface CloudEnvConfig {
+  /** 클라우드 환경 유형 / Cloud environment type */
+  readonly type: 'ssh' | 'docker' | 'github-actions' | 'custom';
+  /** 원격 호스트 / Remote host */
+  readonly host?: string;
+  /** 커스텀 명령어 / Custom command */
+  readonly command?: string;
+}
 
 /**
  * 클린 환경 관리자 / Clean Environment Manager
@@ -35,12 +52,38 @@ import { err, ok } from 'core/types.js';
 export class CleanEnvManager {
   private readonly activeEnvs: Set<string> = new Set();
   private readonly logger: Logger;
+  // WHY: PI-006 — §8.5 클라우드 환경 선택 지원. 현재는 로컬만 구현, 클라우드는 추후 확장
+  private readonly cleanEnvType: CleanEnvType;
+  // WHY: NI-002 — 클라우드 환경 설정을 저장하여 추후 실제 연결 시 활용
+  private readonly cloudEnvConfig?: CloudEnvConfig;
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param cleanEnvType - 클린 환경 유형 (기본: 'local') / Clean env type (default: 'local')
+   * @param cloudEnvConfig - 클라우드 환경 설정 (선택) / Cloud env config (optional)
    */
-  constructor(logger: Logger) {
+  constructor(
+    logger: Logger,
+    cleanEnvType: CleanEnvType = 'local',
+    cloudEnvConfig?: CloudEnvConfig,
+  ) {
     this.logger = logger.child({ module: 'clean-env-manager' });
+    this.cleanEnvType = cleanEnvType;
+    this.cloudEnvConfig = cloudEnvConfig;
+
+    // WHY: NI-002 — 클라우드 클린 환경 선택 시 config 유무에 따라 다른 경고
+    if (this.cleanEnvType === 'cloud') {
+      if (this.cloudEnvConfig) {
+        this.logger.warn(
+          '클라우드 클린 환경은 아직 구현되지 않았습니다 — 로컬 환경으로 대체합니다',
+          { cloudType: this.cloudEnvConfig.type, host: this.cloudEnvConfig.host },
+        );
+      } else {
+        this.logger.warn(
+          '클라우드 클린 환경 설정(cloudEnvConfig)이 없습니다 — 로컬 환경으로 대체합니다',
+        );
+      }
+    }
   }
 
   /**

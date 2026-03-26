@@ -20,6 +20,7 @@ export { ConfigCommand } from 'cli/commands/config.js';
 export { InitCommand } from 'cli/commands/init.js';
 export { ProjectCommand } from 'cli/commands/project.js';
 export { StartCommand } from 'cli/commands/start.js';
+export { StatusCommand } from 'cli/commands/status.js';
 
 // ── 타입 / Types ───────────────────────────────────────────────
 

@@ -7,6 +7,7 @@
  *     (conversations, plan).
  */
 
+import type { VerificationConfig } from 'core/config-schema.js';
 import type { AdevError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { ok } from 'core/types.js';
@@ -27,23 +28,26 @@ import type { Layer1VerificationRequest, Layer1VerificationResult } from 'layer1
  *
  * @param logger - 로거 인스턴스 / Logger instance
  * @param claudeApi - Claude API 인스턴스 (선택) / Claude API instance (optional)
+ * @param verificationConfig - 검증 모델 설정 (선택) / Verification model config (optional)
  *
  * @example
  * const verifier = new Layer1Verifier(logger);
  * const result = verifier.verify(request);
  *
  * @example
- * // With AI-powered async verification
- * const verifier = new Layer1Verifier(logger, claudeApi);
+ * // With AI-powered async verification and model config
+ * const verifier = new Layer1Verifier(logger, claudeApi, { layer1Model: 'sonnet', adevModel: 'opus', opusEscalationOnFailure: true });
  * const result = await verifier.verifyAsync(request);
  */
 export class Layer1Verifier {
   private readonly logger: Logger;
   private readonly claudeApi?: ClaudeApi;
+  private readonly verificationConfig?: VerificationConfig;
 
-  constructor(logger: Logger, claudeApi?: ClaudeApi) {
+  constructor(logger: Logger, claudeApi?: ClaudeApi, verificationConfig?: VerificationConfig) {
     this.logger = logger.child({ module: 'layer1-verifier' });
     this.claudeApi = claudeApi;
+    this.verificationConfig = verificationConfig;
   }
 
   /**
@@ -135,8 +139,17 @@ export class Layer1Verifier {
     // WHY: 로컬 검사를 통과한 경우에만 Claude API 호출로 추가 판정한다.
     const aiPrompt = buildAiVerificationPrompt(request);
 
+    // WHY: verificationConfig.layer1Model에 따라 모델을 선택한다.
+    const selectedModel = resolveModelId(this.verificationConfig?.layer1Model ?? 'opus');
+
+    this.logger.debug('AI 검증 모델 선택 / AI verification model selected', {
+      featureId: request.featureId,
+      model: selectedModel,
+    });
+
     const apiResult = await this.claudeApi.createMessage([{ role: 'user', content: aiPrompt }], {
       maxTokens: 512,
+      model: selectedModel,
     });
 
     if (!apiResult.ok) {
@@ -152,7 +165,42 @@ export class Layer1Verifier {
     }
 
     const aiContent = apiResult.value.content.trim().toUpperCase();
-    const aiPassed = aiContent.includes('PASS') && !aiContent.startsWith('FAIL');
+    let aiPassed = aiContent.includes('PASS') && !aiContent.startsWith('FAIL');
+
+    // WHY: sonnet으로 검증 실패 시 opusEscalationOnFailure가 true면 opus로 재검증한다.
+    if (
+      !aiPassed &&
+      this.verificationConfig?.layer1Model === 'sonnet' &&
+      this.verificationConfig.opusEscalationOnFailure
+    ) {
+      this.logger.info('sonnet 검증 실패 → opus 재검증 시도 / Sonnet failed → escalating to opus', {
+        featureId: request.featureId,
+      });
+
+      const opusModel = resolveModelId('opus');
+      const escalationResult = await this.claudeApi.createMessage(
+        [{ role: 'user', content: aiPrompt }],
+        { maxTokens: 512, model: opusModel },
+      );
+
+      if (escalationResult.ok) {
+        const opusContent = escalationResult.value.content.trim().toUpperCase();
+        aiPassed = opusContent.includes('PASS') && !opusContent.startsWith('FAIL');
+
+        this.logger.info('opus 재검증 완료 / Opus escalation complete', {
+          featureId: request.featureId,
+          opusPassed: aiPassed,
+        });
+      } else {
+        this.logger.warn(
+          'opus 재검증 실패 — 원래 sonnet 결과 유지 / Opus escalation failed — keeping sonnet result',
+          {
+            featureId: request.featureId,
+            error: escalationResult.error.code,
+          },
+        );
+      }
+    }
 
     const result: Layer1VerificationResult = {
       featureId: request.featureId,
@@ -193,6 +241,20 @@ function hasTestFailures(testResults: string): boolean {
  * @param request - 검증 요청 / Verification request
  * @returns 프롬프트 문자열 / Prompt string
  */
+/**
+ * 모델 별칭을 실제 모델 ID로 변환 / Resolve model alias to actual model ID
+ *
+ * @param model - 모델 별칭 / Model alias ('opus' | 'sonnet')
+ * @returns 실제 모델 ID / Actual model ID string
+ */
+function resolveModelId(model: 'opus' | 'sonnet'): string {
+  const MODEL_IDS: Record<'opus' | 'sonnet', string> = {
+    opus: 'claude-opus-4-20250514',
+    sonnet: 'claude-sonnet-4-20250514',
+  };
+  return MODEL_IDS[model];
+}
+
 function buildAiVerificationPrompt(request: Layer1VerificationRequest): string {
   return [
     'Review the following implementation result and respond with PASS or FAIL:',

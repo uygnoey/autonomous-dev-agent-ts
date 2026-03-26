@@ -154,6 +154,12 @@ export async function registerProject(
     // ~/.adev/ 디렉토리 생성
     await fs.mkdir(globalAdevDir, { recursive: true });
 
+    // WHY: PI-011 — 스펙 §5.2 글로벌 디렉토리 하위 구조 자동 생성
+    const globalSubDirs = ['rag', 'data', 'skills', 'templates', 'mcp', 'agents', 'sessions'];
+    for (const subDir of globalSubDirs) {
+      await fs.mkdir(path.join(globalAdevDir, subDir), { recursive: true });
+    }
+
     // projects.json 읽기 (없으면 빈 레지스트리 생성)
     let registry: ProjectRegistry;
     try {

@@ -10,6 +10,7 @@ import type { AuthProvider } from '../../auth/types.js';
 import type { ClaudeApi } from '../../layer1/claude-api.js';
 import type { ContractBuilder } from '../../layer1/contract-builder.js';
 import type { ContractVerifier } from '../../layer1/contract-verifier.js';
+import type { ConversationFsm } from '../../layer1/conversation-fsm.js';
 import type { ConversationManager } from '../../layer1/conversation.js';
 import type { Designer } from '../../layer1/designer.js';
 import type { Planner } from '../../layer1/planner.js';
@@ -35,6 +36,12 @@ export const LAYER1_SYSTEM_PROMPT = `당신은 프로젝트 기획 및 설계 �
 
 /** adev 현재 버전 / Current adev version */
 export const ADEV_VERSION = '0.0.1';
+
+/** Layer1 대화 기본 최대 토큰 수 / Default max tokens for Layer1 conversation */
+export const LAYER1_MAX_TOKENS = 4096;
+
+/** Layer1 대화 기본 온도 / Default temperature for Layer1 conversation */
+export const LAYER1_TEMPERATURE = 0.7;
 
 // ── 인터페이스 / Interfaces ─────────────────────────────────────
 
@@ -62,6 +69,8 @@ export interface Layer1SessionState {
   readonly claudeApi: ClaudeApi;
   /** 대화 관리자 / Conversation manager */
   readonly conversationManager: ConversationManager;
+  /** 대화 Phase FSM / Conversation phase FSM */
+  readonly conversationFsm: ConversationFsm;
   /** Contract 빌더 / Contract builder */
   readonly contractBuilder: ContractBuilder;
   /** Contract 검증기 / Contract verifier */

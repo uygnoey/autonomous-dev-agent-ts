@@ -14,7 +14,11 @@ import { ContractError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
-import type { ContractChangeRecord, ContractDiffEntry } from 'layer1/contract-change-types.js';
+import type {
+  ContractChangeRecord,
+  ContractDiffEntry,
+  ContractImpactAnalysis,
+} from 'layer1/contract-change-types.js';
 import type { ContractSchema, HandoffPackage } from 'layer1/contract-types.js';
 
 // ── ContractChangeManager ────────────────────────────────────────
@@ -188,9 +192,6 @@ export class ContractChangeManager {
    * @param previous - 이전 ContractSchema / Previous schema
    * @param diffs - 변경 항목 목록 / Diff entries
    * @returns 영향받는 기능 ID 목록 / Affected feature IDs
-   *
-   * @example
-   * const ids = manager.identifyAffectedFeatures(schema, diffs);
    */
   identifyAffectedFeatures(
     previous: ContractSchema,
@@ -199,14 +200,172 @@ export class ContractChangeManager {
     const hasFeaturesChange = diffs.some((d) => d.field.includes('features'));
 
     if (!hasFeaturesChange) {
-      // 기능 필드와 무관한 변경 → 전체 영향
       return diffs.length > 0 ? ['*'] : [];
     }
 
     const ids = previous.features.map((f) => f.id);
-
-    // 추출된 ID가 없으면 전체 영향 표시
     return ids.length > 0 ? ids : ['*'];
+  }
+
+  /**
+   * Contract 변경 영향을 상세 분석한다.
+   * Analyzes detailed impact of a Contract change.
+   *
+   * @description
+   * KR: 기능 단위로 변경/추가/제거를 식별하고, 의존 체인을 통해 간접 영향 기능도 식별한다.
+   *     재실행 필요한 테스트의 기능 ID와 재검증/재컨펌 필요 여부를 판단한다.
+   * EN: Identifies changed/added/removed features at granular level, traces dependency chains
+   *     for indirectly affected features, and determines test rerun/reverification/reconfirm needs.
+   *
+   * @param previous - 이전 ContractSchema / Previous schema
+   * @param next - 현재 ContractSchema / Next schema
+   * @returns 영향 분석 결과 / Impact analysis result
+   */
+  analyzeImpact(previous: ContractSchema, next: ContractSchema): ContractImpactAnalysis {
+    this.logger.debug('Contract 변경 영향 분석 시작');
+
+    const prevFeatureMap = new Map(previous.features.map((f) => [f.id, f]));
+    const nextFeatureMap = new Map(next.features.map((f) => [f.id, f]));
+
+    const addedFeatureIds: string[] = [];
+    const removedFeatureIds: string[] = [];
+    const changedFeatureIds: string[] = [];
+
+    // WHY: 이전에 없던 기능 → 추가
+    for (const id of nextFeatureMap.keys()) {
+      if (!prevFeatureMap.has(id)) {
+        addedFeatureIds.push(id);
+      }
+    }
+
+    // WHY: 현재에 없는 기능 → 제거
+    for (const id of prevFeatureMap.keys()) {
+      if (!nextFeatureMap.has(id)) {
+        removedFeatureIds.push(id);
+      }
+    }
+
+    // WHY: 양쪽에 존재하지만 내용이 다른 기능 → 변경
+    for (const [id, prevFeature] of prevFeatureMap) {
+      const nextFeature = nextFeatureMap.get(id);
+      if (nextFeature && JSON.stringify(prevFeature) !== JSON.stringify(nextFeature)) {
+        changedFeatureIds.push(id);
+      }
+    }
+
+    // WHY: 변경/추가된 기능에 의존하는 기능을 의존 체인으로 추적
+    const directlyAffected = new Set([
+      ...changedFeatureIds,
+      ...addedFeatureIds,
+      ...removedFeatureIds,
+    ]);
+    const dependencyAffectedIds = traceDependencyChain(next.features, directlyAffected);
+
+    // WHY: 변경된 기능 + 간접 영향 기능 모두 테스트 재실행 대상
+    const testRerunFeatureIds = [
+      ...new Set([...changedFeatureIds, ...addedFeatureIds, ...dependencyAffectedIds]),
+    ];
+
+    const hasAnyChange =
+      changedFeatureIds.length > 0 || addedFeatureIds.length > 0 || removedFeatureIds.length > 0;
+
+    const analysis: ContractImpactAnalysis = {
+      changedFeatureIds,
+      addedFeatureIds,
+      removedFeatureIds,
+      dependencyAffectedIds,
+      testRerunFeatureIds,
+      reverificationRequired: hasAnyChange,
+      userReconfirmRequired: hasAnyChange,
+    };
+
+    this.logger.info('Contract 변경 영향 분석 완료', {
+      changed: changedFeatureIds.length,
+      added: addedFeatureIds.length,
+      removed: removedFeatureIds.length,
+      dependencyAffected: dependencyAffectedIds.length,
+      testRerun: testRerunFeatureIds.length,
+    });
+
+    return analysis;
+  }
+
+  /**
+   * Contract 변경을 적용하고 영향 분석 결과를 함께 반환한다.
+   * Applies change and returns both updated package and impact analysis.
+   *
+   * @description
+   * KR: applyChange()와 analyzeImpact()를 결합하여 변경 적용 + 영향 분석을 한 번에 수행한다.
+   * EN: Combines applyChange() and analyzeImpact() into a single operation.
+   *
+   * @param current - 현재 HandoffPackage / Current package
+   * @param next - 적용할 새 ContractSchema / New schema
+   * @param reason - 변경 사유 / Reason
+   * @param changedBy - 변경 주체 / Who changed
+   * @returns 업데이트된 패키지 + 영향 분석 / Updated package + impact analysis
+   */
+  applyChangeWithImpact(
+    current: HandoffPackage,
+    next: ContractSchema,
+    reason: string,
+    changedBy: 'user' | 'system',
+  ): Result<{ readonly pkg: HandoffPackage; readonly impact: ContractImpactAnalysis }> {
+    const changeResult = this.applyChange(current, next, reason, changedBy);
+    if (!changeResult.ok) {
+      return changeResult;
+    }
+
+    const impact = this.analyzeImpact(current.contract, next);
+
+    return ok({ pkg: changeResult.value, impact });
+  }
+
+  /**
+   * 영향받는 기능들의 재검증을 트리거한다.
+   * Triggers revalidation for affected features.
+   *
+   * @description
+   * KR: 영향 분석 결과를 기반으로 영향받는 기능을 재개발 대상으로 표시하고
+   *     2계층 재실행 콜백을 호출한다.
+   * EN: Marks affected features for re-development based on impact analysis
+   *     and invokes the layer2 re-execution callback.
+   *
+   * @param impact - 영향 분석 결과 / Impact analysis result
+   * @param onRevalidate - 2계층 재실행 콜백 / Layer2 re-execution callback
+   * @returns 재검증 트리거 성공 여부 / Whether revalidation trigger succeeded
+   */
+  async triggerRevalidation(
+    impact: ContractImpactAnalysis,
+    onRevalidate: (featureIds: readonly string[]) => Promise<void>,
+  ): Promise<Result<void>> {
+    if (!impact.reverificationRequired) {
+      this.logger.debug('재검증 불필요 — 변경 없음');
+      return ok(undefined);
+    }
+
+    this.logger.info('Contract 변경 재검증 트리거', {
+      testRerunFeatureIds: impact.testRerunFeatureIds,
+      reverificationRequired: impact.reverificationRequired,
+      userReconfirmRequired: impact.userReconfirmRequired,
+    });
+
+    try {
+      await onRevalidate(impact.testRerunFeatureIds);
+
+      this.logger.info('Contract 변경 재검증 완료', {
+        featureCount: impact.testRerunFeatureIds.length,
+      });
+
+      return ok(undefined);
+    } catch (error: unknown) {
+      const contractError = new ContractError(
+        'contract_revalidation_failed',
+        `재검증 콜백 실행 실패 / Revalidation callback failed: ${String(error)}`,
+        error,
+      );
+      this.logger.error('재검증 콜백 실패', { error: String(error) });
+      return err(contractError);
+    }
   }
 
   /**
@@ -215,11 +374,57 @@ export class ContractChangeManager {
    *
    * @param pkg - HandoffPackage / Handoff package
    * @returns 변경 이력 목록 (없으면 빈 배열) / Change history (empty array if none)
-   *
-   * @example
-   * const history = manager.getChangeHistory(pkg);
    */
   getChangeHistory(pkg: HandoffPackage): readonly ContractChangeRecord[] {
     return pkg.changeHistory ?? [];
   }
+}
+
+// ── 내부 함수 / Internal Functions ────────────────────────────────
+
+/**
+ * 의존 체인을 추적하여 간접 영향 기능을 식별한다.
+ * Traces dependency chain to find indirectly affected features.
+ *
+ * @description
+ * KR: 직접 변경된 기능에 의존하는 기능을 BFS로 탐색한다.
+ * EN: BFS traversal to find features depending on directly changed features.
+ *
+ * @param features - 현재 기능 목록 / Current feature list
+ * @param directlyAffected - 직접 영향받은 기능 ID 집합 / Directly affected feature ID set
+ * @returns 간접 영향 기능 ID 목록 / Indirectly affected feature IDs
+ */
+function traceDependencyChain(
+  features: readonly { readonly id: string; readonly dependencies: readonly string[] }[],
+  directlyAffected: ReadonlySet<string>,
+): readonly string[] {
+  // WHY: 역방향 의존성 맵 구축 (A가 B에 의존 → B 변경 시 A도 영향)
+  const reverseDeps = new Map<string, string[]>();
+  for (const feature of features) {
+    for (const dep of feature.dependencies) {
+      const dependents = reverseDeps.get(dep) ?? [];
+      dependents.push(feature.id);
+      reverseDeps.set(dep, dependents);
+    }
+  }
+
+  const visited = new Set<string>();
+  const queue = [...directlyAffected];
+  const indirectlyAffected: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    const dependents = reverseDeps.get(current) ?? [];
+    for (const dependent of dependents) {
+      if (!visited.has(dependent) && !directlyAffected.has(dependent)) {
+        visited.add(dependent);
+        indirectlyAffected.push(dependent);
+        queue.push(dependent);
+      }
+    }
+  }
+
+  return indirectlyAffected;
 }

@@ -89,3 +89,35 @@ export interface ContractChangeRecord {
   /** 회귀 테스트 필요 여부 / Whether regression tests are required */
   readonly regressionTestRequired: boolean;
 }
+
+// ── ContractImpactAnalysis ──────────────────────────────────────
+
+/**
+ * Contract 변경 영향 분석 결과 / Contract change impact analysis result
+ *
+ * @description
+ * KR: Contract 변경 후 영향받는 기능, 테스트, 의존 체인을 자동으로 식별한 결과.
+ * EN: Auto-identified affected features, tests, and dependency chains after Contract change.
+ */
+export interface ContractImpactAnalysis {
+  /** 직접 변경된 기능 ID / Directly changed feature IDs */
+  readonly changedFeatureIds: readonly string[];
+
+  /** 추가된 기능 ID / Added feature IDs */
+  readonly addedFeatureIds: readonly string[];
+
+  /** 제거된 기능 ID / Removed feature IDs */
+  readonly removedFeatureIds: readonly string[];
+
+  /** 의존성으로 영향받는 기능 ID (간접 영향) / Indirectly affected feature IDs via dependencies */
+  readonly dependencyAffectedIds: readonly string[];
+
+  /** 재실행 필요한 테스트의 기능 ID / Feature IDs requiring test re-execution */
+  readonly testRerunFeatureIds: readonly string[];
+
+  /** 재검증 필요 여부 / Whether re-verification is required */
+  readonly reverificationRequired: boolean;
+
+  /** 유저 재컨펌 필요 여부 / Whether user re-confirmation is required */
+  readonly userReconfirmRequired: boolean;
+}

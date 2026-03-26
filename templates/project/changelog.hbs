@@ -1,0 +1,33 @@
+# {{projectName}} 변경 이력 / Changelog
+
+{{#each versions}}
+## [{{version}}] - {{date}}
+
+{{#if added}}
+### 추가 / Added
+{{#each added}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if changed}}
+### 변경 / Changed
+{{#each changed}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if fixed}}
+### 수정 / Fixed
+{{#each fixed}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if removed}}
+### 삭제 / Removed
+{{#each removed}}
+- {{this}}
+{{/each}}
+{{/if}}
+{{/each}}

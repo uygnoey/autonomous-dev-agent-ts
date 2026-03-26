@@ -15,8 +15,11 @@
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { HandoffPackage } from 'layer1/types.js';
-import { extractModulesFromSpec } from 'layer2/parallel-coder-runner-helpers.js';
-import { runSupervisionPhase } from 'layer2/parallel-coder-supervision.js';
+import { extractModulesWithDependencyOrder } from 'layer2/parallel-coder-runner-helpers.js';
+import {
+  runSupervisionPhase,
+  runSupervisionWithVerdict,
+} from 'layer2/parallel-coder-supervision.js';
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent, CoderAllocation } from 'layer2/types.js';
 
@@ -67,7 +70,14 @@ export class ParallelCoderRunner {
    * @returns 에이전트 이벤트 스트림 / Agent event stream
    */
   async *runParallel(featureId: string, handoffPackage: HandoffPackage): AsyncIterable<AgentEvent> {
-    const modules = extractModulesFromSpec(handoffPackage.specDocument);
+    // WHY: PI-011 — architect 에이전트 기반 의존성 순서 분석 시도, 실패 시 정적 파싱 폴백
+    const modules = await extractModulesWithDependencyOrder(
+      handoffPackage.specDocument,
+      this.deps.agentGenerator,
+      this.deps.agentSpawner,
+      featureId,
+      this.logger,
+    );
     const allocResult = this.deps.coderAllocator.allocate(featureId, modules);
 
     if (!allocResult.ok) {
@@ -107,7 +117,57 @@ export class ParallelCoderRunner {
     }
 
     // WHY: coder 완료 후 architect(스펙 준수) → reviewer(코드 품질) 순서로 감독 세션 실행
-    yield* runSupervisionPhase(featureId, handoffPackage, this.deps, this.logger);
+    const supervisionResult = await runSupervisionWithVerdict(
+      featureId,
+      handoffPackage,
+      this.deps,
+      this.logger,
+    );
+
+    if (supervisionResult.passed) {
+      for (const verdict of supervisionResult.verdicts) {
+        for (const event of verdict.events) {
+          yield event;
+        }
+      }
+      return;
+    }
+
+    // WHY: M-002 — 감독 피드백을 coder에 전달하여 의미있는 재실행
+    const feedbackText = supervisionResult.verdicts
+      .filter((v) => !v.passed)
+      .map((v) => `[${v.agentName}] ${v.feedback}`)
+      .join('\n');
+
+    const handoffWithFeedback: HandoffPackage = {
+      ...handoffPackage,
+      specDocument: `${handoffPackage.specDocument}\n\n## 이전 코드 리뷰 피드백 (수정 필요)\n${feedbackText}`,
+    };
+
+    yield createEvent('message', 'CODE Phase 감독 불합격 — coder 재실행 1/1');
+
+    const retryResults = await this.runInBatches(allocations, handoffWithFeedback);
+    for (const result of retryResults) {
+      for (const event of result.events) {
+        yield event;
+      }
+    }
+
+    const retrySupervision = await runSupervisionWithVerdict(
+      featureId,
+      handoffWithFeedback,
+      this.deps,
+      this.logger,
+    );
+    for (const verdict of retrySupervision.verdicts) {
+      for (const event of verdict.events) {
+        yield event;
+      }
+    }
+
+    if (!retrySupervision.passed) {
+      this.logger.warn('CODE Phase 감독 재실행 후에도 불합격 — 1회 제한으로 종료', { featureId });
+    }
   }
 
   /**
@@ -209,9 +269,10 @@ export class ParallelCoderRunner {
         // WHY: AgentSpawner가 throw 대신 에러 이벤트를 yield하므로 감지
         if (event.type === 'error') {
           const meta = event.metadata?.error;
-          errorEvent = meta instanceof AgentError
-            ? meta
-            : new AgentError('agent_execution_error', event.content);
+          errorEvent =
+            meta instanceof AgentError
+              ? meta
+              : new AgentError('agent_execution_error', event.content);
         }
       }
 
