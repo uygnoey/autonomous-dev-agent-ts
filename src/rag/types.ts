@@ -7,6 +7,7 @@
  *     search results, and chunk metadata.
  */
 
+import type { AdevError } from 'core/errors.js';
 import type { Result } from 'core/types.js';
 
 // ── 임베딩 프로바이더 / Embedding Provider ─────────────────────
@@ -148,4 +149,88 @@ export interface IndexDirectoryOptions {
 
   /** 프로젝트 ID (기본: 'default') / Project ID */
   readonly projectId?: string;
+}
+
+// ── 벡터 스토어 / Vector Store ─────────────────────────────────
+
+/**
+ * 벡터 스토어 인터페이스 / Vector store abstraction
+ *
+ * @description
+ * KR: 벡터 upsert, 검색, 삭제, 연결 해제를 추상화하는 저수준 인터페이스.
+ * EN: Low-level abstraction for vector upsert, search, delete, and connection teardown.
+ */
+export interface VectorStore {
+  /**
+   * 벡터 upsert / Upsert a vector with metadata
+   *
+   * @param id - 레코드 고유 ID / Record unique ID
+   * @param vector - 임베딩 벡터 / Embedding vector
+   * @param metadata - 부가 메타데이터 / Additional metadata
+   * @returns 성공 시 void, 실패 시 AdevError / void on success, AdevError on failure
+   */
+  upsert(
+    id: string,
+    vector: number[],
+    metadata: Record<string, unknown>,
+  ): Promise<Result<void, AdevError>>;
+
+  /**
+   * 유사도 검색 / Similarity search
+   *
+   * @param vector - 쿼리 벡터 / Query vector
+   * @param limit - 최대 반환 건수 / Max results to return
+   * @returns 검색 결과 배열 / Array of search results
+   */
+  search(vector: number[], limit: number): Promise<Result<VectorSearchResult[], AdevError>>;
+
+  /**
+   * 벡터 삭제 / Delete a vector by ID
+   *
+   * @param id - 삭제 대상 레코드 ID / Record ID to delete
+   * @returns 성공 시 void, 실패 시 AdevError / void on success, AdevError on failure
+   */
+  delete(id: string): Promise<Result<void, AdevError>>;
+
+  /**
+   * 연결 해제 / Close the store connection
+   */
+  close(): Promise<void>;
+}
+
+/**
+ * 벡터 검색 결과 / Vector search result entry
+ *
+ * @description
+ * KR: VectorStore.search()가 반환하는 단일 검색 결과. ID, 유사도 점수, 메타데이터를 포함한다.
+ * EN: Single search result returned by VectorStore.search(). Contains ID, similarity score, and metadata.
+ */
+export interface VectorSearchResult {
+  /** 레코드 ID / Record ID */
+  readonly id: string;
+  /** 유사도 점수 (0~1, 높을수록 유사) / Similarity score (0~1, higher = more similar) */
+  readonly score: number;
+  /** 레코드 메타데이터 / Record metadata */
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+
+// ── RAG 컨텍스트 / RAG Context ─────────────────────────────────
+
+/**
+ * RAG 컨텍스트 — Claude에 주입되는 검색 결과 / RAG context injected into Claude prompts
+ *
+ * @description
+ * KR: 코드 청크, 설계 결정, 실패 이력 검색 결과를 묶어 Claude 프롬프트에 주입하는 컨텍스트.
+ * EN: Bundles code chunks, design decisions, and failure history search results
+ *     for injection into Claude prompts.
+ */
+export interface RAGContext {
+  /** 코드 청크 검색 결과 / Code chunk search results */
+  readonly codeChunks: readonly VectorSearchResult[];
+  /** 설계 결정 검색 결과 / Design decision search results */
+  readonly designDecisions: readonly VectorSearchResult[];
+  /** 실패 이력 검색 결과 / Failure history search results */
+  readonly failureHistory: readonly VectorSearchResult[];
+  /** 총 토큰 추정치 / Estimated total token count */
+  readonly totalTokenEstimate: number;
 }

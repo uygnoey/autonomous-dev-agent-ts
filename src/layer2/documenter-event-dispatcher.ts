@@ -193,7 +193,7 @@ export class DocumenterEventDispatcher {
     messages: string[],
   ): Promise<void> {
     const docContent = messages.join('\n');
-    if (!docContent.trim() || !this.projectPath) return;
+    if (!(docContent.trim() && this.projectPath)) return;
 
     try {
       const docsDir = join(this.projectPath, '.adev', 'docs');

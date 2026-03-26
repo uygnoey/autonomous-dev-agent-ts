@@ -8,15 +8,15 @@
  *     Concentrates cli → layer2 direct dependencies into this file.
  */
 
-import type { Logger } from 'core/logger.js';
-import type { VerificationConfig } from 'core/config-schema.js';
 import type { AuthProvider } from 'auth/types.js';
+import type { VerificationConfig } from 'core/config-schema.js';
+import type { Logger } from 'core/logger.js';
+import { ProcessExecutor } from 'core/process-executor.js';
 import { CleanEnvManager } from 'layer2/clean-env-manager.js';
 import { IntegrationTester } from 'layer2/integration-tester.js';
 import { Layer2Bootstrap } from 'layer2/layer2-bootstrap.js';
 import { UserCheckpoint } from 'layer2/user-checkpoint.js';
 import type { UserInputProvider } from 'layer2/user-checkpoint.js';
-import { ProcessExecutor } from 'core/process-executor.js';
 import type { RagSearcher } from 'rag/search.js';
 
 /**

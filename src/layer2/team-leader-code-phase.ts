@@ -17,10 +17,10 @@ import type { ParallelCoderRunner } from 'layer2/parallel-coder-runner.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
 import type { SessionManager } from 'layer2/session-manager.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
+import { createEvent, executePhase, spawnDocumenter } from 'layer2/team-leader-helpers.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { AgentEvent } from 'layer2/types.js';
 import type { RagSearcher } from 'rag/search.js';
-import { createEvent, executePhase, spawnDocumenter } from 'layer2/team-leader-helpers.js';
 
 /**
  * CODE Phase에서 갱신 가능한 수정 파일 목록 / Mutable modified files for CODE phase update

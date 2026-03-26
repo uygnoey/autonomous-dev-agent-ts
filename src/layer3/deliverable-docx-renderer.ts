@@ -26,6 +26,9 @@ import {
 } from 'docx';
 import type { BusinessDeliverableType } from 'layer3/doc-types.js';
 
+/** 브랜드 색상 코드 / Brand color hex code */
+const BRAND_COLOR_HEX = '1F3864';
+
 /** docx 폰트 설정 상수 / docx font configuration constants */
 const DOCX_FONTS = {
   TITLE_SIZE: 56,
@@ -214,7 +217,7 @@ export async function writeDeliverableAsDocx(
           text: title,
           bold: true,
           size: DOCX_FONTS.TITLE_SIZE,
-          color: '1F3864',
+          color: BRAND_COLOR_HEX,
           underline: { type: UnderlineType.SINGLE },
         }),
       ],

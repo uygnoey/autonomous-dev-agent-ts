@@ -15,12 +15,12 @@ import type { AgentName, Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
+import type { DocumenterEventType } from 'layer2/documenter-event-types.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
 import type { ProgressTracker } from 'layer2/progress-tracker.js';
 import type { SessionManager } from 'layer2/session-manager.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
-import type { DocumenterEventType } from 'layer2/documenter-event-types.js';
 import type { AgentEvent } from 'layer2/types.js';
 import type { RagSearcher } from 'rag/search.js';
 

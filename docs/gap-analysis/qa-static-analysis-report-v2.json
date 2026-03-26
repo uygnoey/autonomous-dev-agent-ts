@@ -1,0 +1,45 @@
+{
+  "reportType": "qa-static-analysis",
+  "version": 2,
+  "analyzedAt": "2026-03-26",
+  "summary": {
+    "tsErrorCount": 0,
+    "biomeErrorCount": 0,
+    "biomeWarningCount": 0,
+    "missingInterfaces": 0,
+    "verdict": "PASS"
+  },
+  "tsErrors": [],
+  "biomeIssues": [],
+  "interfaceChecks": [
+    { "name": "HandoffPackage", "file": "src/layer1/contract-types.ts:75", "status": "EXISTS" },
+    { "name": "PhaseState", "file": "src/layer2/phase-types.ts:22", "status": "EXISTS" },
+    { "name": "PhaseFSM", "file": "src/layer2/phase-types.ts:41", "status": "EXISTS" },
+    { "name": "EmbeddingProvider", "file": "src/rag/types.ts:25", "status": "EXISTS" },
+    { "name": "AgentExecutor", "file": "src/layer2/agent-types.ts:81", "status": "EXISTS" },
+    { "name": "AuthProvider", "file": "src/auth/types.ts:63", "status": "EXISTS" },
+    { "name": "VectorStore", "file": "src/rag/types.ts:163", "status": "EXISTS" },
+    { "name": "SessionSnapshot", "file": "src/layer2/session-types.ts:26", "status": "EXISTS" },
+    { "name": "RAGContext", "file": "src/rag/types.ts:227", "status": "EXISTS" },
+    { "name": "ContractSpec", "file": "src/layer1/contract-types.ts:117", "status": "EXISTS" },
+    { "name": "VectorSearchResult", "file": "src/rag/types.ts:208", "status": "EXISTS" },
+    { "name": "VerificationResult", "file": "src/layer2/phase-types.ts:108", "status": "EXISTS" }
+  ],
+  "newFilesImportCheck": [
+    { "file": "src/layer2/v2-session-executor-design.ts", "importedBy": ["src/layer2/v2-session-executor.ts"], "status": "OK" },
+    { "file": "src/layer3/bug-escalator-snapshot.ts", "importedBy": ["src/layer3/bug-escalator.ts"], "status": "OK" },
+    { "file": "src/layer3/bug-escalator-trigger.ts", "importedBy": ["src/layer3/bug-escalator.ts"], "status": "OK" },
+    { "file": "src/layer1/contract-change-impact.ts", "importedBy": ["src/layer1/contract-change-manager.ts"], "status": "OK" },
+    { "file": "src/layer2/user-checkpoint-types.ts", "importedBy": ["src/layer2/user-checkpoint.ts", "src/layer2/user-checkpoint-formatter.ts"], "status": "OK" },
+    { "file": "src/layer2/user-checkpoint-formatter.ts", "importedBy": ["src/layer2/user-checkpoint.ts"], "status": "OK" },
+    { "file": "src/layer3/doc-collaborator-generator.ts", "importedBy": ["src/layer3/doc-collaborator.ts"], "status": "OK" },
+    { "file": "src/cli/commands/project-crud-scaffold.ts", "importedBy": ["src/cli/commands/project-crud.ts"], "status": "OK" },
+    { "file": "src/cli/commands/project-crud-writes.ts", "importedBy": ["src/cli/commands/project-crud.ts"], "status": "OK" }
+  ],
+  "resolvedFromV1": [
+    { "category": "biomeErrors", "count": 23, "detail": "organizeImports 17건 + useTemplate 3건 + noUnusedTemplateLiteral 3건 → 전부 해결" },
+    { "category": "biomeWarnings", "count": 7, "detail": "noNonNullAssertion 4건 + useSimplifiedLogicExpression 3건 → 전부 해결" },
+    { "category": "missingInterfaces", "count": 5, "detail": "PhaseState, PhaseFSM, VectorStore, RAGContext, ContractSpec → 전부 추가됨" }
+  ],
+  "newIssues": []
+}

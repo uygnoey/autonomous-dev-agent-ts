@@ -8,10 +8,10 @@
  *     Centrally manages Agent Teams creation, agent spawning, and deletion.
  */
 
-import type { Logger } from 'core/logger.js';
 import { AgentError } from 'core/errors.js';
+import type { Logger } from 'core/logger.js';
 import type { Result } from 'core/types.js';
-import { ok, err } from 'core/types.js';
+import { err, ok } from 'core/types.js';
 
 /**
  * Agent Teams 라이프사이클 코디네이터 / Agent Teams lifecycle coordinator

@@ -13,17 +13,15 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type {
   HookCallbackMatcher,
-  PreToolUseHookInput,
   PostToolUseHookInput,
+  PreToolUseHookInput,
   TeammateIdleHookInput,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
 import type { TestingConfig, VerificationConfig } from 'core/config-schema.js';
 import type { Logger } from 'core/logger.js';
-import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { ProcessExecutor } from 'core/process-executor.js';
 import type { AgentName } from 'core/types.js';
-import type { RagSearcher } from 'rag/search.js';
 import { ClaudeApi } from 'layer1/claude-api.js';
 import { Layer1Verifier } from 'layer1/verifier.js';
 import { AgentGenerator } from 'layer2/agent-generator.js';
@@ -45,9 +43,11 @@ import { StreamMonitor } from 'layer2/stream-monitor.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { TeamLeader } from 'layer2/team-leader.js';
 import { TokenMonitor } from 'layer2/token-monitor.js';
+import type { UserCheckpoint, UserInputProvider } from 'layer2/user-checkpoint.js';
 import { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 import { VerificationGate } from 'layer2/verification-gate.js';
 import { resolveParallelWorkers } from 'layer2/worker-resolver.js';
+import type { RagSearcher } from 'rag/search.js';
 
 // ── Layer2BootstrapOptions ──────────────────────────────────────
 

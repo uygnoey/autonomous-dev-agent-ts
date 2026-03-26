@@ -1,0 +1,385 @@
+{
+  "reportType": "gap-analysis-summary",
+  "version": "v2.4",
+  "analyzedAt": "2026-03-26",
+  "agents": ["architect", "reviewer", "qa", "qc"],
+
+  "overallVerdict": "PARTIAL_FAIL",
+  "overallScore": {
+    "moduleImplementation": "85%",
+    "e2eConfidence": "40%",
+    "testPassRate": "100%",
+    "fileCoverage": "51.8%",
+    "staticAnalysis": "FAIL"
+  },
+
+  "architect": {
+    "summary": {
+      "missing": 8,
+      "partial": 12,
+      "done": 65,
+      "architectureIssues": 4,
+      "implementationCoverage": "85%",
+      "e2eConfidence": "40%"
+    },
+    "highPriority": [
+      {
+        "id": "H1",
+        "feature": "CLI → Layer1 → Layer2 → Layer3 end-to-end 통합 테스트",
+        "reason": "개별 모듈은 구현됐으나 전체 파이프라인이 실제 동작하는지 검증 없음. 가장 큰 갭."
+      },
+      {
+        "id": "H2",
+        "feature": "DESIGN Phase Agent Teams 실제 SDK 연동 검증",
+        "reason": "V2SessionExecutor env 설정은 되나 실제 teammate spawn + SendMessage 토론이 SDK와 동작하는지 미검증"
+      },
+      {
+        "id": "H3",
+        "feature": "Layer2 Bootstrap 전체 의존성 조립 + 스모크 테스트",
+        "reason": "모든 컴포넌트가 올바르게 조립되어 TeamLeader.executeFeature()가 실행 가능한지 확인 필요"
+      },
+      {
+        "id": "H4",
+        "feature": "세션 복원 흐름 실제 SDK 호환 검증",
+        "reason": "session-restore-orchestrator.ts의 SDK resume + RAG fallback 경로 실제 동작 미검증"
+      }
+    ],
+    "mediumPriority": [
+      { "id": "M1", "feature": "4-Provider Tier 자동 fallback 로직 검증" },
+      { "id": "M2", "feature": "Subscription 모드 세부 추적 (5시간 윈도우, Pro/Max 추정)" },
+      { "id": "M3", "feature": "documenter 이벤트 5종 전체 트리거 검증" },
+      { "id": "M4", "feature": "agent.md 유저 검토 TUI 흐름 통합" },
+      { "id": "M5", "feature": "Contract 변경 관리 end-to-end" },
+      { "id": "M6", "feature": "비즈니스 산출물 렌더링 품질 (PDF/PPTX/DOCX)" },
+      { "id": "M7", "feature": "Layer3 → Layer2 결합도 개선 (인터페이스 역전)" }
+    ],
+    "lowPriority": [
+      { "id": "L1", "feature": "배포 인프라 (npm publish, brew tap, curl installer)" },
+      { "id": "L2", "feature": "OpenAI EmbeddingProvider (스펙 외 추가) 정리 또는 문서화" },
+      { "id": "L3", "feature": "Layer2 파일 50+ → 모듈 하위 디렉토리 정리" },
+      { "id": "L4", "feature": "모듈 테스트/E2E 테스트 커버리지 확대" }
+    ],
+    "missing": [
+      {
+        "category": "CLI",
+        "feature": "adev auth 토큰 갱신/만료 안내 흐름",
+        "specLocation": "§3.2",
+        "note": "auth.ts 존재하나 claude setup-token 연동 및 만료 안내 미구현 가능성"
+      },
+      {
+        "category": "Layer2",
+        "feature": "DESIGN Phase Agent Teams 실제 SDK 연동",
+        "specLocation": "§8.1, §8.4",
+        "note": "env 설정 구현됨, SDK 호출 통합 미검증"
+      },
+      {
+        "category": "Layer2",
+        "feature": "실시간 architect/reviewer 감독 세션 (CODE Phase) end-to-end",
+        "specLocation": "§8.4",
+        "note": "parallel-coder-supervision.ts 존재하나 별도 세션 실시간 감독 패턴 미확인"
+      },
+      {
+        "category": "통합",
+        "feature": "CLI → Layer1 → Layer2 → Layer3 end-to-end 파이프라인",
+        "specLocation": "§14",
+        "note": "start-pipeline.ts 존재하나 실제 SDK 호출 통합 테스트 부재"
+      },
+      {
+        "category": "Layer1",
+        "feature": "대화 중 LanceDB 영구 저장 CLI 통합",
+        "specLocation": "§6.2, §6.3",
+        "note": "conversation.ts에 구현됐으나 CLI 대화 루프와 end-to-end 통합 미확인"
+      },
+      {
+        "category": "Layer3",
+        "feature": "비즈니스 산출물 실제 렌더링 품질 검증",
+        "specLocation": "§9.1",
+        "note": "렌더러 코드 존재하나 라이브러리 연동 품질 미검증"
+      },
+      {
+        "category": "Layer2",
+        "feature": "Contract 변경 관리 전체 흐름 통합",
+        "specLocation": "§6.7",
+        "note": "contract-change-manager.ts 존재하나 전체 흐름 통합 미확인"
+      },
+      {
+        "category": "다중 프로젝트",
+        "feature": "~/.adev/ 글로벌 디렉토리 projects.json 관리 완전성",
+        "specLocation": "§5.2",
+        "note": "init-scaffold.ts에서 생성하나 완전성 미확인"
+      }
+    ],
+    "architectureIssues": [
+      {
+        "type": "layer-coupling",
+        "description": "layer3/bug-escalator.ts가 layer2/team-leader.ts를 직접 import — 허용 범위이나 결합도 과도",
+        "files": ["src/layer3/bug-escalator.ts", "src/layer2/team-leader.ts"]
+      },
+      {
+        "type": "layer-coupling",
+        "description": "layer3/doc-collaborator.ts가 layer2/agent-spawner.ts를 직접 import",
+        "files": ["src/layer3/doc-collaborator.ts", "src/layer2/agent-spawner.ts"]
+      },
+      {
+        "type": "layer-separation",
+        "description": "src/cli/layer2-runner.ts — CLI에서 Layer2 직접 실행 (Layer1 거치지 않는 경로)",
+        "files": ["src/cli/layer2-runner.ts"]
+      },
+      {
+        "type": "file-bloat",
+        "description": "src/layer2/ 디렉토리 50+ 파일 — 스펙 기준(16개)보다 상당히 많음. 탐색 어려움",
+        "files": ["src/layer2/"]
+      }
+    ]
+  },
+
+  "reviewer": {
+    "summary": {
+      "anyTypeCount": 0,
+      "consoleLogCount": 0,
+      "processEnvCount": 3,
+      "throwOveruseCount": 1,
+      "oversizedFiles": 31,
+      "jsdocMissingCount": 2,
+      "nonNullAssertionCount": 5,
+      "hardcodedValueCount": 12
+    },
+    "verdict": "HIGH_ISSUES",
+    "positives": [
+      "any 타입 완전 제거",
+      "console.log 완전 제거",
+      "Result 패턴 일관 적용",
+      "이중언어 JSDoc 양호",
+      "순환 의존성 없음"
+    ],
+    "critical": [],
+    "high": [
+      { "file": "src/cli/commands/project-crud.ts", "lineCount": 564, "issue": "300줄 초과 규칙 위반" },
+      { "file": "src/layer3/bug-escalator.ts", "lineCount": 493, "issue": "300줄 초과" },
+      { "file": "src/layer3/doc-integrator-fragment.ts", "lineCount": 490, "issue": "300줄 초과" },
+      { "file": "src/layer2/v2-session-executor.ts", "lineCount": 489, "issue": "300줄 초과" },
+      { "file": "src/layer2/user-checkpoint.ts", "lineCount": 483, "issue": "300줄 초과" },
+      { "file": "src/layer3/doc-collaborator.ts", "lineCount": 463, "issue": "300줄 초과" },
+      { "file": "src/layer1/contract-change-manager.ts", "lineCount": 430, "issue": "300줄 초과" }
+    ],
+    "medium": [
+      { "issue": "300~415줄 초과 파일 24개", "action": "점진적 분할 권장" },
+      { "issue": "non-null assertion 5건", "files": ["src/layer2/stream-monitor.ts:260", "src/layer2/team-leader-phase.ts:223", "src/auth/subscription-auth.ts:272", "src/layer1/agent-md-reviewer.ts:96"], "action": "optional chaining + 타입 가드로 대체" },
+      { "issue": "process.env 직접 접근 3건", "files": ["src/index.ts:73", "src/layer2/v2-session-env-builder.ts:42", "src/core/process-executor.ts:121"], "action": "config.ts 경유 권장" },
+      { "issue": "하드코딩 매직값 12건", "action": "config 또는 명명 상수로 통합" },
+      { "issue": "JSDoc 누락 export 함수 2건", "files": ["src/rag/embedding-factory.ts::parseEmbeddingProviderType", "src/layer2/team-leader-phase.ts::advancePhase"] }
+    ],
+    "hardcodedValues": [
+      { "file": "src/rag/voyage-client.ts", "line": 18, "value": "https://api.voyageai.com/v1/embeddings" },
+      { "file": "src/rag/openai-embeddings.ts", "line": 21, "value": "https://api.openai.com/v1/embeddings" },
+      { "file": "src/mcp/builtin/web-search/search-operations.ts", "line": 121, "value": "https://html.duckduckgo.com/html/" },
+      { "file": "src/layer1/claude-api.ts", "line": 48, "value": "claude-opus-4-20250514" },
+      { "file": "src/layer1/contract-verifier.ts", "line": 27, "value": "claude-haiku-4-5-20251001" },
+      { "file": "src/layer1/contract-ai-consistency-verifier.ts", "line": 33, "value": "claude-haiku-4-5-20251001" },
+      { "file": "src/layer1/skill-md-generator.ts", "line": 204, "value": "1024 (maxTokens)" },
+      { "file": "src/layer1/skill-md-generator.ts", "line": 289, "value": "4096 (maxTokens)" },
+      { "file": "src/layer1/claude-api.ts", "line": 172, "value": "4096 (maxTokens default)" },
+      { "file": "src/layer3/deliverable-docx-renderer.ts", "line": 217, "value": "1F3864 (color code)" },
+      { "file": "src/layer3/deliverable-pptx-renderer.ts", "line": 113, "value": "1F3864, 333333 (color codes)" },
+      { "file": "src/layer3/deliverable-pdf-renderer.ts", "line": 116, "value": "#666666, #333333, #999999 (color codes)" }
+    ]
+  },
+
+  "qa": {
+    "summary": {
+      "tsErrorCount": 0,
+      "biomeErrorCount": 23,
+      "biomeWarningCount": 7,
+      "missingInterfaces": 5,
+      "verdict": "FAIL"
+    },
+    "tsErrors": [],
+    "biomeIssuesByType": {
+      "organizeImports": {
+        "count": 17,
+        "fixable": true,
+        "files": [
+          "src/cli/commands/start-execution.ts",
+          "src/cli/commands/start-pipeline.ts",
+          "src/cli/layer2-runner.ts",
+          "src/core/file-size-guard.ts",
+          "src/layer2/agent-coordinator.ts",
+          "src/layer2/layer2-bootstrap.ts",
+          "src/layer2/session-restore-orchestrator-fallback.ts",
+          "src/layer2/session-restore-orchestrator.ts",
+          "src/layer2/team-leader.ts",
+          "src/layer2/team-leader-code-phase.ts",
+          "src/layer2/team-leader-design-phase.ts",
+          "src/layer2/team-leader-helpers.ts",
+          "src/layer2/team-leader-types.ts",
+          "src/layer2/team-leader-verify.ts",
+          "src/layer2/team-leader-test-phase.ts",
+          "src/layer2/v2-session-executor.ts",
+          "src/rag/embedding-factory.ts"
+        ]
+      },
+      "useTemplate": {
+        "count": 3,
+        "fixable": true,
+        "files": [
+          "src/cli/commands/project-crud.ts:238",
+          "src/layer1/conversation-fsm.ts:191",
+          "src/layer1/conversation.ts:74"
+        ]
+      },
+      "noUnusedTemplateLiteral": {
+        "count": 3,
+        "fixable": true,
+        "files": [
+          "src/layer1/skill-md-generator.ts:227",
+          "src/layer1/skill-md-generator.ts:237",
+          "src/layer1/skill-md-generator.ts:247"
+        ]
+      },
+      "noNonNullAssertion": {
+        "count": 4,
+        "fixable": false,
+        "files": [
+          "src/auth/subscription-auth.ts:272",
+          "src/layer1/agent-md-reviewer.ts:96",
+          "src/layer2/team-leader-phase.ts:223"
+        ]
+      },
+      "useSimplifiedLogicExpression": {
+        "count": 3,
+        "fixable": true,
+        "files": [
+          "src/layer1/contract-change-manager.ts:421",
+          "src/layer1/skill-md-generator.ts:233",
+          "src/layer2/documenter-event-dispatcher.ts:196"
+        ]
+      }
+    },
+    "missingInterfaces": [
+      { "name": "PhaseState", "status": "MISSING", "note": "phase-engine.ts에 로직 있으나 독립 인터페이스 없음" },
+      { "name": "PhaseFSM", "status": "MISSING", "note": "FSM 구현 있으나 인터페이스 미정의" },
+      { "name": "VectorStore", "status": "MISSING", "note": "vector-store.ts에 클래스 있으나 인터페이스 분리 안 됨" },
+      { "name": "RAGContext", "status": "MISSING", "note": "RAG 컨텍스트 타입 정의 없음" },
+      { "name": "ContractSpec", "status": "MISSING", "note": "HandoffPackage는 있으나 ContractSpec 인터페이스 별도 없음" }
+    ],
+    "existingInterfaces": [
+      { "name": "HandoffPackage", "file": "src/layer1/contract-types.ts:75" },
+      { "name": "EmbeddingProvider", "file": "src/rag/types.ts:24" },
+      { "name": "AgentExecutor", "file": "src/layer2/agent-types.ts:81" },
+      { "name": "AuthProvider", "file": "src/auth/types.ts:63" },
+      { "name": "SessionSnapshot", "file": "src/layer2/session-types.ts:26" },
+      { "name": "VerificationResult", "file": "src/layer2/phase-types.ts:51" }
+    ]
+  },
+
+  "qc": {
+    "summary": {
+      "total": 205837,
+      "passed": 205837,
+      "failed": 0,
+      "errors": 0,
+      "fileCoverage": "51.8% (88/170 파일)"
+    },
+    "verdict": "PASS",
+    "breakdown": {
+      "unit": { "count": 13512, "files": 106, "durationSec": 35.21, "result": "PASS" },
+      "module": { "count": 1068, "files": 8, "durationSec": 5.34, "result": "PASS" },
+      "e2e": { "count": 191233, "files": 8, "durationSec": 5.83, "result": "PASS" },
+      "integration": { "count": 24, "files": 2, "durationSec": 4.28, "result": "PASS" }
+    },
+    "untestedByLayer": {
+      "cli": 26,
+      "core": 3,
+      "layer1": 5,
+      "layer2": 20,
+      "layer3": 13,
+      "mcp": 13,
+      "rag": 3,
+      "total": 82
+    },
+    "untestedHighPriority": [
+      { "file": "src/core/config-merge.ts", "priority": "HIGH", "reason": "전체 시스템 기반 모듈" },
+      { "file": "src/core/config-schema.ts", "priority": "HIGH", "reason": "전체 시스템 기반 모듈" },
+      { "file": "src/core/file-size-guard.ts", "priority": "HIGH", "reason": "전체 시스템 기반 모듈" },
+      { "file": "src/layer2/layer2-bootstrap.ts", "priority": "HIGH", "reason": "전체 Layer2 조립 진입점" },
+      { "file": "src/layer2/team-leader-code-phase.ts", "priority": "HIGH", "reason": "핵심 오케스트레이션 로직" },
+      { "file": "src/layer2/team-leader-design-phase.ts", "priority": "HIGH", "reason": "핵심 오케스트레이션 로직" },
+      { "file": "src/layer2/team-leader-test-phase.ts", "priority": "HIGH", "reason": "핵심 오케스트레이션 로직" },
+      { "file": "src/layer2/team-leader-verify.ts", "priority": "HIGH", "reason": "핵심 오케스트레이션 로직" },
+      { "file": "src/layer2/session-restore-orchestrator-fallback.ts", "priority": "HIGH", "reason": "런타임 안정성 핵심" },
+      { "file": "src/layer2/v2-session-factory.ts", "priority": "HIGH", "reason": "세션 생성 진입점" }
+    ],
+    "notes": [
+      "E2E 191,233개는 파라미터라이즈 또는 프로퍼티 기반 테스트로 추정",
+      "테스트 실행 시 MCP builtin 실행파일 미존재 로그 노이즈 발생 (테스트 자체는 통과)",
+      "에러 케이스 테스트에서 Logger mock 미적용으로 stderr 노이즈 발생"
+    ]
+  },
+
+  "actionPlan": {
+    "immediate": [
+      {
+        "priority": "P0",
+        "action": "Biome import 정렬 자동 수정",
+        "command": "bunx biome format src/ --write",
+        "effort": "5분",
+        "impact": "biome 23개 error 중 17개 즉시 해결"
+      },
+      {
+        "priority": "P0",
+        "action": "useTemplate / noUnusedTemplateLiteral 수정",
+        "files": ["src/cli/commands/project-crud.ts:238", "src/layer1/conversation-fsm.ts:191", "src/layer1/conversation.ts:74", "src/layer1/skill-md-generator.ts:227,237,247"],
+        "effort": "30분",
+        "impact": "biome error 6건 해결"
+      }
+    ],
+    "shortTerm": [
+      {
+        "priority": "P1",
+        "action": "누락 인터페이스 5종 정의",
+        "files": ["src/layer2/phase-types.ts (PhaseState, PhaseFSM 추가)", "src/rag/types.ts (VectorStore, RAGContext 추가)", "src/layer1/contract-types.ts (ContractSpec 추가)"],
+        "effort": "2~3시간"
+      },
+      {
+        "priority": "P1",
+        "action": "non-null assertion 5건 → optional chaining 대체",
+        "files": ["src/layer2/stream-monitor.ts:260", "src/layer2/team-leader-phase.ts:223", "src/auth/subscription-auth.ts:272", "src/layer1/agent-md-reviewer.ts:96"],
+        "effort": "1~2시간"
+      },
+      {
+        "priority": "P1",
+        "action": "HIGH 초과 파일 7개 분할",
+        "files": ["src/cli/commands/project-crud.ts (564줄)", "src/layer3/bug-escalator.ts (493줄)", "src/layer3/doc-integrator-fragment.ts (490줄)", "src/layer2/v2-session-executor.ts (489줄)", "src/layer2/user-checkpoint.ts (483줄)", "src/layer3/doc-collaborator.ts (463줄)", "src/layer1/contract-change-manager.ts (430줄)"],
+        "effort": "1~2일"
+      },
+      {
+        "priority": "P2",
+        "action": "core 3개 미커버 모듈 테스트 추가",
+        "files": ["tests/unit/core/config-merge.test.ts", "tests/unit/core/config-schema.test.ts", "tests/unit/core/file-size-guard.test.ts"],
+        "effort": "반나절"
+      }
+    ],
+    "midTerm": [
+      {
+        "priority": "P3",
+        "action": "layer2-bootstrap 스모크 테스트 + end-to-end 통합 검증",
+        "effort": "2~3일"
+      },
+      {
+        "priority": "P3",
+        "action": "team-leader 분할 모듈 (7개) 단위 테스트 추가",
+        "effort": "1일"
+      },
+      {
+        "priority": "P3",
+        "action": "하드코딩 모델명·URL·토큰값 → config 상수로 이동",
+        "effort": "반나절"
+      },
+      {
+        "priority": "P3",
+        "action": "layer3 렌더러 8개 단위 테스트 추가",
+        "effort": "1일"
+      }
+    ]
+  }
+}

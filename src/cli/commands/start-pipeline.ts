@@ -18,8 +18,8 @@ import {
 } from '../../layer1/contract-verification-reporter.js';
 import type { HandoffPackage } from '../../layer1/types.js';
 import type { ChatUi } from '../tui/chat.js';
-import { generateHandoffDocs } from './start-handoff-docs.js';
 import { generateAgentMds, generateSkillMds, runLayer2, runLayer3 } from './start-execution.js';
+import { generateHandoffDocs } from './start-handoff-docs.js';
 import type { Layer1SessionState } from './start-types.js';
 
 /**

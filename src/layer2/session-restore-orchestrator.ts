@@ -12,8 +12,8 @@ import type { AgentName } from 'core/types.js';
 import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { AgentConfig, AgentEvent } from 'layer2/agent-types.js';
 import {
-  fallbackWithRagContext as fallbackWithRagContextFn,
   buildFallbackSessionConfig as buildFallbackSessionConfigFn,
+  fallbackWithRagContext as fallbackWithRagContextFn,
 } from 'layer2/session-restore-orchestrator-fallback.js';
 import {
   buildEnvFromAuthProvider,

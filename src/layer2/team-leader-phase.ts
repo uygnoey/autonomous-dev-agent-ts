@@ -220,7 +220,10 @@ async function requestUserConfirmation(
   };
 
   // WHY: userCheckpoint와 userInputProvider는 호출 전에 존재 확인 완료
-  return deps.userCheckpoint!.requestConfirmation(testReport, deps.userInputProvider!);
+  if (!(deps.userCheckpoint && deps.userInputProvider)) {
+    return { decision: 'approve' };
+  }
+  return deps.userCheckpoint.requestConfirmation(testReport, deps.userInputProvider);
 }
 
 // ── Phase 전환 / Phase Transition ───────────────────────────────

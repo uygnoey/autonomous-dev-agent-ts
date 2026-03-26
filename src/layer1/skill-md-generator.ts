@@ -16,6 +16,14 @@ import type { Logger } from 'core/logger.js';
 import { type Result, err, ok } from 'core/types.js';
 import type { ClaudeApi } from 'layer1/claude-api.js';
 
+// ── 상수 / Constants ────────────────────────────────────────────
+
+/** Skill 추출용 짧은 응답 토큰 한도 / Short response token limit for skill extraction */
+const SKILL_MD_MAX_TOKENS_SHORT = 1024;
+
+/** Skill MD 초안 생성용 전체 토큰 한도 / Full token limit for skill MD draft generation */
+const SKILL_MD_MAX_TOKENS_FULL = 4096;
+
 // ── 설정 타입 / Config type ─────────────────────────────────────
 
 /**
@@ -201,7 +209,7 @@ ${specDocument}
 ["code-quality", "testing-strategy", "api-design", "error-handling"]`;
 
     const result = await this.claudeApi.createMessage([{ role: 'user', content: prompt }], {
-      maxTokens: 1024,
+      maxTokens: SKILL_MD_MAX_TOKENS_SHORT,
       timeoutMs: 60_000,
     });
 
@@ -224,17 +232,17 @@ ${specDocument}
         return err(
           new AdevError(
             'skill_md_extract_parse_error',
-            `Skill 추출 응답에서 JSON 배열을 찾을 수 없음 / No JSON array found in response`,
+            'Skill 추출 응답에서 JSON 배열을 찾을 수 없음 / No JSON array found in response',
           ),
         );
       }
 
       const parsed: unknown = JSON.parse(jsonMatch[0]);
-      if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+      if (!(Array.isArray(parsed) && parsed.every((item) => typeof item === 'string'))) {
         return err(
           new AdevError(
             'skill_md_extract_parse_error',
-            `Skill 추출 응답이 string[] 형태가 아님 / Response is not a string array`,
+            'Skill 추출 응답이 string[] 형태가 아님 / Response is not a string array',
           ),
         );
       }
@@ -244,7 +252,7 @@ ${specDocument}
       return err(
         new AdevError(
           'skill_md_extract_parse_error',
-          `Skill 추출 응답 JSON 파싱 실패 / Failed to parse skill extraction response`,
+          'Skill 추출 응답 JSON 파싱 실패 / Failed to parse skill extraction response',
           parseError,
         ),
       );
@@ -286,7 +294,7 @@ SKILL.md 작성 규칙:
     this.logger.debug(`SKILL.md 초안 생성 중 / Generating SKILL.md draft: ${skillName}`);
 
     const result = await this.claudeApi.createMessage([{ role: 'user', content: prompt }], {
-      maxTokens: 4096,
+      maxTokens: SKILL_MD_MAX_TOKENS_FULL,
       timeoutMs: 120_000,
     });
 

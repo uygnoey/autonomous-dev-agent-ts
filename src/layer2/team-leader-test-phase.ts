@@ -14,10 +14,10 @@ import type { AgentSpawner } from 'layer2/agent-spawner.js';
 import type { PhaseEngine } from 'layer2/phase-engine.js';
 import type { SessionManager } from 'layer2/session-manager.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
+import { createEvent, queryRagContext, spawnDocumenter } from 'layer2/team-leader-helpers.js';
 import type { TokenMonitor } from 'layer2/token-monitor.js';
 import type { AgentEvent } from 'layer2/types.js';
 import type { RagSearcher } from 'rag/search.js';
-import { createEvent, queryRagContext, spawnDocumenter } from 'layer2/team-leader-helpers.js';
 
 /** executeTestPhase에 필요한 의존성 / Deps needed by executeTestPhase */
 export interface ExecuteTestPhaseDeps {

@@ -6,6 +6,17 @@
  * EN: Contains all type definitions and default values for adev configuration.
  */
 
+// ── 모델 상수 / Model Constants ──────────────────────────────────
+
+/** 기본 Claude 모델 / Default Claude model */
+export const DEFAULT_CLAUDE_MODEL = 'claude-opus-4-20250514';
+
+/** 검증용 경량 모델 / Lightweight verification model */
+export const DEFAULT_VERIFIER_MODEL = 'claude-haiku-4-5-20251001';
+
+/** 기본 최대 토큰 / Default max tokens */
+export const DEFAULT_MAX_TOKENS = 4096;
+
 // ── 타입 정의 / Type Definitions ────────────────────────────────
 
 /** 인증 방식 / Authentication mode */

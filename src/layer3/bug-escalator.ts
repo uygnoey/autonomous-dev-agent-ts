@@ -1,6 +1,4 @@
 /** BugEscalator - Layer3 → Layer2 버그 에스컬레이션 / Bug escalation orchestration */
-import { mkdir } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 import { type AdevError, AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import type { Phase, Result } from 'core/types.js';
@@ -8,6 +6,9 @@ import { err, ok } from 'core/types.js';
 import type { FailureHandler } from 'layer2/failure-handler.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
 import type { TeamLeader } from 'layer2/team-leader.js';
+import { ArtifactSnapshotStore } from 'layer3/bug-escalator-snapshot.js';
+import { triggerLayer2 as triggerLayer2Impl } from 'layer3/bug-escalator-trigger.js';
+import type { OnLayer2RerunRequired } from 'layer3/bug-escalator-trigger.js';
 import type {
   BugEscalationResult,
   ContinuousE2EResult,
@@ -37,58 +38,20 @@ export type {
   TriggerLayer2Options,
 } from 'layer3/bug-escalator-types.js';
 
-/**
- * 2계층 재실행 콜백 타입 / Layer 2 re-execution callback type
- *
- * @description
- * KR: 지속 E2E 실패 시 2계층 전체 루프 재실행을 외부에서 주입할 수 있는 콜백.
- *     §9.4: "버그 발견 → 2계층 전체 루프 재실행 (architect부터)"
- * EN: Callback injectable from outside to trigger Layer 2 full loop re-execution on E2E failure.
- *     §9.4: "Bug found → Layer 2 full loop re-execution (from architect)"
- */
-export type OnLayer2RerunRequired = (report: BugReport) => Promise<void>;
-
-/**
- * 산출물 스냅샷 / Artifact snapshot
- *
- * @description
- * KR: 2계층 재실행 전 산출물 경로 목록을 저장한다.
- *     재실행 실패 시 이전 산출물로 복원할 수 있도록 참조 정보를 보관한다.
- * EN: Stores artifact path list before Layer 2 re-execution.
- *     Keeps reference info for restoring previous artifacts if re-run fails.
- */
-export interface ArtifactSnapshot {
-  /** 프로젝트 ID / Project ID */
-  readonly projectId: string;
-  /** 기능 ID / Feature ID */
-  readonly featureId: string;
-  /** 산출물 파일 경로 목록 / Artifact file paths */
-  readonly artifactPaths: readonly string[];
-  /** 스냅샷 저장 시각 / Snapshot saved at */
-  readonly savedAt: Date;
-  /** 백업 디렉토리 경로 (파일 복사본 저장 위치) / Backup directory path */
-  readonly backupDir?: string;
-}
+export type { ArtifactSnapshot } from 'layer3/bug-escalator-snapshot.js';
+export type { OnLayer2RerunRequired } from 'layer3/bug-escalator-trigger.js';
 
 /** BugEscalator 구현 클래스 / BugEscalator implementation */
 export class BugEscalator implements IBugEscalator {
   private reportCounter = 0;
   private readonly activeReports: Map<string, BugReport> = new Map();
-  /** 산출물 스냅샷 (projectId → ArtifactSnapshot) / Artifact snapshots by projectId */
-  private readonly artifactSnapshots: Map<string, ArtifactSnapshot> = new Map();
+  private readonly snapshotStore: ArtifactSnapshotStore;
   private readonly logger: Logger;
   private readonly teamLeader: TeamLeader | null;
   private readonly failureHandler: FailureHandler | null;
   private readonly integrationTester: IntegrationTester | null;
   private readonly onLayer2RerunRequired: OnLayer2RerunRequired | null;
 
-  /**
-   * @param teamLeader - TeamLeader 또는 Logger (간단 API) / TeamLeader or Logger (simple API)
-   * @param failureHandler - 실패 분류기 (선택) / Failure classifier (optional)
-   * @param integrationTester - 통합 테스터 (선택) / Integration tester (optional)
-   * @param logger - 로거 (선택) / Logger (optional)
-   * @param onLayer2RerunRequired - 2계층 재실행 콜백 (선택) / Layer 2 re-execution callback (optional)
-   */
   constructor(
     teamLeader: TeamLeader | Logger,
     failureHandler?: FailureHandler,
@@ -114,14 +77,10 @@ export class BugEscalator implements IBugEscalator {
       });
       this.onLayer2RerunRequired = onLayer2RerunRequired ?? null;
     }
+    this.snapshotStore = new ArtifactSnapshotStore(this.logger);
   }
 
-  /**
-   * 심각도에 따라 대상 Phase를 결정하고 반환한다 / Determine target phase by severity.
-   *
-   * @param bugReport - 버그 리포트
-   * @returns 대상 Phase 포함 에스컬레이션 결과
-   */
+  /** 심각도에 따라 대상 Phase를 결정하고 반환한다 / Determine target phase by severity. */
   escalate(bugReport: BugReport): Result<{ targetPhase: Phase; bugReport: BugReport }> {
     this.logger.info('버그 에스컬레이션 (간단 버전)', {
       bugId: bugReport.id,
@@ -132,12 +91,7 @@ export class BugEscalator implements IBugEscalator {
     return ok({ targetPhase, bugReport });
   }
 
-  /**
-   * 전체 에스컬레이션 워크플로우를 실행한다 / Run the full escalation workflow.
-   *
-   * @param options - 에스컬레이션 옵션
-   * @returns 에스컬레이션 결과
-   */
+  /** 전체 에스컬레이션 워크플로우를 실행한다 / Run the full escalation workflow. */
   async escalateAsync(options: EscalateBugOptions): Promise<Result<BugEscalationResult>> {
     const { projectId, projectPath, featureId, failedTest, context } = options;
     this.logger.info('버그 에스컬레이션 시작', {
@@ -179,7 +133,6 @@ export class BugEscalator implements IBugEscalator {
     if (!confirmationResult.ok) return err(confirmationResult.error as AdevError);
     const userApproved = confirmationResult.value;
     this.logger.info('유저 재확인 완료', { approved: userApproved });
-    // WHY: 유저 승인 시 새 산출물 채택 → 이전 스냅샷 불필요
     if (userApproved) {
       this.clearArtifactSnapshot(projectId);
       this.activeReports.delete(bugReport.id);
@@ -200,12 +153,7 @@ export class BugEscalator implements IBugEscalator {
     return ok(escalationResult);
   }
 
-  /**
-   * qc 에이전트에 근본 원인 분석을 요청한다 / Request root cause analysis from qc agent.
-   *
-   * @param failedTest - 실패한 E2E 테스트 결과
-   * @returns 생성된 버그 리포트
-   */
+  /** qc 에이전트에 근본 원인 분석을 요청한다 / Request root cause analysis from qc agent. */
   async analyzeRootCause(failedTest: ContinuousE2EResult): Promise<Result<BugReport>> {
     this.logger.info('qc 근본 원인 분석 시작', { testId: failedTest.id });
 
@@ -236,85 +184,12 @@ export class BugEscalator implements IBugEscalator {
     return ok(bugReport);
   }
 
-  /**
-   * TeamLeader를 통해 2계층 재실행을 트리거한다 / Trigger Layer2 re-execution via TeamLeader.
-   *
-   * @param options - 트리거 옵션
-   * @returns 성공 여부
-   */
+  /** TeamLeader를 통해 2계층 재실행을 트리거한다 / Trigger Layer2 re-execution via TeamLeader. */
   async triggerLayer2(options: TriggerLayer2Options): Promise<Result<void>> {
-    const { projectId, bugReport, startPhase } = options;
-    this.logger.info('2계층 재실행 트리거', { projectId, bugId: bugReport.id, startPhase });
-
-    // WHY: onLayer2RerunRequired 콜백이 있으면 우선 호출 — 실제 2계층 재실행 위임
-    //      §9.4: "2계층 전체 루프 재실행 (architect부터)"
-    if (this.onLayer2RerunRequired) {
-      try {
-        this.logger.info('onLayer2RerunRequired 콜백 호출', {
-          bugId: bugReport.id,
-          featureId: bugReport.featureId,
-        });
-        await this.onLayer2RerunRequired(bugReport);
-        this.logger.info('onLayer2RerunRequired 콜백 완료', { bugId: bugReport.id });
-        return ok(undefined);
-      } catch (callbackError) {
-        return err(
-          new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 콜백 실패', {
-            error: String(callbackError),
-          }),
-        );
-      }
-    }
-
-    if (this.teamLeader) {
-      // WHY: PI-008 — handoffPackage가 있으면 TeamLeader.executeFeature() 직접 호출
-      //      없으면 onLayer2RerunRequired 콜백에 위임 (위에서 이미 처리됨)
-      if (options.handoffPackage) {
-        const featureId = bugReport.featureId ?? projectId;
-        this.logger.info('TeamLeader.executeFeature() 직접 호출 — 2계층 전체 재실행', {
-          projectId,
-          bugId: bugReport.id,
-          featureId,
-          startPhase,
-        });
-        try {
-          // WHY: TeamLeader를 DESIGN Phase부터 전체 재실행
-          //      executeFeature는 AsyncIterable — 모든 이벤트를 소비하여 완료 대기
-          for await (const _event of this.teamLeader.executeFeature(
-            featureId,
-            options.handoffPackage,
-          )) {
-            // WHY: 이벤트 소비만 — 결과 처리는 BugEscalator 상위에서 수행
-          }
-          this.logger.info('TeamLeader 2계층 재실행 완료', { bugId: bugReport.id, featureId });
-        } catch (executeError) {
-          return err(
-            new AgentError('layer3_escalation_trigger_failed', '2계층 재실행 실패', {
-              error: String(executeError),
-            }),
-          );
-        }
-      } else {
-        this.logger.info('HandoffPackage 미제공 — TeamLeader 직접 호출 생략 (콜백 경로 사용)', {
-          projectId,
-          bugId: bugReport.id,
-        });
-      }
-    } else {
-      this.logger.debug('TeamLeader 없음 — 시뮬레이션 모드', { projectId });
-    }
-
-    this.logger.info('2계층 재실행 완료', { projectId, bugId: bugReport.id });
-    return ok(undefined);
+    return triggerLayer2Impl(options, this.teamLeader, this.onLayer2RerunRequired, this.logger);
   }
 
-  /**
-   * 4단계 계단식 통합 검증을 실행한다 / Run 4-step stepwise integration verification.
-   *
-   * @param projectId - 프로젝트 ID
-   * @param featureId - 수정된 기능 ID
-   * @returns 검증 결과 배열
-   */
+  /** 4단계 계단식 통합 검증을 실행한다 / Run 4-step stepwise integration verification. */
   async runStepwiseVerification(
     projectId: string,
     projectPath: string,
@@ -334,18 +209,12 @@ export class BugEscalator implements IBugEscalator {
     return requestUserConfirmation(bugReport, changes, this.logger);
   }
 
-  /**
-   * TestFailure를 BugReport로 변환하고 활성 리포트에 추가한다 / Create BugReport from TestFailure.
-   *
-   * @param projectId - 프로젝트 ID
-   * @param testFailure - 테스트 실패 정보
-   * @returns 생성된 버그 리포트
-   */
+  /** TestFailure를 BugReport로 변환하고 활성 리포트에 추가한다 / Create BugReport from TestFailure. */
   createReport(projectId: string, testFailure: TestFailure): Result<BugReport> {
     this.reportCounter += 1;
     const result = buildBugReport(projectId, testFailure, this.reportCounter);
     if (!result.ok) {
-      this.reportCounter -= 1; // WHY: 검증 실패 시 카운터 롤백
+      this.reportCounter -= 1;
       return result;
     }
     const bugReport = result.value;
@@ -376,118 +245,24 @@ export class BugEscalator implements IBugEscalator {
     return ok(undefined);
   }
 
-  /**
-   * 산출물 스냅샷을 저장한다 / Saves an artifact snapshot
-   *
-   * @description
-   * KR: 2계층 재실행 전 현재 산출물 경로 목록을 저장하고,
-   *     각 파일의 백업 복사본을 /tmp/adev-artifact-backup/ 에 생성한다.
-   * EN: Saves current artifact paths before Layer 2 re-execution,
-   *     and creates backup copies in /tmp/adev-artifact-backup/.
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @param featureId - 기능 ID / Feature ID
-   * @param artifactPaths - 산출물 파일 경로 목록 / Artifact file paths
-   */
+  // WHY: 기존 public API 유지 — ArtifactSnapshotStore로 위임
   async saveArtifactSnapshot(
     projectId: string,
     featureId: string,
     artifactPaths: readonly string[],
   ): Promise<void> {
-    const backupDir = join('/tmp', 'adev-artifact-backup', projectId, `${Date.now()}`);
-    await mkdir(backupDir, { recursive: true });
-
-    // WHY: 파일이 실제 존재하는 경우에만 백업 — 존재하지 않는 경로는 무시
-    for (const artifactPath of artifactPaths) {
-      const file = Bun.file(artifactPath);
-      if (await file.exists()) {
-        const destPath = join(backupDir, basename(artifactPath));
-        await Bun.write(destPath, file);
-      }
-    }
-
-    const snapshot: ArtifactSnapshot = {
-      projectId,
-      featureId,
-      artifactPaths: [...artifactPaths],
-      savedAt: new Date(),
-      backupDir,
-    };
-    this.artifactSnapshots.set(projectId, snapshot);
-    this.logger.info('산출물 스냅샷 저장 (백업 포함)', {
-      projectId,
-      featureId,
-      pathCount: artifactPaths.length,
-      backupDir,
-    });
+    return this.snapshotStore.save(projectId, featureId, artifactPaths);
   }
 
-  /**
-   * 산출물 스냅샷을 조회한다 / Gets an artifact snapshot
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @returns 스냅샷 또는 null / Snapshot or null
-   */
-  getArtifactSnapshot(projectId: string): ArtifactSnapshot | null {
-    return this.artifactSnapshots.get(projectId) ?? null;
+  getArtifactSnapshot(projectId: string) {
+    return this.snapshotStore.get(projectId);
   }
 
-  /**
-   * 산출물 스냅샷을 삭제한다 / Clears an artifact snapshot
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   */
   clearArtifactSnapshot(projectId: string): void {
-    this.artifactSnapshots.delete(projectId);
-    this.logger.debug('산출물 스냅샷 삭제', { projectId });
+    this.snapshotStore.clear(projectId);
   }
 
-  /**
-   * 백업된 산출물을 원래 경로로 복원한다 / Restore backed-up artifacts to original paths
-   *
-   * @description
-   * KR: 스냅샷의 backupDir에서 백업 파일들을 원래 artifactPaths 위치로 복원한다.
-   *     복원 완료 후 스냅샷을 삭제한다.
-   * EN: Restores backup files from snapshot's backupDir to original artifactPaths.
-   *     Clears the snapshot after successful restoration.
-   *
-   * @param projectId - 프로젝트 ID / Project ID
-   * @returns ok(void) 복원 성공, err(AdevError) 실패 시 / ok on success, err on failure
-   */
   async restoreArtifactSnapshot(projectId: string): Promise<Result<void>> {
-    const snapshot = this.getArtifactSnapshot(projectId);
-    if (!snapshot) {
-      return err(
-        new AgentError('agent_invalid_input', `산출물 스냅샷을 찾을 수 없습니다: ${projectId}`),
-      );
-    }
-
-    if (!snapshot.backupDir) {
-      this.clearArtifactSnapshot(projectId);
-      return ok(undefined);
-    }
-
-    try {
-      // WHY: 백업 파일명과 원래 경로를 basename으로 매칭하여 복원
-      for (const artifactPath of snapshot.artifactPaths) {
-        const backupFilePath = join(snapshot.backupDir, basename(artifactPath));
-        const backupFile = Bun.file(backupFilePath);
-        if (await backupFile.exists()) {
-          await Bun.write(artifactPath, backupFile);
-          this.logger.debug('산출물 복원', { from: backupFilePath, to: artifactPath });
-        }
-      }
-
-      this.logger.info('산출물 스냅샷 복원 완료', {
-        projectId,
-        pathCount: snapshot.artifactPaths.length,
-        backupDir: snapshot.backupDir,
-      });
-
-      this.clearArtifactSnapshot(projectId);
-      return ok(undefined);
-    } catch (cause) {
-      return err(new AgentError('agent_invalid_input', `산출물 복원 실패: ${projectId}`, cause));
-    }
+    return this.snapshotStore.restore(projectId);
   }
 }

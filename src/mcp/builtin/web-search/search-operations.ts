@@ -15,6 +15,11 @@ import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { McpTool } from 'mcp/types.js';
 
+// ── 상수 / Constants ────────────────────────────────────────
+
+/** DuckDuckGo HTML 검색 URL / DuckDuckGo HTML search URL */
+const DUCKDUCKGO_SEARCH_URL = 'https://html.duckduckgo.com/html/';
+
 // ── 타입 / Types ────────────────────────────────────────────
 
 /**
@@ -118,7 +123,7 @@ export class SearchExecutor {
 
     // WHY: DuckDuckGo HTML 검색 (간단한 구현)
     const encodedQuery = encodeURIComponent(query);
-    const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`;
+    const url = `${DUCKDUCKGO_SEARCH_URL}?q=${encodedQuery}`;
 
     const result = await this.executor.execute('curl', [
       '-L', // WHY: 리다이렉트 따라가기

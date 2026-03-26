@@ -11,10 +11,10 @@ import type { HandoffPackage } from 'layer1/types.js';
 import type { AgentGenerator } from 'layer2/agent-generator.js';
 import type { IpcPoller } from 'layer2/ipc-poller.js';
 import type { StreamMonitor } from 'layer2/stream-monitor.js';
+import { createEvent, queryRagContext } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent } from 'layer2/types.js';
 import type { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 import type { RagSearcher } from 'rag/search.js';
-import { createEvent, queryRagContext } from 'layer2/team-leader-helpers.js';
 
 /** TeamDelete 안정화 대기 횟수 / TeamDelete settle attempts */
 const TEAM_DELETE_SETTLE_ATTEMPTS = 3;

@@ -269,7 +269,7 @@ export class SubscriptionAuth implements AuthProvider {
     this.pruneExpiredEntries();
     if (this.usageHistory.length === 0) return null;
     // WHY: 가장 오래된 기록이 윈도우 시작 시각
-    return this.usageHistory[0]!.timestamp;
+    return this.usageHistory[0]?.timestamp ?? null;
   }
 
   /**

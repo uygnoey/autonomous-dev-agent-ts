@@ -6,7 +6,64 @@
  * EN: Types for phase transitions, verification results, failure classification, bias detection, hook events, and integration test results.
  */
 
-import type { AgentName, Phase } from 'core/types.js';
+import type { AdevError } from 'core/errors.js';
+import type { AgentName, Phase, Result } from 'core/types.js';
+
+// ── Phase FSM 상태 / Phase FSM State ────────────────────────────
+
+/**
+ * Phase FSM 상태 인터페이스 / Phase FSM state interface
+ *
+ * @description
+ * KR: Phase 유한 상태 머신의 현재 스냅샷. 현재/이전 Phase, 전환 시각, 실패 횟수를 포함한다.
+ * EN: Snapshot of the Phase finite state machine. Includes current/previous phase,
+ *     transition timestamp, and failure count.
+ */
+export interface PhaseState {
+  /** 현재 Phase / Current phase */
+  readonly current: Phase;
+  /** 이전 Phase (최초 상태이면 null) / Previous phase (null if initial) */
+  readonly previous: Phase | null;
+  /** 마지막 전환 시각 / Last transition timestamp */
+  readonly transitionedAt: Date;
+  /** 누적 실패 횟수 / Cumulative failure count */
+  readonly failureCount: number;
+}
+
+/**
+ * Phase FSM 인터페이스 / Phase finite state machine interface
+ *
+ * @description
+ * KR: Phase 전환을 관리하는 유한 상태 머신 추상화. 전환 가능 여부 확인, 전환 실행, 초기화를 제공한다.
+ * EN: Abstraction for the phase finite state machine managing transitions,
+ *     transition eligibility checks, and reset capability.
+ */
+export interface PhaseFSM {
+  /**
+   * 현재 FSM 상태 반환 / Return current FSM state
+   * @returns 현재 PhaseState 스냅샷 / Current PhaseState snapshot
+   */
+  getState(): PhaseState;
+
+  /**
+   * 지정 Phase로 전환 / Transition to the specified phase
+   * @param to - 전환 대상 Phase / Target phase
+   * @returns 전환 성공 시 새 상태, 실패 시 AdevError / New state on success, AdevError on failure
+   */
+  transition(to: Phase): Result<PhaseState, AdevError>;
+
+  /**
+   * 지정 Phase로 전환 가능 여부 확인 / Check if transition to target phase is allowed
+   * @param to - 전환 대상 Phase / Target phase
+   * @returns 전환 가능 여부 / Whether transition is allowed
+   */
+  canTransition(to: Phase): boolean;
+
+  /**
+   * FSM을 초기 상태로 리셋 / Reset FSM to initial state
+   */
+  reset(): void;
+}
 
 // ── Phase 전환 / Phase Transition ───────────────────────────────
 

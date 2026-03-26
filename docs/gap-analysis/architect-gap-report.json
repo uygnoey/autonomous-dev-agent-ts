@@ -1,0 +1,331 @@
+{
+  "reportType": "architect-gap-analysis",
+  "analyzedAt": "2026-03-26",
+  "summary": {
+    "missing": 9,
+    "partial": 11,
+    "done": 72,
+    "architectureIssues": 5
+  },
+  "missing": [
+    {
+      "category": "CLI",
+      "feature": "adev auth 명령어 (토큰 갱신/상태 확인)",
+      "specLocation": "§3.2",
+      "note": "src/cli/commands/auth.ts 존재하나 claude setup-token 연동 및 토큰 만료 안내 흐름 미구현 가능성"
+    },
+    {
+      "category": "설치",
+      "feature": "배포 인프라 (npm publish, brew tap, curl installer)",
+      "specLocation": "§4",
+      "note": "scripts/install.sh, scripts/brew/ 존재. 실제 배포 인프라 미구축"
+    },
+    {
+      "category": "Layer1",
+      "feature": "CLI → Layer1 대화 루프 end-to-end 통합",
+      "specLocation": "§6.2, §6.3",
+      "note": "conversation.ts에 벡터 저장 구현됨. CLI TUI와 Layer1 대화 루프의 end-to-end 통합 미확인"
+    },
+    {
+      "category": "Layer2",
+      "feature": "DESIGN Phase Agent Teams 실제 SDK 연동",
+      "specLocation": "§8.1, §8.4",
+      "note": "V2SessionExecutor에서 Agent Teams env 설정 구현됨. 실제 session.stream() + teammate spawn + SendMessage 토론 오케스트레이션 SDK 호출 통합 미검증"
+    },
+    {
+      "category": "Layer2",
+      "feature": "CODE Phase 실시간 architect/reviewer 감독 세션",
+      "specLocation": "§8.4",
+      "note": "parallel-coder-supervision.ts 존재. architect/reviewer가 별도 세션으로 실시간 감독하는 패턴 end-to-end 완성 미확인"
+    },
+    {
+      "category": "Layer2",
+      "feature": "Contract 변경 관리 전체 흐름 통합",
+      "specLocation": "§6.7",
+      "note": "contract-change-manager.ts 존재. version 증가, 변경 사유 기록, 영향 기능 식별, 회귀 테스트 트리거 등 전체 흐름 통합 미확인"
+    },
+    {
+      "category": "Layer3",
+      "feature": "비즈니스 산출물 실제 파일 렌더링 (PDF/PPTX/DOCX)",
+      "specLocation": "§9.1",
+      "note": "deliverable-pdf/pptx/docx-renderer.ts 존재. 실제 라이브러리 연동 및 렌더링 품질 미검증"
+    },
+    {
+      "category": "통합",
+      "feature": "CLI → Layer1 → Layer2 → Layer3 전체 end-to-end 파이프라인",
+      "specLocation": "§14",
+      "note": "start-pipeline.ts, start-execution.ts 등 존재. 전체 흐름이 실제 SDK 호출과 함께 동작하는지 end-to-end 통합 테스트 부재"
+    },
+    {
+      "category": "다중 프로젝트",
+      "feature": "~/.adev/ 글로벌 디렉토리 자동 생성 및 projects.json 관리 완전성",
+      "specLocation": "§5.2",
+      "note": "init-scaffold.ts에서 .adev/ 생성. ~/.adev/ 글로벌 디렉토리 생성 및 projects.json 관리 완전성 미확인"
+    }
+  ],
+  "partial": [
+    {
+      "category": "RAG/Embedding",
+      "feature": "4-Provider Tier 전환 로직",
+      "specRequirement": "§13: Tier1-무료(Transformers, Jina), Tier2-유료(Voyage-lite, Voyage-code) 자동 전환",
+      "currentState": "embeddings.ts(Transformers), jina-embeddings.ts(Jina), voyage-embeddings.ts(Voyage), openai-embeddings.ts(OpenAI), embedding-factory.ts 구현됨",
+      "gap": "OpenAI provider는 스펙 외 추가. Voyage voyage-3-lite vs voyage-code-3 자동 전환 로직 미확인. Tier 우선순위 자동 fallback 로직 미확인"
+    },
+    {
+      "category": "Token Monitor",
+      "feature": "Subscription 모드 5시간 롤링 윈도우",
+      "specRequirement": "§11.1, §11.2: 5시간 롤링 윈도우 + 7일 롤링 캡, Pro/Max 메시지 추정",
+      "currentState": "token-monitor.ts에서 AuthProvider 위임으로 레이트 리밋 추적",
+      "gap": "5시간 롤링 윈도우, Pro/Max 메시지 추정, 7일 롤링 캡 세부 추적 로직 완전 구현 미확인"
+    },
+    {
+      "category": "Session Restore",
+      "feature": "세션 복원 흐름",
+      "specRequirement": "§11.3: SDK 세션 재개(sessionId) → 실패 시 새 세션 + RAG 벡터 복원",
+      "currentState": "session-restore-orchestrator.ts, session-snapshot-store.ts 구현됨. fallback 파일에 RAG 복원 경로 존재",
+      "gap": "실제 SDK resume 호환성 미검증"
+    },
+    {
+      "category": "Phase Engine",
+      "feature": "Phase 전환 시 documenter 이벤트 트리거 (5종 전체)",
+      "specRequirement": "§7.3, §8.4: 기능 완료, 테스트 완료/실패, 버그 발생, Phase 경계 5가지 이벤트 모두 트리거",
+      "currentState": "documenter-event-dispatcher.ts 구현됨. team-leader-phase.ts에서 spawnDocumenterOnPhaseBoundary 호출",
+      "gap": "5가지 이벤트 유형 전부 커버되는지 미확인"
+    },
+    {
+      "category": "Verification Gate",
+      "feature": "4중 검증 모델 전략 (Opus/Sonnet 에스컬레이션)",
+      "specRequirement": "§6.8: opus_escalation_on_failure 설정에 따른 Sonnet→Opus 에스컬레이션",
+      "currentState": "verification-gate.ts + verification-escalator.ts 구현됨",
+      "gap": "실제 Claude API 호출과의 연동 미검증"
+    },
+    {
+      "category": "Integration Tester",
+      "feature": "계단식 Fail-Fast 4단계 테스트",
+      "specRequirement": "§8.5: 수량 10만+/1만/1천/100만, 실제 bun test 호출 + 결과 파싱",
+      "currentState": "integration-tester.ts + integration-tester-steps.ts 구현됨",
+      "gap": "테스트 수량 config 연동, 실제 bun test 호출 + 대규모 결과 파싱 동작 미검증"
+    },
+    {
+      "category": "Agent Generator",
+      "feature": "agent.md + SKILL.md 초안 생성 → 유저 검토 → 확정",
+      "specRequirement": "§7.4: 초안 생성 → 유저 검토/수정 → 확정 흐름",
+      "currentState": "agent-md-generator.ts, skill-md-generator.ts, agent-md-reviewer.ts 구현됨",
+      "gap": "유저 검토 UI/UX 흐름(TUI에서 초안 표시 → 유저 수정 → 확정)이 CLI와 통합되었는지 미확인"
+    },
+    {
+      "category": "MCP",
+      "feature": "유저 커스텀 MCP 로드 + 프로젝트>글로벌 우선순위",
+      "specRequirement": "§5.6: 글로벌 + 프로젝트별 MCP 동시 로드, 동일 이름 프로젝트 우선",
+      "currentState": "mcp-manager.ts에서 initialize(globalDir, projectDir) 패턴",
+      "gap": "동일 이름 프로젝트 우선 병합 로직의 완전성 미확인"
+    },
+    {
+      "category": "Config",
+      "feature": "설정 우선순위 (프로젝트 > 글로벌)",
+      "specRequirement": "§5.4: MCP/SKILL/config/templates 각각의 병합 규칙",
+      "currentState": "config-merge.ts 구현됨",
+      "gap": "각 항목별 병합 규칙이 스펙대로 구현되었는지 세부 검증 필요"
+    },
+    {
+      "category": "Layer2 Bootstrap",
+      "feature": "Layer2 전체 초기화 + 의존성 조립",
+      "specRequirement": "모든 Layer2 컴포넌트가 올바르게 조립되어 TeamLeader.executeFeature() 실행 가능",
+      "currentState": "layer2-bootstrap.ts 존재",
+      "gap": "전체 컴포넌트(TeamLeader, PhaseEngine, AgentSpawner, StreamMonitor 등) 올바른 조립 미확인"
+    },
+    {
+      "category": "TUI",
+      "feature": "Chat 스트리밍 UI와 Layer1 대화 연동",
+      "specRequirement": "CLI TUI에서 Layer1 Claude API 스트리밍 대화",
+      "currentState": "src/cli/tui/ 하위 chat-input/output/streaming/types 등 구현됨",
+      "gap": "Layer1 대화 스트리밍과의 실제 연동 미확인"
+    }
+  ],
+  "done": [
+    { "category": "Core", "feature": "config.ts — 환경변수 경유, 하드코딩 금지" },
+    { "category": "Core", "feature": "errors.ts — AdevError 계층, Result 패턴" },
+    { "category": "Core", "feature": "logger.ts — 구조화 로깅 (console.log 금지)" },
+    { "category": "Core", "feature": "memory.ts — MemoryRepository (LanceDB 기반)" },
+    { "category": "Core", "feature": "plugin-loader.ts — 커스텀 모듈 로드" },
+    { "category": "Core", "feature": "config-merge.ts — 설정 병합" },
+    { "category": "Core", "feature": "config-schema.ts — 설정 스키마 검증" },
+    { "category": "Core", "feature": "file-size-guard.ts — 100MB 파일 제한" },
+    { "category": "Core", "feature": "process-executor.ts — 프로세스 실행 추상화" },
+    { "category": "Core", "feature": "skill-merger.ts — Skill 병합" },
+    { "category": "Core", "feature": "template-loader.ts — 템플릿 로드" },
+    { "category": "Auth", "feature": "api-key-auth.ts — ANTHROPIC_API_KEY 인증 + rate limit 헤더 파싱" },
+    { "category": "Auth", "feature": "subscription-auth.ts — CLAUDE_CODE_OAUTH_TOKEN 인증 + 누적 추적" },
+    { "category": "Auth", "feature": "auth-manager.ts — 인증 방식 분기" },
+    { "category": "Auth", "feature": "oauth-expiry-checker.ts — OAuth 토큰 만료 체크" },
+    { "category": "CLI", "feature": "init.ts — 프로젝트 초기화 (위저드 + 스캐폴딩)" },
+    { "category": "CLI", "feature": "config.ts — 설정 CRUD" },
+    { "category": "CLI", "feature": "project.ts — 프로젝트 CRUD (add/remove/list/switch/update)" },
+    { "category": "CLI", "feature": "start.ts — 자율 개발 시작" },
+    { "category": "CLI", "feature": "status.ts — 진행 상태 조회" },
+    { "category": "CLI", "feature": "main.ts — CLI 진입점 (yargs)" },
+    { "category": "CLI/TUI", "feature": "chat.ts, chat-input.ts, chat-output.ts, chat-streaming.ts — TUI 채팅 UI" },
+    { "category": "CLI/TUI", "feature": "renderer.ts, renderer-box.ts, spinner.ts, input.ts — TUI 컴포넌트" },
+    { "category": "Layer1", "feature": "conversation.ts — 대화 관리 + 모호성 감지 + LanceDB 벡터 저장" },
+    { "category": "Layer1", "feature": "conversation-fsm.ts — 대화 Phase FSM (IDEA→PLANNING→...→CONTRACT)" },
+    { "category": "Layer1", "feature": "planner.ts — 기획" },
+    { "category": "Layer1", "feature": "designer.ts — 설계" },
+    { "category": "Layer1", "feature": "spec-builder.ts — 스펙 빌더" },
+    { "category": "Layer1", "feature": "test-type-designer.ts — 테스트 유형 정의서 생성" },
+    { "category": "Layer1", "feature": "contract-builder.ts — Contract(HandoffPackage) 생성 + 5대 원칙 검증" },
+    { "category": "Layer1", "feature": "contract-verifier.ts — 구조 검증 + 정합성 검증" },
+    { "category": "Layer1", "feature": "contract-change-manager.ts — Contract 변경 관리" },
+    { "category": "Layer1", "feature": "claude-api.ts — Claude Messages API 래퍼 (스트리밍/비스트리밍)" },
+    { "category": "Layer1", "feature": "agent-md-generator.ts — 에이전트 .md 초안 생성" },
+    { "category": "Layer1", "feature": "agent-md-reviewer.ts — 에이전트 .md 유저 검토" },
+    { "category": "Layer1", "feature": "skill-md-generator.ts — SKILL.md 자동 생성" },
+    { "category": "Layer1", "feature": "verifier.ts — 4중 검증 중 1계층 참여" },
+    { "category": "Layer2", "feature": "team-leader.ts — 메인 오케스트레이터 (4-Phase 루프)" },
+    { "category": "Layer2", "feature": "phase-engine.ts — 4-Phase FSM (DESIGN→CODE→TEST→VERIFY)" },
+    { "category": "Layer2", "feature": "agent-spawner.ts — 에이전트 스폰/재개" },
+    { "category": "Layer2", "feature": "agent-generator.ts — 에이전트 설정 생성" },
+    { "category": "Layer2", "feature": "v2-session-executor.ts — V2 Session API 기반 AgentExecutor" },
+    { "category": "Layer2", "feature": "session-manager.ts — 세션 생명주기 관리" },
+    { "category": "Layer2", "feature": "token-monitor.ts — 토큰 사용량 추적 + 인증별 분기" },
+    { "category": "Layer2", "feature": "progress-tracker.ts — 기능별/Phase별 진행률" },
+    { "category": "Layer2", "feature": "failure-handler.ts — 실패 유형 분류 + 복구" },
+    { "category": "Layer2", "feature": "handoff-receiver.ts — Contract 수신 + 구조/정합성 검증" },
+    { "category": "Layer2", "feature": "coder-allocator.ts — Coder×N 분배" },
+    { "category": "Layer2", "feature": "stream-monitor.ts — Hook 감시 + 이상 패턴 탐지" },
+    { "category": "Layer2", "feature": "bias-detector.ts — 확증편향/루프/교착/범위이탈 탐지" },
+    { "category": "Layer2", "feature": "ipc-poller.ts — 디스크 IPC 폴링 (~/.claude/teams/ + tasks/)" },
+    { "category": "Layer2", "feature": "integration-tester.ts — 4단계 계단식 Fail-Fast 통합 테스트" },
+    { "category": "Layer2", "feature": "clean-env-manager.ts — 클린 환경 생성/삭제" },
+    { "category": "Layer2", "feature": "user-checkpoint.ts — 유저 확인 흐름 (2계층-C)" },
+    { "category": "Layer2", "feature": "verification-gate.ts — 4중 검증 종합 판단" },
+    { "category": "Layer2", "feature": "verification-escalator.ts — Opus/Sonnet 에스컬레이션" },
+    { "category": "Layer2", "feature": "git-branch-manager.ts — Git branch 전략 관리" },
+    { "category": "Layer2", "feature": "parallel-coder-runner.ts — Coder×N 병렬 실행" },
+    { "category": "Layer2", "feature": "parallel-coder-supervision.ts — architect/reviewer 감독" },
+    { "category": "Layer2", "feature": "documenter-event-dispatcher.ts — documenter 이벤트 트리거" },
+    { "category": "Layer2", "feature": "session-restore-orchestrator.ts — 세션 복원" },
+    { "category": "Layer2", "feature": "session-snapshot-store.ts — 세션 스냅샷 LanceDB 저장" },
+    { "category": "Layer2", "feature": "layer1-verifier.ts — Layer1 의도 기반 검증" },
+    { "category": "Layer2", "feature": "token-wait-loop.ts — 토큰 리셋 대기 루프" },
+    { "category": "Layer2", "feature": "agent-draft-loader.ts — 에이전트 .md 로드" },
+    { "category": "Layer3", "feature": "doc-integrator.ts — 조각 문서 → 통합 문서 (8개 유형)" },
+    { "category": "Layer3", "feature": "doc-collaborator.ts — 1계층+2계층 협업 문서 생성" },
+    { "category": "Layer3", "feature": "production-tester.ts — 지속 E2E 실행" },
+    { "category": "Layer3", "feature": "bug-escalator.ts — 3계층→2계층 버그 리포트" },
+    { "category": "Layer3", "feature": "deliverable-builder.ts — 비즈니스 산출물 생성 (4개 유형)" },
+    { "category": "Layer3", "feature": "user-confirmation.ts — 유저 재확인" },
+    { "category": "Layer3", "feature": "verification-runner.ts — 계단식 통합 검증" },
+    { "category": "Layer3", "feature": "e2e-runner.ts — E2E 테스트 실행기" },
+    { "category": "RAG", "feature": "vector-store.ts, design-decision-store.ts, failure-store.ts — LanceDB 4 테이블 (memory, code_index, design_decisions, failures)" },
+    { "category": "RAG", "feature": "embeddings.ts (Transformers), jina-embeddings.ts, voyage-embeddings.ts, openai-embeddings.ts, embedding-factory.ts — 4-Provider Tier" },
+    { "category": "RAG", "feature": "code-indexer.ts, search.ts, chunk-splitter.ts, vectorizer.ts — 코드 인덱싱 + 벡터 검색" },
+    { "category": "MCP", "feature": "mcp-manager.ts, registry.ts, loader.ts, mcp-handshake.ts — MCP 서버 라이프사이클" },
+    { "category": "MCP/builtin", "feature": "os-control/, browser/, web-search/, git/ — builtin MCP 4개" },
+    { "category": "Scripts", "feature": "install.sh, uninstall.sh, brew/ — 설치/삭제 스크립트" },
+    { "category": "Tests", "feature": "단위 테스트 106개, 모듈 테스트 8개, E2E 테스트 8개 파일" }
+  ],
+  "architectureIssues": [
+    {
+      "type": "boundary-violation",
+      "description": "layer3/bug-escalator.ts가 layer2/team-leader.ts를 직접 import. 스펙 허용 범위(layer3→layer2)이나 TeamLeader 전체를 직접 참조하여 과도한 결합",
+      "files": ["src/layer3/bug-escalator.ts", "src/layer2/team-leader.ts"]
+    },
+    {
+      "type": "boundary-violation",
+      "description": "layer3/doc-collaborator.ts가 layer2/agent-spawner.ts를 직접 import. 인터페이스를 통한 의존성 역전 권장",
+      "files": ["src/layer3/doc-collaborator.ts", "src/layer2/agent-spawner.ts"]
+    },
+    {
+      "type": "layer-separation",
+      "description": "src/cli/layer2-runner.ts에서 CLI 레이어가 Layer2를 직접 실행. layer1을 거쳐야 하나 start 명령어에서 직접 layer2로 점프하는 경로 존재",
+      "files": ["src/cli/layer2-runner.ts"]
+    },
+    {
+      "type": "layer-separation",
+      "description": "src/layer1/claude-api.ts가 @anthropic-ai/sdk를 직접 import. 의도적 설계이나 auth 모듈과의 역할 중복 가능성",
+      "files": ["src/layer1/claude-api.ts"]
+    },
+    {
+      "type": "boundary-violation",
+      "description": "src/layer2/ 디렉토리에 50+ 파일. 스펙 기준(16개)보다 상당히 많음. 300줄 규칙 준수를 위한 분할이나 타입/헬퍼 파일의 과도한 분리로 탐색 어려움",
+      "files": ["src/layer2/"]
+    }
+  ],
+  "priorities": [
+    {
+      "priority": "HIGH",
+      "feature": "CLI → Layer1 → Layer2 → Layer3 end-to-end 통합 테스트",
+      "reason": "개별 모듈은 구현되었으나 전체 파이프라인이 실제로 동작하는지 검증 없음. 가장 큰 갭"
+    },
+    {
+      "priority": "HIGH",
+      "feature": "DESIGN Phase Agent Teams 실제 SDK 연동 검증",
+      "reason": "V2SessionExecutor에서 env 설정은 되나 실제 teammate spawn + SendMessage 토론이 SDK와 동작하는지 미검증"
+    },
+    {
+      "priority": "HIGH",
+      "feature": "Layer2 Bootstrap 전체 의존성 조립 + 스모크 테스트",
+      "reason": "모든 컴포넌트가 올바르게 조립되어 TeamLeader.executeFeature()가 실행 가능한지 확인 필요"
+    },
+    {
+      "priority": "HIGH",
+      "feature": "세션 복원 흐름 실제 SDK 호환 검증",
+      "reason": "session-restore-orchestrator.ts의 SDK resume + RAG fallback 경로가 실제 동작하는지 미검증"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "4-Provider Tier 자동 fallback 로직 검증",
+      "reason": "Tier1→Tier2 자동 전환, voyage-3-lite vs voyage-code-3 선택 로직 미확인"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "Subscription 모드 세부 추적 (5시간 윈도우, Pro/Max 추정)",
+      "reason": "현재 누적 추적은 구현되나 정밀한 윈도우 계산 미확인"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "documenter 이벤트 5종 전체 트리거 검증",
+      "reason": "기능 완료, 테스트 완료/실패, 버그 발생, Phase 경계 모두 커버하는지 확인 필요"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "agent.md 유저 검토 TUI 흐름 통합",
+      "reason": "초안 생성 + 유저 수정 + 확정의 UX가 CLI와 통합되었는지 미확인"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "Contract 변경 관리 end-to-end",
+      "reason": "version 증가, 영향 기능 식별, 회귀 테스트 트리거 전체 흐름 미확인"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "비즈니스 산출물 렌더링 품질 (PDF/PPTX/DOCX)",
+      "reason": "렌더러 코드 존재하나 실제 출력 품질 미검증"
+    },
+    {
+      "priority": "MEDIUM",
+      "feature": "Layer3 → Layer2 결합도 개선 (인터페이스 역전)",
+      "reason": "bug-escalator, doc-collaborator의 직접 import를 인터페이스로 교체 권장"
+    },
+    {
+      "priority": "LOW",
+      "feature": "배포 인프라 (npm publish, brew tap, curl installer)",
+      "reason": "기능 구현과 무관. 배포 준비 단계에서 처리"
+    },
+    {
+      "priority": "LOW",
+      "feature": "OpenAI EmbeddingProvider (스펙 외 추가) 정리 또는 문서화",
+      "reason": "스펙에 없는 provider. 유지할지 제거할지 결정 필요"
+    },
+    {
+      "priority": "LOW",
+      "feature": "Layer2 파일 50+ → 모듈 하위 디렉토리 정리",
+      "reason": "탐색성 개선. 기능 영향 없음"
+    },
+    {
+      "priority": "LOW",
+      "feature": "모듈 테스트/E2E 테스트 커버리지 확대",
+      "reason": "현재 unit 106, module 8, e2e 8. module/e2e 대폭 보강 필요"
+    }
+  ]
+}

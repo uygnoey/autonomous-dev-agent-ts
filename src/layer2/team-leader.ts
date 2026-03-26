@@ -14,12 +14,12 @@ import type { IpcPoller } from 'layer2/ipc-poller.js';
 import type { SessionRestoreOrchestrator } from 'layer2/session-restore-orchestrator.js';
 import type { SessionSnapshotStore } from 'layer2/session-snapshot-store.js';
 import { createEvent } from 'layer2/team-leader-helpers.js';
+import { executeCurrentPhase } from 'layer2/team-leader-phase-dispatch.js';
 import {
   advancePhase,
   handleVerifyResult,
   spawnDocumenterOnPhaseBoundary,
 } from 'layer2/team-leader-phase.js';
-import { executeCurrentPhase } from 'layer2/team-leader-phase-dispatch.js';
 import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import { runTokenWaitLoop } from 'layer2/token-wait-loop.js';
 import type { AgentEvent } from 'layer2/types.js';

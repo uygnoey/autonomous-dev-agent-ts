@@ -1,0 +1,221 @@
+{
+  "reportType": "reviewer-quality-analysis",
+  "version": 2,
+  "analyzedAt": "2026-03-26",
+  "summary": {
+    "anyTypeCount": 0,
+    "consoleLogCount": 0,
+    "processEnvCount": 0,
+    "throwOveruseCount": 0,
+    "oversizedFiles": 9,
+    "jsdocMissingCount": 5,
+    "nonNullAssertionCount": 0,
+    "hardcodedValueCount": 5
+  },
+  "anyTypeUsages": [],
+  "consoleLogUsages": [],
+  "processEnvUsages": [],
+  "throwOveruses": [],
+  "oversizedFiles": [
+    {
+      "file": "src/mcp/mcp-manager.ts",
+      "lines": 415,
+      "severity": "medium",
+      "note": "MCP 관리 로직 집중. 도구 등록/해제/실행이 한 파일에 있으나, 각 메서드가 단일 책임"
+    },
+    {
+      "file": "src/layer1/claude-api.ts",
+      "lines": 400,
+      "severity": "medium",
+      "note": "Claude API 래퍼. 인증/요청/응답 매핑이 한 파일. 분할 시 과도한 파일 수 증가 우려"
+    },
+    {
+      "file": "src/layer1/test-type-designer.ts",
+      "lines": 387,
+      "severity": "low",
+      "note": "테스트 타입 설계 로직. 순수 함수 위주로 응집도 높음"
+    },
+    {
+      "file": "src/layer2/git-branch-manager.ts",
+      "lines": 373,
+      "severity": "low",
+      "note": "Git 브랜치 관리. 단일 도메인 집중"
+    },
+    {
+      "file": "src/layer2/team-leader.ts",
+      "lines": 370,
+      "severity": "low",
+      "note": "이미 phase별 헬퍼로 분할 완료(team-leader-*.ts). 본체는 오케스트레이션만 담당"
+    },
+    {
+      "file": "src/auth/subscription-auth.ts",
+      "lines": 366,
+      "severity": "low",
+      "note": "구독 인증 전체 흐름. 단일 도메인"
+    },
+    {
+      "file": "src/layer2/session-manager.ts",
+      "lines": 344,
+      "severity": "low",
+      "note": "세션 생명주기 관리. 생성/복원/정리가 응집"
+    },
+    {
+      "file": "src/layer2/team-leader-helpers.ts",
+      "lines": 339,
+      "severity": "low",
+      "note": "팀 리더 헬퍼 함수 모음. re-export 포함"
+    },
+    {
+      "file": "src/layer3/production-tester.ts",
+      "lines": 338,
+      "severity": "low",
+      "note": "E2E 프로덕션 테스터. 설정/실행/결과가 한 도메인"
+    }
+  ],
+  "jsdocMissing": [
+    {
+      "file": "src/cli/tui/input.ts",
+      "line": 106,
+      "export": "export type InputHandler = ReturnType<typeof createInputHandler>",
+      "severity": "low",
+      "note": "ReturnType 유틸리티 타입 alias — createInputHandler에 JSDoc 있으면 충분"
+    },
+    {
+      "file": "src/cli/tui/renderer.ts",
+      "line": 111,
+      "export": "export type Renderer = ReturnType<typeof createRenderer>",
+      "severity": "low",
+      "note": "ReturnType 유틸리티 타입 alias — createRenderer에 JSDoc 있으면 충분"
+    },
+    {
+      "file": "src/rag/embedding-factory.ts",
+      "line": 265,
+      "export": "export function parseEmbeddingProviderType(raw: string): Result<EmbeddingProviderType>",
+      "severity": "medium",
+      "note": "public 유틸리티 함수. JSDoc 추가 필요"
+    },
+    {
+      "file": "src/layer2/phase-types.ts",
+      "line": 263,
+      "export": "export interface IntegrationStepResult",
+      "severity": "medium",
+      "note": "public 인터페이스. JSDoc 추가 필요"
+    },
+    {
+      "file": "src/layer2/team-leader-phase.ts",
+      "line": 253,
+      "export": "export function advancePhase()",
+      "severity": "medium",
+      "note": "Phase FSM 핵심 함수. JSDoc 추가 필요"
+    }
+  ],
+  "nonNullAssertions": [],
+  "hardcodedValues": [
+    {
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 139,
+      "value": "'claude-opus-4-6'",
+      "severity": "medium",
+      "note": "fallback 모델명이 문자열 리터럴. DEFAULT_CLAUDE_MODEL 상수를 import해서 사용해야 함"
+    },
+    {
+      "file": "src/layer2/v2-session-executor.ts",
+      "line": 176,
+      "value": "'claude-opus-4-6'",
+      "severity": "medium",
+      "note": "동일. createSession의 fallback 모델명"
+    },
+    {
+      "file": "src/cli/types.ts",
+      "line": 263,
+      "value": "'claude-opus-4-6' (defaultModel)",
+      "severity": "medium",
+      "note": "DEFAULT_CONFIG에서 문자열 리터럴 사용. config-schema의 DEFAULT_CLAUDE_MODEL 참조 필요"
+    },
+    {
+      "file": "src/cli/commands/start.ts",
+      "line": 86,
+      "value": "'claude-opus-4-6'",
+      "severity": "medium",
+      "note": "ChatUi 생성 시 하드코딩. config에서 가져와야 함"
+    },
+    {
+      "file": "src/layer2/layer2-bootstrap.ts",
+      "line": 196,
+      "value": "'claude-sonnet-4-6' / 'claude-opus-4-6'",
+      "severity": "medium",
+      "note": "조건 분기에서 직접 모델명 사용. config-schema 상수 참조 필요"
+    }
+  ],
+  "circularDependencies": [],
+  "severityAssessment": {
+    "critical": [],
+    "high": [],
+    "medium": [
+      {
+        "category": "hardcodedValues",
+        "count": 5,
+        "description": "모델명이 5곳에서 문자열 리터럴로 사용됨. config-schema.ts에 상수 정의가 있으나 일부 모듈이 참조하지 않음",
+        "recommendation": "DEFAULT_CLAUDE_MODEL 또는 새 상수를 import하여 사용. 모델 버전 변경 시 일괄 수정 가능하도록"
+      },
+      {
+        "category": "jsdocMissing",
+        "count": 3,
+        "description": "public 함수/인터페이스 3건(parseEmbeddingProviderType, IntegrationStepResult, advancePhase)에 JSDoc 누락",
+        "recommendation": "해당 3건에 JSDoc 추가 (@description, @param, @returns)"
+      },
+      {
+        "category": "oversizedFiles",
+        "count": 2,
+        "description": "mcp-manager.ts(415줄), claude-api.ts(400줄)가 여전히 300줄 초과. 단, 응집도 높고 단일 도메인이라 즉시 분할 불필요",
+        "recommendation": "모니터링. 추가 기능 시 분할 검토"
+      }
+    ]
+  },
+  "resolvedFromV1": [
+    {
+      "issue": "non-null assertion 5건",
+      "status": "resolved",
+      "note": "0건으로 확인. optional chaining으로 교체 완료"
+    },
+    {
+      "issue": "하드코딩 12건",
+      "status": "partially_resolved",
+      "note": "12건 → 5건. 7건은 명명 상수로 이동 완료. 잔여 5건은 상수가 정의되어 있으나 참조하지 않는 경우"
+    },
+    {
+      "issue": "400줄+ 파일 7개",
+      "status": "mostly_resolved",
+      "note": "7개 → 2개(415줄, 400줄). 5개 파일 분할 완료. 잔여 2개는 경계선 수준"
+    },
+    {
+      "issue": "biome 위반",
+      "status": "resolved",
+      "note": "0건 유지"
+    },
+    {
+      "issue": "any 타입",
+      "status": "resolved",
+      "note": "0건 유지"
+    },
+    {
+      "issue": "console.log 직접 사용",
+      "status": "resolved",
+      "note": "0건. JSDoc @example 내부만 존재하며 실행 코드에는 없음"
+    }
+  ],
+  "newIssues": [
+    {
+      "category": "modelVersionInconsistency",
+      "severity": "low",
+      "description": "config-schema.ts에는 'claude-opus-4-20250514'가 정의되어 있으나, 나머지 모듈에서는 'claude-opus-4-6'을 사용. 두 가지 모델 버전 표기가 혼재",
+      "files": [
+        "src/core/config-schema.ts (claude-opus-4-20250514)",
+        "src/layer2/v2-session-executor.ts (claude-opus-4-6)",
+        "src/layer2/verification-escalator.ts (claude-opus-4-6)",
+        "src/cli/types.ts (claude-opus-4-6)"
+      ],
+      "recommendation": "모델 ID를 단일 상수 파일로 통합. config-schema.ts의 상수를 최신 모델 ID로 갱신 후 전체 참조"
+    }
+  ]
+}

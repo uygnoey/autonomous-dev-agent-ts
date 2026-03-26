@@ -15,6 +15,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import type { AuthProvider } from 'auth/types.js';
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_MAX_TOKENS } from 'core/config-schema.js';
 import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
 import { type Result, err, ok } from 'core/types.js';
@@ -45,7 +46,7 @@ import type {
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 /** 기본 모델 / Default model */
-const DEFAULT_MODEL = 'claude-opus-4-20250514';
+const DEFAULT_MODEL = DEFAULT_CLAUDE_MODEL;
 
 // ── ClaudeApi 클래스 ────────────────────────────────────────
 
@@ -169,7 +170,7 @@ export class ClaudeApi implements IClaudeApi {
 
     // WHY: PI-015 — options.model > this.model(constructor) > DEFAULT_MODEL 우선순위
     const model = options.model ?? this.model;
-    const maxTokens = options.maxTokens ?? 4096;
+    const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options.temperature ?? 1.0;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -240,7 +241,7 @@ export class ClaudeApi implements IClaudeApi {
   ): Promise<Result<void, AgentError>> {
     // WHY: PI-015 — options.model > this.model(constructor) > DEFAULT_MODEL 우선순위
     const model = options.model ?? this.model;
-    const maxTokens = options.maxTokens ?? 4096;
+    const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options.temperature ?? 1.0;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 

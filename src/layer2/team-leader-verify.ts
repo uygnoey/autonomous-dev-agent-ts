@@ -13,8 +13,8 @@
 import type { Phase } from 'core/types.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import type { Layer1Verifier } from 'layer1/verifier.js';
-import type { IntegrationTester, StaircaseTestResult } from 'layer2/integration-tester.js';
 import type { ModifiedFiles } from 'layer2/integration-tester-steps.js';
+import type { IntegrationTester, StaircaseTestResult } from 'layer2/integration-tester.js';
 import { createEvent, queryRagContext } from 'layer2/team-leader-helpers.js';
 import type { ExecutePhaseDeps } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent } from 'layer2/types.js';

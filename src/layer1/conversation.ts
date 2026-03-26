@@ -70,10 +70,7 @@ export function generateProbingQuestion(text: string, phase: string): string | n
   }
 
   // WHY: PI-009 — 스펙 §6.3 능동적 탐색 질문 코드 레벨 구현
-  return (
-    '좀 더 구체적으로 설명해주실 수 있을까요? ' +
-    `"${text}"에서 어떤 부분을 ${phase} 단계에서 더 다루어야 할까요?`
-  );
+  return `좀 더 구체적으로 설명해주실 수 있을까요? "${text}"에서 어떤 부분을 ${phase} 단계에서 더 다루어야 할까요?`;
 }
 
 // ── 상수 / Constants ────────────────────────────────────────────

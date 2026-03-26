@@ -20,13 +20,13 @@ import type { AgentMdReviewInput } from '../../layer1/agent-md-reviewer.js';
 import { SkillMdGenerator } from '../../layer1/skill-md-generator.js';
 import type { SkillMdGeneratorConfig } from '../../layer1/skill-md-generator.js';
 import type { HandoffPackage } from '../../layer1/types.js';
+import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import {
-  createLayer2Bootstrap,
   createIntegrationTester,
+  createLayer2Bootstrap,
   createUserCheckpoint,
 } from '../layer2-runner.js';
 import type { UserInputProvider } from '../layer2-runner.js';
-import { runStepwiseVerification } from '../../layer3/verification-runner.js';
 import type { ChatUi } from '../tui/chat.js';
 import type { Layer1SessionState } from './start-types.js';
 

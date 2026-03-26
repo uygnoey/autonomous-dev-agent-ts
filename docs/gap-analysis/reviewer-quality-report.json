@@ -1,0 +1,100 @@
+{
+  "reportType": "reviewer-quality-analysis",
+  "analyzedAt": "2026-03-26",
+  "summary": {
+    "anyTypeCount": 0,
+    "consoleLogCount": 0,
+    "processEnvCount": 3,
+    "throwOveruseCount": 1,
+    "oversizedFiles": 31,
+    "jsdocMissingCount": 2,
+    "nonNullAssertionCount": 5,
+    "hardcodedValueCount": 12
+  },
+  "anyTypeUsages": [],
+  "consoleLogUsages": [],
+  "processEnvUsages": [
+    { "file": "src/index.ts", "line": 73, "code": "if (!process.env[key]) { process.env[key] = value; }" },
+    { "file": "src/layer2/v2-session-env-builder.ts", "line": 42, "code": "...(process.env as Record<string, string>)" },
+    { "file": "src/core/process-executor.ts", "line": 121, "code": "env: { ...process.env, ...env }" }
+  ],
+  "throwOveruses": [
+    { "file": "src/core/process-executor.ts", "line": 229, "issue": "throw new AdevError — 시스템 경계(child_process 실행 실패)에서의 throw. 규칙상 허용 범위" }
+  ],
+  "oversizedFiles": [
+    { "file": "src/cli/commands/project-crud.ts", "lineCount": 564 },
+    { "file": "src/layer3/bug-escalator.ts", "lineCount": 493 },
+    { "file": "src/layer3/doc-integrator-fragment.ts", "lineCount": 490 },
+    { "file": "src/layer2/v2-session-executor.ts", "lineCount": 489 },
+    { "file": "src/layer2/user-checkpoint.ts", "lineCount": 483 },
+    { "file": "src/layer3/doc-collaborator.ts", "lineCount": 463 },
+    { "file": "src/layer1/contract-change-manager.ts", "lineCount": 430 },
+    { "file": "src/mcp/mcp-manager.ts", "lineCount": 415 },
+    { "file": "src/layer1/claude-api.ts", "lineCount": 399 },
+    { "file": "src/layer1/test-type-designer.ts", "lineCount": 387 },
+    { "file": "src/layer2/git-branch-manager.ts", "lineCount": 373 },
+    { "file": "src/layer2/team-leader.ts", "lineCount": 370 },
+    { "file": "src/auth/subscription-auth.ts", "lineCount": 366 },
+    { "file": "src/layer2/session-manager.ts", "lineCount": 344 },
+    { "file": "src/layer2/team-leader-helpers.ts", "lineCount": 339 },
+    { "file": "src/layer3/production-tester.ts", "lineCount": 338 },
+    { "file": "src/layer2/agent-generator.ts", "lineCount": 334 },
+    { "file": "src/layer2/layer2-bootstrap.ts", "lineCount": 332 },
+    { "file": "src/cli/commands/start-execution.ts", "lineCount": 332 },
+    { "file": "src/layer2/parallel-coder-runner.ts", "lineCount": 330 },
+    { "file": "src/layer2/parallel-coder-supervision.ts", "lineCount": 329 },
+    { "file": "src/layer3/doc-integrator-template.ts", "lineCount": 327 },
+    { "file": "src/layer2/team-leader-test-phase.ts", "lineCount": 327 },
+    { "file": "src/rag/openai-embeddings.ts", "lineCount": 326 },
+    { "file": "src/layer2/team-leader-verify.ts", "lineCount": 326 },
+    { "file": "src/layer1/skill-md-generator.ts", "lineCount": 320 },
+    { "file": "src/layer2/bias-detector.ts", "lineCount": 317 },
+    { "file": "src/cli/commands/start-pipeline.ts", "lineCount": 316 },
+    { "file": "src/layer2/session-restore-orchestrator.ts", "lineCount": 309 },
+    { "file": "src/layer2/team-leader-phase.ts", "lineCount": 305 },
+    { "file": "src/layer1/conversation.ts", "lineCount": 301 }
+  ],
+  "jsdocMissing": [
+    { "file": "src/rag/embedding-factory.ts", "exportName": "parseEmbeddingProviderType" },
+    { "file": "src/layer2/team-leader-phase.ts", "exportName": "advancePhase" }
+  ],
+  "nonNullAssertions": [
+    { "file": "src/layer2/stream-monitor.ts", "line": 260 },
+    { "file": "src/layer2/team-leader-phase.ts", "line": 223 },
+    { "file": "src/auth/subscription-auth.ts", "line": 272 },
+    { "file": "src/layer1/agent-md-reviewer.ts", "line": 96 }
+  ],
+  "hardcodedValues": [
+    { "file": "src/rag/voyage-client.ts", "line": 18, "value": "https://api.voyageai.com/v1/embeddings" },
+    { "file": "src/rag/openai-embeddings.ts", "line": 21, "value": "https://api.openai.com/v1/embeddings" },
+    { "file": "src/mcp/builtin/web-search/search-operations.ts", "line": 121, "value": "https://html.duckduckgo.com/html/" },
+    { "file": "src/layer1/claude-api.ts", "line": 48, "value": "claude-opus-4-20250514" },
+    { "file": "src/layer1/contract-verifier.ts", "line": 27, "value": "claude-haiku-4-5-20251001" },
+    { "file": "src/layer1/contract-ai-consistency-verifier.ts", "line": 33, "value": "claude-haiku-4-5-20251001" },
+    { "file": "src/layer1/skill-md-generator.ts", "line": 204, "value": "1024 (maxTokens)" },
+    { "file": "src/layer1/skill-md-generator.ts", "line": 289, "value": "4096 (maxTokens)" },
+    { "file": "src/layer1/claude-api.ts", "line": 172, "value": "4096 (maxTokens default)" },
+    { "file": "src/layer3/deliverable-docx-renderer.ts", "line": 217, "value": "1F3864 (color code)" },
+    { "file": "src/layer3/deliverable-pptx-renderer.ts", "line": 113, "value": "1F3864, 333333 (color codes)" },
+    { "file": "src/layer3/deliverable-pdf-renderer.ts", "line": 116, "value": "#666666, #333333, #999999 (color codes)" }
+  ],
+  "severityAssessment": {
+    "critical": [],
+    "high": [
+      "src/cli/commands/project-crud.ts — 564줄 (300줄 초과 규칙 위반)",
+      "src/layer3/bug-escalator.ts — 493줄",
+      "src/layer3/doc-integrator-fragment.ts — 490줄",
+      "src/layer2/v2-session-executor.ts — 489줄",
+      "src/layer2/user-checkpoint.ts — 483줄",
+      "src/layer3/doc-collaborator.ts — 463줄",
+      "src/layer1/contract-change-manager.ts — 430줄"
+    ],
+    "medium": [
+      "300~415줄 초과 파일 24개 — 점진적 분할 권장",
+      "non-null assertion 5건 — optional chaining + 타입 가드로 대체 권장",
+      "process.env 직접 접근 3건 — 허용 가능한 예외이나 config.ts 경유 권장",
+      "하드코딩 매직값 12건 — config 또는 명명 상수로 통합 권장",
+      "JSDoc 누락 export 함수 2건 — JSDoc 추가 필요"
+    ]
+  }
+}

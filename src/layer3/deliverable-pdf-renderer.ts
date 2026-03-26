@@ -28,6 +28,18 @@ export interface PdfDocumentOptions {
   readonly pageSize?: 'A4' | 'LETTER';
 }
 
+/** 인용문 텍스트 색상 / Blockquote text color */
+const BLOCKQUOTE_COLOR = '#666666';
+
+/** 본문 텍스트 색상 / Body text color */
+const BODY_TEXT_COLOR = '#333333';
+
+/** 수평선 색상 / Horizontal rule color */
+const HR_COLOR = '#cccccc';
+
+/** 푸터 텍스트 색상 / Footer text color */
+const FOOTER_COLOR = '#999999';
+
 /** PDF 폰트 설정 상수 / PDF font configuration constants */
 const PDF_FONTS = {
   TITLE_SIZE: 24,
@@ -88,7 +100,7 @@ function renderLinesToPdf(lines: readonly string[], doc: PDFKit.PDFDocument): vo
       doc
         .moveTo(PDF_FONTS.PAGE_MARGIN, currentY)
         .lineTo(doc.page.width - PDF_FONTS.PAGE_MARGIN, currentY)
-        .stroke('#cccccc');
+        .stroke(HR_COLOR);
       doc.moveDown(0.5);
       continue;
     }
@@ -113,9 +125,9 @@ function renderLinesToPdf(lines: readonly string[], doc: PDFKit.PDFDocument): vo
       doc
         .font('Helvetica-Oblique')
         .fontSize(PDF_FONTS.BODY_SIZE)
-        .fillColor('#666666')
+        .fillColor(BLOCKQUOTE_COLOR)
         .text(text, { indent: PDF_FONTS.LIST_INDENT })
-        .fillColor('#333333');
+        .fillColor(BODY_TEXT_COLOR);
       continue;
     }
 
@@ -222,9 +234,9 @@ export async function renderMarkdownToPdf(
     doc
       .font('Helvetica')
       .fontSize(PDF_FONTS.SMALL_SIZE)
-      .fillColor('#999999')
+      .fillColor(FOOTER_COLOR)
       .text(`Generated at ${new Date().toISOString()}`, { align: 'right' })
-      .fillColor('#333333');
+      .fillColor(BODY_TEXT_COLOR);
 
     doc.end();
     await finished;

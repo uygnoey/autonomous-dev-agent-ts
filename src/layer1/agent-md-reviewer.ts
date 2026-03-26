@@ -93,7 +93,8 @@ export class AgentMdReviewer {
     input.system(`총 ${ALL_AGENT_NAMES.length}개 에이전트 문서를 검토합니다.\n`);
 
     for (let i = 0; i < ALL_AGENT_NAMES.length; i++) {
-      const agentName = ALL_AGENT_NAMES[i]!;
+      const agentName = ALL_AGENT_NAMES[i];
+      if (!agentName) continue;
       const draft = drafts[agentName];
 
       if (draft === undefined) {

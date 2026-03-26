@@ -103,3 +103,28 @@ export interface HandoffPackage {
   /** 변경 이력 / Change history */
   readonly changeHistory?: readonly ContractChangeRecord[];
 }
+
+// ── Contract 스펙 / Contract Spec ───────────────────────────────
+
+/**
+ * Contract 스펙 인터페이스 — HandoffPackage의 핵심 요건 정의 / Contract spec — core requirements for HandoffPackage
+ *
+ * @description
+ * KR: 단일 기능에 대한 요구사항, 수락 기준, 테스트 전략, 제약 조건을 정의하는 스펙.
+ * EN: Spec defining requirements, acceptance criteria, test strategy, and constraints
+ *     for a single feature.
+ */
+export interface ContractSpec {
+  /** 기능 ID / Feature ID */
+  readonly featureId: string;
+  /** 기능 제목 / Feature title */
+  readonly title: string;
+  /** 요구사항 목록 / List of requirements */
+  readonly requirements: readonly string[];
+  /** 수락 기준 목록 / List of acceptance criteria */
+  readonly acceptanceCriteria: readonly string[];
+  /** 테스트 전략 / Test strategy */
+  readonly testStrategy: string;
+  /** 제약 조건 목록 / List of constraints */
+  readonly constraints: readonly string[];
+}

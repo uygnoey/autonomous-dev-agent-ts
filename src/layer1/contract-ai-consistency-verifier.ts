@@ -16,6 +16,7 @@
  *     4. Design vs constraint contradictions
  */
 
+import { DEFAULT_VERIFIER_MODEL } from 'core/config-schema.js';
 import type { AdevError } from 'core/errors.js';
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
@@ -30,7 +31,7 @@ import type { HandoffPackage } from 'layer1/types.js';
 // ── 상수 / Constants ─────────────────────────────────────────────
 
 /** 정합성 검증 모델 / Consistency verification model */
-const CONSISTENCY_MODEL = 'claude-haiku-4-5-20251001';
+const CONSISTENCY_MODEL = DEFAULT_VERIFIER_MODEL;
 
 /** architect 시스템 프롬프트 / Architect system prompt */
 const ARCHITECT_SYSTEM_PROMPT = [

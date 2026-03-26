@@ -1,0 +1,180 @@
+{
+  "reportType": "gap-analysis-summary",
+  "version": "v2.4",
+  "round": 2,
+  "analyzedAt": "2026-03-26",
+  "agents": ["architect-v2", "reviewer-v2", "qa-v2", "qc-v2"],
+
+  "overallVerdict": "SIGNIFICANTLY_IMPROVED",
+  "overallScore": {
+    "moduleImplementation": "90%",
+    "e2eConfidence": "40%",
+    "testPassRate": "99.99%",
+    "fileCoverage": "66.4%",
+    "staticAnalysis": "PASS"
+  },
+
+  "deltaFromV1": {
+    "biomeErrors": { "v1": 30, "v2": 0, "delta": -30 },
+    "missingInterfaces": { "v1": 5, "v2": 0, "delta": -5 },
+    "nonNullAssertions": { "v1": 5, "v2": 0, "delta": -5 },
+    "hardcodedValues": { "v1": 12, "v2": 5, "delta": -7 },
+    "oversizedFiles400plus": { "v1": 7, "v2": 2, "delta": -5 },
+    "testFileCoverage": { "v1": "51.8%", "v2": "66.4%", "delta": "+14.6%p" },
+    "testCount": { "v1": 13512, "v2": 14663, "delta": "+1151" },
+    "architectMissing": { "v1": 9, "v2": 5, "delta": -4 },
+    "architectPartial": { "v1": 11, "v2": 8, "delta": -3 },
+    "architectDone": { "v1": 72, "v2": 76, "delta": 4 }
+  },
+
+  "architect": {
+    "summary": {
+      "missing": 5,
+      "partial": 8,
+      "done": 76,
+      "architectureIssues": 4,
+      "implementationCoverage": "90%",
+      "e2eConfidence": "40%"
+    },
+    "resolvedFromV1": [
+      "adev auth 토큰 갱신/만료 안내 흐름",
+      "~/.adev/ 글로벌 디렉토리 projects.json 관리",
+      "CLI → Layer1 대화 루프 통합",
+      "설정 우선순위 (프로젝트 > 글로벌)",
+      "MCP 글로벌+프로젝트 우선순위 병합",
+      "TUI 스트리밍 연동",
+      "claude-api.ts 직접 import (의도적 설계로 정리)"
+    ],
+    "newIssues": [
+      "OpenAI EmbeddingProvider 스펙 외 추가 — 유지/제거 결정 필요",
+      "voyage 컨텍스트 라우팅 미구현 (voyage-3-lite vs voyage-code-3 자동 선택)",
+      "Subscription 7일 롤링 캡 누락"
+    ],
+    "remainingHighPriority": [
+      { "id": "H1", "feature": "CLI→Layer1→Layer2→Layer3 end-to-end 통합 테스트", "reason": "전체 파이프라인 실제 동작 검증 없음. 최대 갭." },
+      { "id": "H2", "feature": "DESIGN Phase Agent Teams 실제 SDK 연동 검증", "reason": "SDK teammate spawn + SendMessage 실제 동작 미검증" },
+      { "id": "H3", "feature": "Layer2 Bootstrap 전체 의존성 조립 스모크 테스트", "reason": "TeamLeader.executeFeature() 실행 가능 여부 미확인" },
+      { "id": "H4", "feature": "세션 복원 SDK resume 호환 검증", "reason": "sessionId resume + RAG fallback 실제 동작 미검증" }
+    ]
+  },
+
+  "reviewer": {
+    "summary": {
+      "anyTypeCount": 0,
+      "consoleLogCount": 0,
+      "processEnvCount": 0,
+      "throwOveruseCount": 0,
+      "oversizedFiles300plus": 2,
+      "jsdocMissingCount": 3,
+      "nonNullAssertionCount": 0,
+      "hardcodedValueCount": 5,
+      "circularDependencies": 0
+    },
+    "verdict": "CLEAN",
+    "resolvedFromV1": [
+      "non-null assertion 5건 → 0건",
+      "하드코딩 12건 → 5건",
+      "400줄+ 파일 7개 → 2개",
+      "biome 0건 유지"
+    ],
+    "remainingIssues": [
+      {
+        "severity": "MEDIUM",
+        "issue": "모델 ID 불일치 — config-schema.ts는 claude-opus-4-20250514, 나머지는 claude-opus-4-6 사용",
+        "files": ["src/layer2/v2-session-executor.ts", "src/cli/types.ts", "src/cli/commands/start.ts", "src/layer2/layer2-bootstrap.ts"]
+      },
+      {
+        "severity": "MEDIUM",
+        "issue": "JSDoc 누락 3건",
+        "files": ["src/rag/embedding-factory.ts::parseEmbeddingProviderType", "src/layer2/phase-types.ts::IntegrationStepResult", "src/layer2/team-leader-phase.ts::advancePhase"]
+      },
+      {
+        "severity": "MEDIUM",
+        "issue": "300줄+ 파일 2개 — 응집도 높아 즉시 분할 불필요",
+        "files": ["src/mcp/mcp-manager.ts (415줄)", "src/layer1/claude-api.ts (400줄)"]
+      },
+      {
+        "severity": "MEDIUM",
+        "issue": "하드코딩 모델명 5건 잔여",
+        "files": ["src/layer2/v2-session-executor.ts", "src/cli/types.ts", "src/cli/commands/start.ts", "src/layer2/layer2-bootstrap.ts"]
+      }
+    ]
+  },
+
+  "qa": {
+    "summary": {
+      "tsErrorCount": 0,
+      "biomeErrorCount": 0,
+      "biomeWarningCount": 0,
+      "missingInterfaces": 0,
+      "verdict": "PASS"
+    },
+    "resolvedFromV1": [
+      "PhaseState — src/layer2/phase-types.ts",
+      "PhaseFSM — src/layer2/phase-types.ts",
+      "VectorStore — src/rag/types.ts",
+      "RAGContext — src/rag/types.ts",
+      "ContractSpec — src/layer1/contract-types.ts",
+      "VectorSearchResult — src/rag/types.ts (보조 타입)"
+    ],
+    "interfaceChecks": [
+      { "name": "HandoffPackage", "file": "src/layer1/contract-types.ts", "status": "EXISTS" },
+      { "name": "PhaseState", "file": "src/layer2/phase-types.ts", "status": "EXISTS" },
+      { "name": "PhaseFSM", "file": "src/layer2/phase-types.ts", "status": "EXISTS" },
+      { "name": "EmbeddingProvider", "file": "src/rag/types.ts", "status": "EXISTS" },
+      { "name": "AgentExecutor", "file": "src/layer2/agent-types.ts", "status": "EXISTS" },
+      { "name": "AuthProvider", "file": "src/auth/types.ts", "status": "EXISTS" },
+      { "name": "VectorStore", "file": "src/rag/types.ts", "status": "EXISTS" },
+      { "name": "SessionSnapshot", "file": "src/layer2/session-types.ts", "status": "EXISTS" },
+      { "name": "RAGContext", "file": "src/rag/types.ts", "status": "EXISTS" },
+      { "name": "ContractSpec", "file": "src/layer1/contract-types.ts", "status": "EXISTS" },
+      { "name": "VectorSearchResult", "file": "src/rag/types.ts", "status": "EXISTS" },
+      { "name": "VerificationResult", "file": "src/layer2/phase-types.ts", "status": "EXISTS" }
+    ],
+    "newFilesImportCheck": "All 9 new split files import OK"
+  },
+
+  "qc": {
+    "summary": {
+      "total": 14663,
+      "passed": 14662,
+      "failed": 1,
+      "errors": 0,
+      "fileCoverage": "66.4% (119/179)",
+      "deltaFromV1": "+14.6%p (51.8% → 66.4%)"
+    },
+    "verdict": "PASS",
+    "flaky": [
+      { "file": "tests/unit/mcp/builtin/git.test.ts", "test": "git_push", "issue": "5000ms 타임아웃 — 병렬 실행 시 리소스 경합. 단독 실행 PASS", "action": "타임아웃 증가 또는 mock 적용" },
+      { "file": "tests/unit/layer2/v2-session-executor.test.ts", "issue": "간헐적 실패. 단독 실행 118 pass/0 fail", "action": "비동기 타이밍 개선" }
+    ],
+    "newlyCovered": [
+      "core: config-merge, config-schema, file-size-guard",
+      "layer1: agent-md-reviewer, contract-ai-consistency-verifier, contract-change-manager, conversation-fsm, test-type-designer",
+      "layer2: layer2-bootstrap, team-leader-phase-dispatch, parallel-coder-runner, parallel-coder-supervision, phase-recorder, token-wait-loop, documenter-event-dispatcher",
+      "layer3: doc-integrator",
+      "auth: auth-manager",
+      "rag: voyage-client"
+    ],
+    "remainingHighPriority": [
+      "src/layer2/team-leader-code-phase.ts",
+      "src/layer2/team-leader-design-phase.ts",
+      "src/layer2/team-leader-helpers.ts",
+      "src/layer2/team-leader-phase.ts",
+      "src/layer2/team-leader-test-phase.ts",
+      "src/layer2/v2-session-executor-design.ts",
+      "src/layer2/v2-session-env-builder.ts",
+      "src/layer2/session-restore-orchestrator-fallback.ts"
+    ]
+  },
+
+  "nextActions": [
+    { "priority": "P1", "action": "모델 ID 통합 — DEFAULT_CLAUDE_MODEL 상수를 v2-session-executor.ts 등 4곳에 적용" },
+    { "priority": "P1", "action": "flaky 테스트 2건 수정 (git 타임아웃, v2-session-executor 비동기)" },
+    { "priority": "P2", "action": "JSDoc 누락 3건 추가" },
+    { "priority": "P2", "action": "team-leader 분할 모듈 5개 단위 테스트 추가" },
+    { "priority": "P3", "action": "end-to-end 통합 테스트 설계 및 구현 (최대 갭)" },
+    { "priority": "P3", "action": "voyage 컨텍스트 라우팅 구현 (voyage-3-lite vs voyage-code-3)" },
+    { "priority": "P3", "action": "Subscription 7일 롤링 캡 구현" }
+  ]
+}

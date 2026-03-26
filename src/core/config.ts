@@ -16,7 +16,12 @@ import type { Result } from 'core/types.js';
 
 // ── re-export 분할 파일 / Re-export split files ──────────────
 
-export { DEFAULT_CONFIG } from 'core/config-schema.js';
+export {
+  DEFAULT_CLAUDE_MODEL,
+  DEFAULT_CONFIG,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_VERIFIER_MODEL,
+} from 'core/config-schema.js';
 export type {
   AuthMode,
   CleanEnvType,

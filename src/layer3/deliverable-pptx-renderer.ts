@@ -18,6 +18,12 @@ import { type Result, err, ok } from 'core/types.js';
 import type { BusinessDeliverableType } from 'layer3/doc-types.js';
 import pptxgen from 'pptxgenjs';
 
+/** 브랜드 색상 코드 / Brand color hex code */
+const BRAND_COLOR_HEX = '1F3864';
+
+/** 본문 텍스트 색상 / Body text color */
+const BODY_TEXT_COLOR = '333333';
+
 /** PPTX 레이아웃 상수 / PPTX layout constants */
 const PPTX_LAYOUT = {
   TITLE_X: 0.5,
@@ -110,7 +116,7 @@ function renderSlidesToPptx(
     fontSize: 40,
     bold: true,
     align: 'center',
-    color: '1F3864',
+    color: BRAND_COLOR_HEX,
   });
 
   for (const buffer of slideBuffers) {
@@ -124,7 +130,7 @@ function renderSlidesToPptx(
         h: PPTX_LAYOUT.TITLE_H,
         fontSize: PPTX_LAYOUT.TITLE_FONT_SIZE,
         bold: true,
-        color: '1F3864',
+        color: BRAND_COLOR_HEX,
       });
     }
 
@@ -134,7 +140,7 @@ function renderSlidesToPptx(
         options: {
           fontSize: PPTX_LAYOUT.BODY_FONT_SIZE,
           breakLine: true,
-          color: '333333',
+          color: BODY_TEXT_COLOR,
         },
       }));
 

@@ -256,7 +256,7 @@ export class StreamMonitor {
     );
 
     if (agentEvents.length === 0) return null;
-    // biome-ignore lint/style/noNonNullAssertion: 배열이 비어있지 않음을 위에서 확인
-    return agentEvents[agentEvents.length - 1]!.timestamp;
+    const lastEvent = agentEvents[agentEvents.length - 1];
+    return lastEvent?.timestamp ?? null;
   }
 }

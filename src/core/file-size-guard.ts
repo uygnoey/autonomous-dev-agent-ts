@@ -6,11 +6,11 @@
  * EN: Returns error or auto-splits into chunks when file size exceeds the allowed limit.
  */
 
+import { mkdir } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { AdevError } from 'core/errors.js';
 import type { Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
-import { mkdir } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 
 /** 파일 최대 허용 크기 (bytes) / Maximum allowed file size in bytes */
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB

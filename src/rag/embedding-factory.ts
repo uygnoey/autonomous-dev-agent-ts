@@ -16,11 +16,11 @@ import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import { createTransformersEmbeddingProvider } from 'rag/embeddings.js';
 import { createJinaEmbeddingProvider } from 'rag/jina-embeddings.js';
-import type { EmbeddingProvider } from 'rag/types.js';
 import {
   createOpenAILargeEmbeddingProvider,
   createOpenAISmallEmbeddingProvider,
 } from 'rag/openai-embeddings.js';
+import type { EmbeddingProvider } from 'rag/types.js';
 import {
   createVoyageEmbeddingProvider,
   createVoyageLiteEmbeddingProvider,

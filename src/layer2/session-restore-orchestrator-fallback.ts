@@ -8,8 +8,8 @@
  *     Handles RAG context search and fallback session config building on restore failure.
  */
 
-import type { AgentName, Phase } from 'core/types.js';
 import type { Logger } from 'core/logger.js';
+import type { AgentName, Phase } from 'core/types.js';
 import type { AgentConfig, AgentEvent } from 'layer2/agent-types.js';
 import type { RagSearcher } from 'rag/search.js';
 
