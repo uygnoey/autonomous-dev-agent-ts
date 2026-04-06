@@ -31,7 +31,6 @@ import {
   extractAgentNameFromSessionId,
   generateSessionId,
   mapSdkEvent,
-  sdkResumeSession,
   sdkSessionFactory,
 } from 'layer2/v2-session-factory.js';
 
@@ -133,11 +132,18 @@ export class V2SessionExecutor implements AgentExecutor {
     const agentName = extractAgentNameFromSessionId(sessionId);
     const stored = this.activeSessions.get(sessionId);
 
-    const session: V2Session = stored
-      ? stored.session
-      : sdkResumeSession(sessionId, {
-          model: this.defaultOptions?.model ?? 'claude-opus-4-6',
-        });
+    if (!stored) {
+      this.logger.error('Session not found for resume', { sessionId });
+      yield {
+        type: 'error',
+        agentName,
+        content: `Session not found: ${sessionId}`,
+        timestamp: new Date(),
+      };
+      return;
+    }
+
+    const session = stored.session;
 
     try {
       for await (const sdkEvent of session.stream()) {

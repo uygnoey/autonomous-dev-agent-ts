@@ -30,6 +30,7 @@ function createMockAuthProvider(): AuthProvider {
     getApiKey: () => 'test-api-key',
     getAuthMode: () => 'api-key' as const,
     getHeaders: () => ({ 'x-api-key': 'test-api-key' }),
+    getAuthHeader: () => ({ 'x-api-key': 'test-api-key' }),
   } as unknown as AuthProvider;
 }
 
@@ -104,12 +105,14 @@ describe('Layer2Bootstrap 생성자', () => {
 // ── createTeamLeader 검증 / createTeamLeader ─────────────────
 
 describe('Layer2Bootstrap.createTeamLeader', () => {
-  it('createTeamLeader가 async 함수이다', () => {
+  it('createTeamLeader가 async 함수이다', async () => {
     const bootstrap = new Layer2Bootstrap(createMinimalOptions());
 
     const result = bootstrap.createTeamLeader();
 
     expect(result).toBeInstanceOf(Promise);
+    // WHY: 미대기 Promise의 unhandled rejection 방지 — 실패해도 catch로 처리
+    await result.catch(() => {});
   });
 
   // WHY: createTeamLeader는 실제 SDK 의존성(Anthropic API, LanceDB 등)이 필요하므로
