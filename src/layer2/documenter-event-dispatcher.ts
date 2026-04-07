@@ -103,6 +103,8 @@ export function buildDocumenterPrompt(event: DocumenterEvent): string {
  * EN: Receives events and spawns the documenter.
  *     Generates appropriate prompts per event type and injects them into the documenter.
  *
+ * @internal 내부 구현 세부사항 — TeamLeader 전용 documenter 연동
+ *
  * @param agentGenerator - 에이전트 설정 생성기 / Agent config generator
  * @param agentSpawner - 에이전트 스포너 / Agent spawner
  * @param logger - 로거 / Logger

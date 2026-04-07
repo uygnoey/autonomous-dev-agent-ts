@@ -4,6 +4,32 @@
   "description": "Claude Code Skills + RAG autonomous development agent",
   "type": "module",
   "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./core": {
+      "import": "./dist/core/index.js",
+      "default": "./dist/core/index.js"
+    },
+    "./rag": {
+      "import": "./dist/rag/index.js",
+      "default": "./dist/rag/index.js"
+    },
+    "./layer1": {
+      "import": "./dist/layer1/index.js",
+      "default": "./dist/layer1/index.js"
+    },
+    "./layer2": {
+      "import": "./dist/layer2/index.js",
+      "default": "./dist/layer2/index.js"
+    },
+    "./layer3": {
+      "import": "./dist/layer3/index.js",
+      "default": "./dist/layer3/index.js"
+    }
+  },
   "bin": {
     "adev": "./dist/index.js"
   },
@@ -39,10 +65,11 @@
   ],
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --outdir ./dist --target bun",
+    "build": "bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting",
     "postinstall": "echo '\\n[adev] 네이티브 바이너리 설치를 위해 bun install을 실행하세요. / Run bun install for native binaries.\\n'",
     "prepublishOnly": "bun run typecheck && bun run lint",
     "test": "bun run test:unit && bun run test:module && bun run test:e2e",
+    "test:coverage": "bun test --coverage tests/unit/",
     "test:unit": "bun test tests/unit/",
     "test:module": "bun test tests/module/cli-integration.test.ts tests/module/core-auth.test.ts tests/module/core-mcp.test.ts tests/module/layer1-rag.test.ts tests/module/layer2-auth.test.ts tests/module/layer2-layer1.test.ts tests/module/layer3-layer2.test.ts && bash scripts/test-lancedb.sh tests/module/core-rag.test.ts",
     "test:e2e": "bash scripts/test-lancedb.sh tests/e2e/",

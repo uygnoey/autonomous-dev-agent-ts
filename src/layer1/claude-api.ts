@@ -6,6 +6,8 @@
  *     AuthProvider 통합, 토큰 사용량 추적, 타임아웃 및 재시도 처리를 담당한다.
  * EN: Wraps Anthropic Claude Messages API for streaming/non-streaming calls,
  *     AuthProvider integration, token usage tracking, timeout and retry handling.
+ *
+ * @internal layer1 내부 구현 — 외부 소비자는 LlmProvider (core) 인터페이스를 사용할 것
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -94,6 +96,7 @@ export interface IClaudeApi {
  * KR: Anthropic SDK를 래핑하여 스트리밍/비스트리밍 호출, 인증, 재시도, 토큰 추적을 제공한다.
  * EN: Wraps Anthropic SDK to provide streaming/non-streaming calls, auth, retry, and token tracking.
  *
+ * @internal layer1 내부 구현 — 외부 소비자는 LlmProvider (core) 인터페이스를 사용할 것
  * @param authProvider - 인증 공급자 / Authentication provider
  * @param logger - 로거 인스턴스 / Logger instance
  * @param retryPolicy - 재시도 정책 (선택) / Retry policy (optional)

@@ -38,6 +38,7 @@ const IDLE_THRESHOLD_MS = 300_000;
  * KR: 에이전트 훅 이벤트를 수집하고 이상 패턴을 감지한다.
  * EN: Collects agent hook events and detects anomalous patterns.
  *
+ * @internal 내부 구현 세부사항 — layer2 오케스트레이션 전용
  * @example
  * const monitor = new StreamMonitor(logger);
  * monitor.onEvent(hookEvent);

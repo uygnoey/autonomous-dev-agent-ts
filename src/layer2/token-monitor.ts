@@ -33,6 +33,7 @@ const PAUSE_THRESHOLD = 0.05;
  * KR: 레이트 리밋 상태를 추적하고 스폰 결정에 활용한다.
  * EN: Tracks rate limit status and provides spawn decisions.
  *
+ * @internal 내부 구현 세부사항 — PhaseEngine / TeamLeader 전용
  * @example
  * const monitor = new TokenMonitor(authProvider, logger);
  * if (monitor.shouldThrottleSpawn()) logger.warn('스폰 스로틀링 필요');

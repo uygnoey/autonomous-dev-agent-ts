@@ -32,6 +32,8 @@ const MIN_COMPLETENESS_SCORE = 0.8;
  * KR: layer1 → layer2 인수 패키지를 검증한다.
  * EN: Validates the layer1 → layer2 handoff package.
  *
+ * @internal 내부 구현 세부사항 — PhaseEngine / TeamLeader 전용
+ *
  * @example
  * const receiver = new HandoffReceiver(logger);
  * const result = receiver.receive(handoffPackage);

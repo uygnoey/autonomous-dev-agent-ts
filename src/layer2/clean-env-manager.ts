@@ -41,6 +41,7 @@ export interface CloudEnvConfig {
  * KR: 격리된 테스트 환경의 라이프사이클을 관리한다.
  * EN: Manages the lifecycle of isolated test environments.
  *
+ * @internal 내부 구현 세부사항 — IntegrationTester / PhaseEngine 전용
  * @example
  * const envManager = new CleanEnvManager(logger);
  * const result = await envManager.create('proj-1');
