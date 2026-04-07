@@ -2,7 +2,7 @@
 
 > **Languages:** [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [Español](README.es.md)
 
-**Claude Code Skills + RAG-powered autonomous development agent system**
+**v1.0 — Claude Code Skills + RAG-powered autonomous development agent system**
 
 [![npm version](https://img.shields.io/npm/v/autonomous-dev-agent?color=cb3837&logo=npm)](https://www.npmjs.com/package/autonomous-dev-agent)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESNext-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -10,6 +10,17 @@
 [![Claude SDK](https://img.shields.io/badge/Claude_Agent_SDK-V2_Session_API-cc785c?logo=anthropic&logoColor=white)](https://docs.anthropic.com/)
 [![LanceDB](https://img.shields.io/badge/LanceDB-Embedded_Vector_DB-4B8BBE)](https://lancedb.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+---
+
+## Quick Start
+
+See the [Getting Started Guide](docs/getting-started.md) for a 5-minute quickstart.
+
+```bash
+bun add -g autonomous-dev-agent
+adev init && adev start
+```
 
 ---
 
@@ -337,6 +348,9 @@ Comprehensive documentation available in multiple languages:
 | [V2-SESSION-API.md](docs/references/V2-SESSION-API.md) | SDK V2 Session API runtime patterns |
 | [CONTRACT-SCHEMA.md](docs/references/CONTRACT-SCHEMA.md) | Contract-based HandoffPackage schema |
 | [TESTING-STRATEGY.md](docs/references/TESTING-STRATEGY.md) | Fail-Fast + cascading integration verification |
+| [Getting Started](docs/getting-started.md) | 5-minute quickstart guide |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes and version history |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contribution guidelines |
 
 ---
 
@@ -484,6 +498,7 @@ VOYAGE_API_KEY exists?
 | `bun run lint` | Biome linting |
 | `bun run format` | Biome auto-formatting |
 | `bun run check` | typecheck + lint + test |
+| `bun run docs` | Generate API docs (TypeDoc) |
 
 ---
 

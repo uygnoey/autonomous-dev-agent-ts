@@ -1,6 +1,6 @@
 {
   "name": "autonomous-dev-agent",
-  "version": "0.1.0-alpha",
+  "version": "1.0.0",
   "description": "Claude Code Skills + RAG autonomous development agent",
   "type": "module",
   "main": "./dist/index.js",
@@ -49,7 +49,9 @@
     "typecheck": "bunx tsc --noEmit",
     "lint": "bunx biome check src/",
     "format": "bunx biome format src/ --write",
-    "check": "bun run typecheck && bun run lint && bun run test"
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "docs": "bunx typedoc",
+    "docs:watch": "bunx typedoc --watch"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",
@@ -71,6 +73,7 @@
     "@types/inquirer": "^9.0.9",
     "@types/pdfkit": "^0.17.5",
     "@types/yargs": "^17.0.35",
+    "typedoc": "^0.27.0",
     "typescript": "^5.7.0"
   },
   "engines": {

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "docs/api-reference",
+  "name": "adev - Autonomous Dev Agent",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "includeVersion": true,
+  "navigationLinks": {
+    "GitHub": "https://github.com/uygnoey/autonomous-dev-agent-ts",
+    "npm": "https://www.npmjs.com/package/autonomous-dev-agent"
+  },
+  "plugin": [],
+  "categorizeByGroup": true,
+  "sort": ["source-order"],
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}
