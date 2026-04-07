@@ -83,6 +83,23 @@ export function getSafeEnvForSubprocess(): Record<string, string> {
   return result;
 }
 
+// ── Headless 모드 / Headless Mode ───────────────────────────────
+
+/**
+ * headless 모드 여부를 반환한다 / Check if running in headless mode
+ *
+ * @description
+ * KR: ADEV_HEADLESS=1 이면 TUI를 비활성화하고 plain text 출력으로 전환.
+ *     Docker, CI, 파이프라인 등 비대화형 환경에서 사용.
+ * EN: When ADEV_HEADLESS=1, disables TUI and switches to plain text output.
+ *     Used in Docker, CI, pipeline, and other non-interactive environments.
+ *
+ * @returns true if headless mode is active
+ */
+export function isHeadless(): boolean {
+  return process.env.ADEV_HEADLESS === '1' || process.env.ADEV_HEADLESS === 'true';
+}
+
 // ── 환경변수 / Environment Variables ────────────────────────────
 
 /**

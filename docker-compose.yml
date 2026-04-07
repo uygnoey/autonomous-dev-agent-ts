@@ -1,0 +1,17 @@
+services:
+  adev:
+    build: .
+    environment:
+      - ADEV_HEADLESS=1
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      # LanceDB persistent storage
+      - adev-data:/app/data
+      # Mount target project for adev to operate on
+      - ./:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: false
+
+volumes:
+  adev-data:

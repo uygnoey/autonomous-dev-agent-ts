@@ -6,10 +6,12 @@
  * EN: ChatUi class entry point. Composes input (chat-input), output (chat-output), and types (chat-types).
  */
 
+import { setNoColor } from 'cli/tui/ansi.js';
 import { ChatInputHandler } from 'cli/tui/chat-input.js';
 import { ChatOutputHandler } from 'cli/tui/chat-output.js';
 import type { ChatEvent, ChatUiOptions } from 'cli/tui/chat-types.js';
 import type { ChatMessage } from 'cli/tui/types.js';
+import { isHeadless } from 'core/config.js';
 
 // ── re-export ───────────────────────────────────────────────────
 
@@ -40,6 +42,10 @@ export class ChatUi {
 
   constructor(options: ChatUiOptions = {}) {
     this.options = options;
+    // WHY: headless 모드에서 ANSI 이스케이프 비활성화 (Docker/CI 환경)
+    if (isHeadless()) {
+      setNoColor(true);
+    }
     this.input = new ChatInputHandler();
     this.output = new ChatOutputHandler(options.tuiConfig);
   }

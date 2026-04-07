@@ -6,7 +6,7 @@
  * 비동기 작업 진행 중 시각적 피드백 제공.
  */
 
-import { clearAndReturn, colorize, dim } from 'cli/tui/ansi.js';
+import { clearAndReturn, colorize, dim, isNoColor } from 'cli/tui/ansi.js';
 import type { FgColor, SpinnerFrames, SpinnerOptions, SpinnerState } from 'cli/tui/types.js';
 
 // ── 스피너 프레임 목록 / Spinner frame sets ───────────────────────
@@ -102,6 +102,12 @@ export class Spinner {
     this.state = 'spinning';
     this.frameIndex = 0;
 
+    // WHY: headless/noColor 환경에서 스피너 애니메이션 비활성화 (TTY 없음)
+    if (isNoColor()) {
+      this.write(`... ${this.text}\n`);
+      return this;
+    }
+
     this.timer = setInterval(() => {
       this.render();
     }, this.interval);
@@ -128,7 +134,9 @@ export class Spinner {
   stop(): this {
     this.cleanup();
     this.state = 'idle';
-    this.write(clearAndReturn());
+    if (!isNoColor()) {
+      this.write(clearAndReturn());
+    }
     return this;
   }
 
@@ -141,7 +149,11 @@ export class Spinner {
     this.cleanup();
     this.state = 'success';
     const msg = text ?? this.text;
-    this.write(`${clearAndReturn()}${colorize('✔', 'green')} ${msg}\n`);
+    if (isNoColor()) {
+      this.write(`[OK] ${msg}\n`);
+    } else {
+      this.write(`${clearAndReturn()}${colorize('✔', 'green')} ${msg}\n`);
+    }
     return this;
   }
 
@@ -154,7 +166,11 @@ export class Spinner {
     this.cleanup();
     this.state = 'error';
     const msg = text ?? this.text;
-    this.write(`${clearAndReturn()}${colorize('✖', 'red')} ${msg}\n`);
+    if (isNoColor()) {
+      this.write(`[FAIL] ${msg}\n`);
+    } else {
+      this.write(`${clearAndReturn()}${colorize('✖', 'red')} ${msg}\n`);
+    }
     return this;
   }
 
