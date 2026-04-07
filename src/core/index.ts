@@ -165,3 +165,23 @@ export {
   NoOpMetricsCollector,
 } from 'core/metrics.js';
 export type { MetricsCollector, MetricsEvent, MetricsLabels } from 'core/metrics.js';
+
+// ── LLM Provider ────────────────────────────────────────────────
+
+export type {
+  LlmCallOptions,
+  LlmCapabilities,
+  LlmChatResponse,
+  LlmCostEstimate,
+  LlmMessage,
+  LlmProvider,
+  LlmRole,
+  LlmStreamEvent,
+  LlmStreamEventType,
+  LlmTokenUsage,
+} from 'core/llm-provider.js';
+
+// ── LLM Registry ────────────────────────────────────────────────
+
+export { LlmRegistry } from 'core/llm-registry.js';
+export type { ILlmRegistry, LlmProviderFactory } from 'core/llm-registry.js';

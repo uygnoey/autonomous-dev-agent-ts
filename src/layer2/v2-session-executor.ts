@@ -10,6 +10,7 @@
 
 import type { AuthProvider } from 'auth/types.js';
 import { AgentError } from 'core/errors.js';
+import type { LlmProvider } from 'core/llm-provider.js';
 import type { Logger } from 'core/logger.js';
 import { type AgentName, type Result, err, ok } from 'core/types.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
@@ -44,6 +45,7 @@ export class V2SessionExecutor implements AgentExecutor {
   private readonly activeSessions: Map<string, { session: V2Session; options: SDKSessionOptions }>;
   private readonly sessionFactory: V2SessionFactory;
   private readonly hooks: V2SessionExecutorOptions['hooks'];
+  private readonly llmProvider: LlmProvider | undefined;
 
   constructor(options: V2SessionExecutorOptions) {
     this.authProvider = options.authProvider;
@@ -52,6 +54,16 @@ export class V2SessionExecutor implements AgentExecutor {
     this.activeSessions = new Map();
     this.sessionFactory = options.sessionFactory ?? sdkSessionFactory;
     this.hooks = options.hooks;
+    this.llmProvider = options.llmProvider;
+  }
+
+  /**
+   * 주입된 LLM Provider를 반환한다 / Returns the injected LLM provider
+   *
+   * @returns LlmProvider 또는 undefined / LlmProvider or undefined
+   */
+  getLlmProvider(): LlmProvider | undefined {
+    return this.llmProvider;
   }
 
   /**

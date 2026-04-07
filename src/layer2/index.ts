@@ -26,6 +26,8 @@ export { UserCheckpoint } from 'layer2/user-checkpoint.js';
 export { V2SessionExecutor } from 'layer2/v2-session-executor.js';
 export { VerificationGate, type IVerificationGate } from 'layer2/verification-gate.js';
 export { DocumenterEventDispatcher } from 'layer2/documenter-event-dispatcher.js';
+export { ClaudeProvider, type ClaudeProviderOptions } from 'layer2/claude-provider.js';
+export { OpenAiProvider, type OpenAiProviderOptions } from 'layer2/openai-provider.js';
 
 // ── 타입 / Types ────────────────────────────────────────────────
 

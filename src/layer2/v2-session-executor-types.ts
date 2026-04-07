@@ -15,6 +15,7 @@ import type {
   SDKSessionOptions,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { AuthProvider } from 'auth/types.js';
+import type { LlmProvider } from 'core/llm-provider.js';
 import type { Logger } from 'core/logger.js';
 
 // Re-export SDK types for use in executor and factory modules
@@ -106,4 +107,12 @@ export interface V2SessionExecutorOptions {
    * EN: Hook event callbacks for PreToolUse, PostToolUse, etc. Used to connect StreamMonitor.
    */
   readonly hooks?: Partial<Record<SDKHookEvent, HookCallbackMatcher[]>>;
+  /**
+   * LLM Provider (선택) / LLM Provider (optional)
+   *
+   * @description
+   * KR: LlmProvider 인터페이스를 통해 다중 모델 지원. 미지정 시 Claude 전용 세션 팩토리 사용.
+   * EN: Enables multi-model support via LlmProvider interface. Falls back to Claude session factory when not specified.
+   */
+  readonly llmProvider?: LlmProvider;
 }
