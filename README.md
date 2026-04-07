@@ -4,8 +4,9 @@
 
 **Claude Code Skills + RAG-powered autonomous development agent system**
 
+[![npm version](https://img.shields.io/npm/v/autonomous-dev-agent?color=cb3837&logo=npm)](https://www.npmjs.com/package/autonomous-dev-agent)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ESNext-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.1-f9f1e1?logo=bun&logoColor=000)](https://bun.sh/)
+[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.3-f9f1e1?logo=bun&logoColor=000)](https://bun.sh/)
 [![Claude SDK](https://img.shields.io/badge/Claude_Agent_SDK-V2_Session_API-cc785c?logo=anthropic&logoColor=white)](https://docs.anthropic.com/)
 [![LanceDB](https://img.shields.io/badge/LanceDB-Embedded_Vector_DB-4B8BBE)](https://lancedb.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -115,7 +116,22 @@ Built on the Claude Agent SDK with a three-layer architecture, it manages the en
 
 ## 3. Installation
 
-### Quick Install (Recommended)
+### Install via npm/bun (Recommended)
+
+```bash
+# Using bun (recommended)
+bun add -g autonomous-dev-agent
+
+# Using npm
+npm install -g autonomous-dev-agent
+```
+
+After installation:
+```bash
+adev --help
+```
+
+### Quick Install (Shell Script)
 
 **One-line install** (automatically installs Bun if needed):
 
@@ -139,7 +155,7 @@ adev
 
 #### Prerequisites
 
-- **Bun runtime** (≥1.1.0) - Fast JavaScript/TypeScript runtime
+- **Bun runtime** (≥1.3.0) - Fast JavaScript/TypeScript runtime
 - **Anthropic API key** OR **Claude Pro/Max Subscription**
 
 #### Install Bun
@@ -396,7 +412,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 | Category | Technology | Purpose |
 |----------|-----------|---------|
-| **Runtime** | [Bun](https://bun.sh/) ≥1.1 | Package manager, bundler, test runner |
+| **Runtime** | [Bun](https://bun.sh/) ≥1.3 | Package manager, bundler, test runner |
 | **Language** | TypeScript (ESNext, strict) | Entire codebase |
 | **Agent SDK** | [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) | V2 Session API based agent execution |
 | **Vector DB** | [LanceDB](https://lancedb.com/) | Embedded, serverless, file-based vector DB |
