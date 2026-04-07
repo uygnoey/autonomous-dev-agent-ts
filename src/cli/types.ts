@@ -17,7 +17,7 @@ import type { Result } from 'core/types.js';
  * KR: adev CLI에서 사용 가능한 명령어 타입.
  * EN: Available command types for adev CLI.
  */
-export type CliCommandName = 'init' | 'start' | 'config' | 'project' | 'plugin' | 'version' | 'help';
+export type CliCommandName = 'init' | 'start' | 'config' | 'project' | 'plugin' | 'dashboard' | 'version' | 'help';
 
 /**
  * 프로젝트 서브 명령어 타입 / Project sub-command type
