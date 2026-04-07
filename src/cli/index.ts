@@ -18,6 +18,7 @@ export { CommandRouter, type ParsedArgs, type RoutableCommand } from 'cli/comman
 
 export { ConfigCommand } from 'cli/commands/config.js';
 export { InitCommand } from 'cli/commands/init.js';
+export { PluginCommand } from 'cli/commands/plugin.js';
 export { ProjectCommand } from 'cli/commands/project.js';
 export { StartCommand } from 'cli/commands/start.js';
 export { StatusCommand } from 'cli/commands/status.js';
@@ -33,6 +34,7 @@ export type {
   GlobalCliOptions,
   InitOptions,
   ProjectInfo,
+  PluginSubCommand,
   ProjectOptions,
   ProjectRegistry,
   StartOptions,

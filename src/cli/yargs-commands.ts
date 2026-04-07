@@ -25,6 +25,7 @@ adev - Claude Code Agent Development CLI
   config <sub>      설정 관리 / Manage configuration (get/set/list/reset)
   setting <sub>     설정 관리 / Manage configuration (alias: config)
   project <sub>     프로젝트 관리 / Manage projects (add/remove/list/switch/update)
+  plugin <sub>      플러그인 관리 / Manage plugins (list/install/remove/create)
 
 전역 옵션 / Global Options:
   -v, --verbose     상세 로그 출력 / Enable verbose logging

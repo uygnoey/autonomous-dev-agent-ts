@@ -81,6 +81,18 @@ export async function buildYargsParser(
           describe: 'Subcommand arguments (e.g. path for add)',
         }),
     )
+    .command('plugin <sub> [args..]', 'Manage plugins', (y) =>
+      y
+        .positional('sub', {
+          type: 'string',
+          describe: 'Subcommand (list/install/remove/create)',
+        })
+        .positional('args', {
+          type: 'string',
+          array: true,
+          describe: 'Plugin name or path',
+        }),
+    )
     .option('verbose', {
       alias: 'v',
       type: 'boolean',

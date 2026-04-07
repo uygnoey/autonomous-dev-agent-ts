@@ -17,7 +17,7 @@ import type { Result } from 'core/types.js';
  * KR: adev CLI에서 사용 가능한 명령어 타입.
  * EN: Available command types for adev CLI.
  */
-export type CliCommandName = 'init' | 'start' | 'config' | 'project' | 'version' | 'help';
+export type CliCommandName = 'init' | 'start' | 'config' | 'project' | 'plugin' | 'version' | 'help';
 
 /**
  * 프로젝트 서브 명령어 타입 / Project sub-command type
@@ -28,6 +28,11 @@ export type ProjectSubCommand = 'add' | 'remove' | 'list' | 'switch' | 'update';
  * 설정 서브 명령어 타입 / Config sub-command type
  */
 export type ConfigSubCommand = 'get' | 'set' | 'list' | 'reset';
+
+/**
+ * 플러그인 서브 명령어 타입 / Plugin sub-command type
+ */
+export type PluginSubCommand = 'list' | 'install' | 'remove' | 'create';
 
 // ── CLI 옵션 / CLI Options ─────────────────────────────────────
 
