@@ -1,0 +1,10 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "Minimal example plugin that logs lifecycle events",
+  "entryPoint": "index.ts",
+  "capabilities": ["phase_hook"],
+  "permissions": [],
+  "dependencies": [],
+  "minAdevVersion": "1.0.0"
+}

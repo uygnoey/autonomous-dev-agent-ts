@@ -1,0 +1,10 @@
+{
+  "name": "metrics-logger",
+  "version": "1.0.0",
+  "description": "Example plugin that tracks phase durations and emits metrics events",
+  "entryPoint": "index.ts",
+  "capabilities": ["phase_hook"],
+  "permissions": ["fs_write"],
+  "dependencies": [],
+  "minAdevVersion": "1.0.0"
+}
