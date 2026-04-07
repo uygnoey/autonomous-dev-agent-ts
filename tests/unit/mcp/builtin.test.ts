@@ -292,8 +292,8 @@ describe('GIT_SERVER', () => {
 // ── BUILTIN_SERVERS 배열 ──────────────────────────────────────
 
 describe('BUILTIN_SERVERS', () => {
-  it('4개의 내장 서버를 포함한다', () => {
-    expect(BUILTIN_SERVERS).toHaveLength(4);
+  it('7개의 내장 서버를 포함한다', () => {
+    expect(BUILTIN_SERVERS).toHaveLength(7);
   });
 
   it('모든 서버가 고유한 이름을 가진다', () => {
@@ -350,8 +350,8 @@ describe('BUILTIN_SERVERS', () => {
     expect(Array.isArray(BUILTIN_SERVERS)).toBe(true);
   });
 
-  it('5개 이상 서버는 없다', () => {
-    expect(BUILTIN_SERVERS.length).toBeLessThanOrEqual(5);
+  it('8개 이상 서버는 없다', () => {
+    expect(BUILTIN_SERVERS.length).toBeLessThanOrEqual(8);
   });
 
   it('0개 이상의 서버를 포함한다', () => {
@@ -404,19 +404,19 @@ describe('BUILTIN_SERVERS', () => {
     }
   });
 
-  it('필터링: enabled=true인 서버만 → 4개', () => {
+  it('필터링: enabled=true인 서버만 → 7개', () => {
     const enabled = BUILTIN_SERVERS.filter((s) => s.enabled);
-    expect(enabled.length).toBe(4);
+    expect(enabled.length).toBe(7);
   });
 
-  it('필터링: command=builtin인 서버 → 4개', () => {
+  it('필터링: command=builtin인 서버 → 7개', () => {
     const builtin = BUILTIN_SERVERS.filter((s) => s.command === 'builtin');
-    expect(builtin.length).toBe(4);
+    expect(builtin.length).toBe(7);
   });
 
-  it('5번 반복 조회 → 항상 4개', () => {
+  it('5번 반복 조회 → 항상 7개', () => {
     for (let i = 0; i < 5; i++) {
-      expect(BUILTIN_SERVERS.length).toBe(4);
+      expect(BUILTIN_SERVERS.length).toBe(7);
     }
   });
 
@@ -733,8 +733,8 @@ describe('BUILTIN_SERVERS 인덱스 접근', () => {
     expect(BUILTIN_SERVERS[3]).toBeDefined();
   });
 
-  it('인덱스 4 항목은 undefined이다', () => {
-    expect(BUILTIN_SERVERS[4]).toBeUndefined();
+  it('인덱스 7 항목은 undefined이다', () => {
+    expect(BUILTIN_SERVERS[7]).toBeUndefined();
   });
 
   it('각 인덱스 항목의 name은 string이다', () => {
@@ -778,9 +778,9 @@ describe('BUILTIN_SERVERS 인덱스 접근', () => {
     expect(found).toBeUndefined();
   });
 
-  it('map으로 이름 배열 생성 → length=4', () => {
+  it('map으로 이름 배열 생성 → length=7', () => {
     const names = BUILTIN_SERVERS.map(s => s.name);
-    expect(names.length).toBe(4);
+    expect(names.length).toBe(7);
   });
 
   it('reduce로 command 집합 → size=1', () => {
@@ -843,9 +843,9 @@ describe('BUILTIN_SERVERS - 추가 edge/random 케이스', () => {
     expect(enabledList.every(e => e === true)).toBe(true);
   });
 
-  it('filter로 name 길이 > 5인 서버 → 3개 (os-control, web-search, browser)', () => {
+  it('filter로 name 길이 > 5인 서버 → 6개 (os-control, web-search, browser, database, api-testing, deployment)', () => {
     const long = BUILTIN_SERVERS.filter(s => s.name.length > 5);
-    expect(long.length).toBe(3);
+    expect(long.length).toBe(6);
   });
 
   it('filter로 name 길이 <= 5인 서버 → 2개 (git, browser[7]? 아니면 git만)', () => {
@@ -854,9 +854,9 @@ describe('BUILTIN_SERVERS - 추가 edge/random 케이스', () => {
     expect(short.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('sort로 알파벳순 정렬 → 첫 번째가 browser', () => {
+  it('sort로 알파벳순 정렬 → 첫 번째가 api-testing', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
-    expect(sorted[0]?.name).toBe('browser');
+    expect(sorted[0]?.name).toBe('api-testing');
   });
 
   it('sort 후 마지막이 web-search', () => {
@@ -898,10 +898,10 @@ describe('BUILTIN_SERVERS - 추가 edge/random 케이스', () => {
     expect(BUILTIN_SERVERS.slice(0, 4).length).toBe(4);
   });
 
-  it('forEach로 모든 서버 순회 → count 4', () => {
+  it('forEach로 모든 서버 순회 → count 7', () => {
     let count = 0;
     BUILTIN_SERVERS.forEach(() => { count++; });
-    expect(count).toBe(4);
+    expect(count).toBe(7);
   });
 
   it('reduce로 이름 합산 → 4개 이름 포함', () => {
@@ -1086,12 +1086,12 @@ describe('McpServerConfig 타입 구조 심층 검증', () => {
     }
   });
 
-  it('Object.entries로 모든 서버 순회 → 4개', () => {
+  it('Object.entries로 모든 서버 순회 → 7개', () => {
     let count = 0;
     for (const _ of BUILTIN_SERVERS) {
       count++;
     }
-    expect(count).toBe(4);
+    expect(count).toBe(7);
   });
 
   it('각 서버 JSON.stringify → 유효한 JSON', () => {
@@ -1285,7 +1285,7 @@ describe('BUILTIN_SERVERS 배열 연산 검증', () => {
   it('concat으로 새 배열 → 길이 5 (기존 서버 + 1개 추가)', () => {
     const extra: McpServerConfig = { name: 'extra', command: 'builtin', args: [], enabled: true };
     const extended = [...BUILTIN_SERVERS, extra];
-    expect(extended.length).toBe(5);
+    expect(extended.length).toBe(8);
   });
 
   it('filter로 command=builtin → 원본과 동일 길이', () => {
@@ -1305,13 +1305,13 @@ describe('BUILTIN_SERVERS 배열 연산 검증', () => {
 
   it('reduce로 이름 길이 합산', () => {
     const totalNameLength = BUILTIN_SERVERS.reduce((acc, s) => acc + s.name.length, 0);
-    // os-control(10) + browser(7) + web-search(10) + git(3) = 30
-    expect(totalNameLength).toBe(30);
+    // os-control(10) + browser(7) + web-search(10) + git(3) + database(8) + api-testing(11) + deployment(10) = 59
+    expect(totalNameLength).toBe(59);
   });
 
-  it('sort 역순 → 마지막이 os-control', () => {
+  it('sort 역순 → 마지막이 api-testing', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => b.name.localeCompare(a.name));
-    expect(sorted[sorted.length - 1]?.name).toBe('browser');
+    expect(sorted[sorted.length - 1]?.name).toBe('api-testing');
   });
 
   it('indexOf로 OS_CONTROL_SERVER 인덱스 조회 → -1이 아님', () => {
@@ -1350,10 +1350,10 @@ describe('BUILTIN_SERVERS 배열 연산 검증', () => {
     expect(disabled).toBeUndefined();
   });
 
-  it('filter로 이름 길이 > 3인 서버 → 3개', () => {
-    // os-control(10), browser(7), web-search(10) → 3개
+  it('filter로 이름 길이 > 3인 서버 → 6개', () => {
+    // os-control(10), browser(7), web-search(10), database(8), api-testing(11), deployment(10) → 6개
     const filtered = BUILTIN_SERVERS.filter((s) => s.name.length > 3);
-    expect(filtered.length).toBe(3);
+    expect(filtered.length).toBe(6);
   });
 
   it('5번 반복 sort → 항상 동일 순서', () => {
@@ -1378,11 +1378,11 @@ describe('서버 간 관계 심층 검증', () => {
     expect(GIT_SERVER.name.includes('-')).toBe(false);
   });
 
-  it('하이픈 포함 서버 2개, 미포함 서버 2개', () => {
+  it('하이픈 포함 서버 3개, 미포함 서버 4개', () => {
     const withDash = BUILTIN_SERVERS.filter((s) => s.name.includes('-'));
     const withoutDash = BUILTIN_SERVERS.filter((s) => !s.name.includes('-'));
-    expect(withDash.length).toBe(2);
-    expect(withoutDash.length).toBe(2);
+    expect(withDash.length).toBe(3);
+    expect(withoutDash.length).toBe(4);
   });
 
   it('모든 서버 command가 "builtin" 단일 값', () => {
@@ -1396,34 +1396,34 @@ describe('서버 간 관계 심층 검증', () => {
     expect(shortest.name).toBe('git');
   });
 
-  it('이름 최장: os-control 또는 web-search (10글자)', () => {
+  it('이름 최장: api-testing (11글자)', () => {
     const longest = BUILTIN_SERVERS.reduce((max, s) => s.name.length > max.name.length ? s : max);
-    expect(longest.name.length).toBe(10);
+    expect(longest.name.length).toBe(11);
   });
 
-  it('이름 알파벳순 첫 번째는 browser', () => {
+  it('이름 알파벳순 첫 번째는 api-testing', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
-    expect(sorted[0]?.name).toBe('browser');
+    expect(sorted[0]?.name).toBe('api-testing');
   });
 
-  it('이름 알파벳순 두 번째는 git', () => {
+  it('이름 알파벳순 두 번째는 browser', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
-    expect(sorted[1]?.name).toBe('git');
+    expect(sorted[1]?.name).toBe('browser');
   });
 
-  it('이름 알파벳순 세 번째는 os-control', () => {
+  it('이름 알파벳순 세 번째는 database', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
-    expect(sorted[2]?.name).toBe('os-control');
+    expect(sorted[2]?.name).toBe('database');
   });
 
-  it('이름 알파벳순 네 번째는 web-search', () => {
+  it('이름 알파벳순 네 번째는 deployment', () => {
     const sorted = [...BUILTIN_SERVERS].sort((a, b) => a.name.localeCompare(b.name));
-    expect(sorted[3]?.name).toBe('web-search');
+    expect(sorted[3]?.name).toBe('deployment');
   });
 
-  it('총 이름 문자 수 30 (10+7+10+3)', () => {
+  it('총 이름 문자 수 59 (10+7+10+3+8+11+10)', () => {
     const total = BUILTIN_SERVERS.reduce((sum, s) => sum + s.name.length, 0);
-    expect(total).toBe(30);
+    expect(total).toBe(59);
   });
 
   it('모든 서버 args 총 개수 0', () => {

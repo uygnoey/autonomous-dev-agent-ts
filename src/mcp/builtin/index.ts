@@ -2,9 +2,9 @@
  * 내장 MCP 서버 모음 / Built-in MCP servers collection
  *
  * @description
- * KR: adev에 기본 포함된 4개의 MCP 서버를 export한다.
+ * KR: adev에 기본 포함된 7개의 MCP 서버를 export한다.
  *     모두 ProcessExecutor 기반으로 구현되어 외부 의존성이 없다.
- * EN: Exports 4 built-in MCP servers bundled with adev.
+ * EN: Exports 7 built-in MCP servers bundled with adev.
  *     All implemented with ProcessExecutor, no external dependencies.
  */
 
@@ -16,8 +16,14 @@ export { OS_CONTROL_SERVER } from 'mcp/builtin/os-control/index.js';
 export { BROWSER_SERVER } from 'mcp/builtin/browser/index.js';
 export { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/index.js';
 export { GIT_SERVER } from 'mcp/builtin/git/index.js';
+export { DATABASE_SERVER } from 'mcp/builtin/database/index.js';
+export { API_TESTING_SERVER } from 'mcp/builtin/api-testing/index.js';
+export { DEPLOYMENT_SERVER } from 'mcp/builtin/deployment/index.js';
 
+import { API_TESTING_SERVER } from 'mcp/builtin/api-testing/index.js';
 import { BROWSER_SERVER } from 'mcp/builtin/browser/index.js';
+import { DATABASE_SERVER } from 'mcp/builtin/database/index.js';
+import { DEPLOYMENT_SERVER } from 'mcp/builtin/deployment/index.js';
 import { GIT_SERVER } from 'mcp/builtin/git/index.js';
 import { OS_CONTROL_SERVER } from 'mcp/builtin/os-control/index.js';
 import { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/index.js';
@@ -26,9 +32,9 @@ import { WEB_SEARCH_SERVER } from 'mcp/builtin/web-search/index.js';
  * 모든 내장 MCP 서버 설정 배열 / Array of all built-in MCP server configurations
  *
  * @description
- * KR: 4개 내장 서버 설정을 배열로 제공한다.
+ * KR: 7개 내장 서버 설정을 배열로 제공한다.
  *     registry에 일괄 등록할 때 사용.
- * EN: Provides 4 built-in server configurations as an array.
+ * EN: Provides 7 built-in server configurations as an array.
  *     Used for bulk registration in registry.
  *
  * @example
@@ -41,6 +47,9 @@ export const BUILTIN_SERVERS: readonly McpServerConfig[] = [
   BROWSER_SERVER,
   WEB_SEARCH_SERVER,
   GIT_SERVER,
+  DATABASE_SERVER,
+  API_TESTING_SERVER,
+  DEPLOYMENT_SERVER,
 ];
 
 // ── 서버 인스턴스 / Server Instances ───────────────────────
@@ -49,6 +58,9 @@ export { OsControlServer } from 'mcp/builtin/os-control/index.js';
 export { BrowserServer } from 'mcp/builtin/browser/index.js';
 export { WebSearchServer } from 'mcp/builtin/web-search/index.js';
 export { GitServer } from 'mcp/builtin/git/index.js';
+export { DatabaseServer } from 'mcp/builtin/database/index.js';
+export { ApiTestingServer } from 'mcp/builtin/api-testing/index.js';
+export { DeploymentServer } from 'mcp/builtin/deployment/index.js';
 
 // ── 도구 목록 / Tool Lists ─────────────────────────────────
 
@@ -56,6 +68,9 @@ export { OS_CONTROL_TOOLS } from 'mcp/builtin/os-control/index.js';
 export { BROWSER_TOOLS } from 'mcp/builtin/browser/index.js';
 export { WEB_SEARCH_TOOLS } from 'mcp/builtin/web-search/index.js';
 export { GIT_TOOLS } from 'mcp/builtin/git/index.js';
+export { DATABASE_TOOLS } from 'mcp/builtin/database/index.js';
+export { API_TESTING_TOOLS } from 'mcp/builtin/api-testing/index.js';
+export { DEPLOYMENT_TOOLS } from 'mcp/builtin/deployment/index.js';
 
 // ── 타입 / Types ───────────────────────────────────────────
 
@@ -76,3 +91,9 @@ export type {
 } from 'mcp/builtin/web-search/index.js';
 
 export type { GitInput, GitOutput } from 'mcp/builtin/git/index.js';
+
+export type { DatabaseInput, DatabaseOutput } from 'mcp/builtin/database/index.js';
+
+export type { ApiTestInput, ApiTestOutput } from 'mcp/builtin/api-testing/index.js';
+
+export type { DeployInput, DeployOutput } from 'mcp/builtin/deployment/index.js';
