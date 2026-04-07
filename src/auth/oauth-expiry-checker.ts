@@ -18,6 +18,12 @@ const EXPIRING_SOON_DAYS = 30;
 /** 갱신 명령 / Renewal command */
 const RENEWAL_COMMAND = 'claude setup-token';
 
+/** JWT 토큰 최대 크기 (bytes) — 비정상적으로 큰 토큰의 파싱 방지 / Max JWT token size */
+const MAX_TOKEN_SIZE = 64 * 1024; // 64KB
+
+/** JWT 페이로드 최대 크기 (bytes) — 디코딩된 페이로드의 크기 제한 / Max decoded payload size */
+const MAX_PAYLOAD_SIZE = 32 * 1024; // 32KB
+
 /** 하루 밀리초 / Milliseconds per day */
 const MS_PER_DAY = 1_000 * 60 * 60 * 24;
 
@@ -70,6 +76,11 @@ export class OAuthExpiryChecker {
       return fallback;
     }
 
+    // WHY: 비정상적으로 큰 토큰은 파싱하지 않아 메모리 폭발 방지
+    if (token.length > MAX_TOKEN_SIZE) {
+      return fallback;
+    }
+
     // JWT 파싱 시도: {header}.{payload}.{signature}
     const parts = token.split('.');
     if (parts.length !== 3) {
@@ -84,6 +95,12 @@ export class OAuthExpiryChecker {
       const base64 = padded + '='.repeat(padding);
 
       const decoded = atob(base64);
+
+      // WHY: 디코딩된 페이로드 크기 제한 — JSON 폭탄 방지
+      if (decoded.length > MAX_PAYLOAD_SIZE) {
+        return fallback;
+      }
+
       const payload: unknown = JSON.parse(decoded);
 
       if (typeof payload !== 'object' || payload === null) {

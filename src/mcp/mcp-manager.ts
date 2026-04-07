@@ -14,10 +14,11 @@ import type { CircuitBreakerConfig } from 'core/circuit-breaker.js';
 import { getSafeEnvForSubprocess } from 'core/config.js';
 import { McpError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { safeJsonParse } from 'core/safe-json.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { McpLoader } from 'mcp/loader.js';
-import { performHandshake } from 'mcp/mcp-handshake.js';
+import { MAX_MCP_MESSAGE_SIZE, performHandshake } from 'mcp/mcp-handshake.js';
 import type { McpRegistry } from 'mcp/registry.js';
 import type { McpServerInstance, McpServerStatus, McpTool } from 'mcp/types.js';
 
@@ -406,14 +407,44 @@ export class McpManager {
             return err(new McpError('mcp_stream_closed', 'MCP 서버 스트림이 종료되었습니다'));
           }
           buffer += decoder.decode(value, { stream: true });
+
+          // WHY: 버퍼 크기 제한으로 악의적 MCP 서버의 대량 응답을 차단
+          if (buffer.length > MAX_MCP_MESSAGE_SIZE) {
+            return err(
+              new McpError(
+                'mcp_message_too_large',
+                `MCP 도구 응답 크기 초과: ${buffer.length} bytes > ${MAX_MCP_MESSAGE_SIZE} bytes`,
+              ),
+            );
+          }
+
           const newlineIdx = buffer.indexOf('\n');
           if (newlineIdx !== -1) {
             const line = buffer.slice(0, newlineIdx).trim();
             buffer = buffer.slice(newlineIdx + 1);
             if (line) {
-              const parsed = JSON.parse(line) as { result?: unknown; error?: { message: string } };
+              // WHY: safeJsonParse로 크기/깊이 제한 적용 — 악의적 페이로드 차단
+              const parseResult = safeJsonParse<{ result?: unknown; error?: { message: string } }>(
+                line,
+                { maxSize: MAX_MCP_MESSAGE_SIZE },
+              );
+              if (!parseResult.ok) {
+                return err(
+                  new McpError(
+                    'mcp_tool_call_failed',
+                    `MCP 응답 파싱 실패: ${parseResult.error.message}`,
+                  ),
+                );
+              }
+              const parsed = parseResult.value;
               if (parsed.error) {
-                return err(new McpError('mcp_tool_call_failed', parsed.error.message));
+                const errorMsg =
+                  typeof parsed.error === 'object' &&
+                  parsed.error !== null &&
+                  typeof parsed.error.message === 'string'
+                    ? parsed.error.message
+                    : 'MCP 서버 에러 (상세 없음)';
+                return err(new McpError('mcp_tool_call_failed', errorMsg));
               }
               return ok(parsed.result);
             }

@@ -126,6 +126,16 @@ export {
   splitLargeFile,
 } from 'core/file-size-guard.js';
 
+// ── 안전한 JSON 파싱 ──────────────────────────────────────────────
+
+export {
+  DEFAULT_MAX_JSON_DEPTH,
+  DEFAULT_MAX_JSON_SIZE,
+  safeJsonParse,
+  sanitizeFilePath,
+} from 'core/safe-json.js';
+export type { SafeJsonParseOptions } from 'core/safe-json.js';
+
 // ── 메트릭스 ────────────────────────────────────────────────────
 
 export {

@@ -11,6 +11,7 @@
 import type { Subprocess } from 'bun';
 import { McpError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { safeJsonParse } from 'core/safe-json.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { McpTool } from 'mcp/types.js';
@@ -22,6 +23,9 @@ export const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 /** MCP 프로토콜 버전 / MCP protocol version */
 const MCP_PROTOCOL_VERSION = '2024-11-05';
+
+/** MCP 메시지 최대 크기 (bytes) / Maximum MCP message size */
+export const MAX_MCP_MESSAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // ── 내부 타입 / Internal types ───────────────────────────────────
 
@@ -126,6 +130,17 @@ async function readRpcLine(
         );
       }
       buffer += decoder.decode(value, { stream: true });
+
+      // WHY: 버퍼 크기 제한으로 메모리 폭발 방지 — 악의적 서버가 개행 없이 대량 데이터 전송 시 차단
+      if (buffer.length > MAX_MCP_MESSAGE_SIZE) {
+        return err(
+          new McpError(
+            'mcp_message_too_large',
+            `MCP 메시지 크기 초과: ${buffer.length} bytes > ${MAX_MCP_MESSAGE_SIZE} bytes`,
+          ),
+        );
+      }
+
       const newlineIdx = buffer.indexOf('\n');
       if (newlineIdx !== -1) {
         const line = buffer.slice(0, newlineIdx).trim();
@@ -145,23 +160,48 @@ async function readRpcLine(
  * @param logger - 로거 인스턴스 / Logger instance
  */
 function parseToolsResponse(raw: string, logger: Logger): McpTool[] {
-  try {
-    const parsed = JSON.parse(raw) as {
-      result?: {
-        tools?: Array<{
-          name: string;
-          description?: string;
-          inputSchema?: Record<string, unknown>;
-        }>;
-      };
+  // WHY: 외부 MCP 서버 응답에 크기/깊이 제한을 적용하여 DoS 방지
+  const parseResult = safeJsonParse<{
+    result?: {
+      tools?: Array<{
+        name: string;
+        description?: string;
+        inputSchema?: Record<string, unknown>;
+      }>;
     };
-    return (parsed.result?.tools ?? []).map((t) => ({
+  }>(raw, { maxSize: MAX_MCP_MESSAGE_SIZE });
+
+  if (!parseResult.ok) {
+    logger.warn('MCP 도구 목록 파싱 실패, 빈 배열 반환', {
+      error: parseResult.error.message,
+    });
+    return [];
+  }
+
+  const parsed = parseResult.value;
+
+  // WHY: JSON-RPC 2.0 응답 구조 검증 — result 필드가 객체인지 확인
+  if (
+    parsed.result !== undefined &&
+    (typeof parsed.result !== 'object' || parsed.result === null)
+  ) {
+    logger.warn('MCP 응답 result 필드가 유효한 객체가 아닙니다');
+    return [];
+  }
+
+  const tools = parsed.result?.tools;
+  if (!Array.isArray(tools)) {
+    return [];
+  }
+
+  return tools
+    .filter(
+      (t): t is { name: string; description?: string; inputSchema?: Record<string, unknown> } =>
+        typeof t === 'object' && t !== null && typeof t.name === 'string' && t.name.length > 0,
+    )
+    .map((t) => ({
       name: t.name,
       description: t.description ?? '',
       inputSchema: t.inputSchema ?? {},
     }));
-  } catch {
-    logger.warn('MCP 도구 목록 파싱 실패, 빈 배열 반환');
-    return [];
-  }
 }
