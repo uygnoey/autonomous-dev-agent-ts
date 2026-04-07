@@ -73,6 +73,27 @@ export { MemoryRepository } from 'core/memory.js';
 export { DefaultPluginLoader } from 'core/plugin-loader.js';
 export type { Plugin, PluginLoader, PluginManifest } from 'core/plugin-loader.js';
 
+// ── 플러그인 SDK v2 ──────────────────────────────────────────
+
+export type {
+  AdevPlugin,
+  LoadedPluginV2,
+  PhaseChangeInfo,
+  PluginCapability,
+  PluginCompletionResult,
+  PluginConfigAccess,
+  PluginContext,
+  PluginDependency,
+  PluginManifestV2,
+  PluginPermission,
+  PluginStatus,
+} from 'core/plugin-types.js';
+
+export { DefaultPluginContext } from 'core/plugin-context.js';
+export type { PluginEventListener } from 'core/plugin-context.js';
+
+export { PluginManager } from 'core/plugin-manager.js';
+
 // ── 프로세스 실행 ─────────────────────────────────────────────
 
 export { ProcessExecutor } from 'core/process-executor.js';
