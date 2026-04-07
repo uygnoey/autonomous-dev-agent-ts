@@ -77,11 +77,15 @@ export const API_TESTING_TOOLS: readonly McpTool[] = [
   },
   {
     name: 'api_parse_openapi',
-    description: 'OpenAPI 스펙 파싱 및 엔드포인트 목록 조회 / Parse OpenAPI spec and list endpoints',
+    description:
+      'OpenAPI 스펙 파싱 및 엔드포인트 목록 조회 / Parse OpenAPI spec and list endpoints',
     inputSchema: {
       type: 'object',
       properties: {
-        specPath: { type: 'string', description: 'OpenAPI 스펙 파일 경로 / OpenAPI spec file path' },
+        specPath: {
+          type: 'string',
+          description: 'OpenAPI 스펙 파일 경로 / OpenAPI spec file path',
+        },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
       required: ['specPath'],
@@ -93,7 +97,10 @@ export const API_TESTING_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        responseBody: { type: 'string', description: '검증할 응답 바디 (JSON) / Response body to validate (JSON)' },
+        responseBody: {
+          type: 'string',
+          description: '검증할 응답 바디 (JSON) / Response body to validate (JSON)',
+        },
         expectedSchema: {
           type: 'object',
           description: '기대 JSON 스키마 / Expected JSON schema',
@@ -128,8 +135,10 @@ export class ApiTestingExecutor {
   private async executeHttpRequest(input: ApiTestInput): Promise<Result<string>> {
     const args: string[] = [
       '-s', // WHY: 진행 표시 비활성화
-      '-w', '\n---HTTP_STATUS:%{http_code}---',
-      '-X', input.method ?? 'GET',
+      '-w',
+      '\n---HTTP_STATUS:%{http_code}---',
+      '-X',
+      input.method ?? 'GET',
     ];
 
     if (input.headers) {
@@ -191,12 +200,18 @@ export class ApiTestingExecutor {
         if (key in record && propSchema.type) {
           const actualType = Array.isArray(record[key]) ? 'array' : typeof record[key];
           if (actualType !== propSchema.type) {
-            errors.push(`${key}: 타입 불일치 (기대: ${propSchema.type as string}, 실제: ${actualType})`);
+            errors.push(
+              `${key}: 타입 불일치 (기대: ${propSchema.type as string}, 실제: ${actualType})`,
+            );
           }
         }
       }
-    } else if (schema.type && typeof data !== schema.type) {
-      errors.push(`루트 타입 불일치 (기대: ${schema.type as string}, 실제: ${typeof data})`);
+    } else if (schema.type) {
+      const expectedType = schema.type as string;
+      const actualRootType = Array.isArray(data) ? 'array' : typeof data;
+      if (actualRootType !== expectedType) {
+        errors.push(`루트 타입 불일치 (기대: ${expectedType}, 실제: ${actualRootType})`);
+      }
     }
 
     return errors;

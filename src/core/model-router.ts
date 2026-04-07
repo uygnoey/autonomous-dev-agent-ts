@@ -97,9 +97,7 @@ export interface RoutingDecision {
 /** 기본 모델 라우팅 설정 / Default model routing configuration */
 export const DEFAULT_MODEL_ROUTING_CONFIG: ModelRoutingConfig = {
   defaultModel: { provider: 'claude', model: 'claude-opus-4-6' },
-  defaultFallbacks: [
-    { provider: 'claude', model: 'claude-sonnet-4-6' },
-  ],
+  defaultFallbacks: [{ provider: 'claude', model: 'claude-sonnet-4-6' }],
   phases: {
     DESIGN: {
       default: { provider: 'claude', model: 'claude-opus-4-6' },

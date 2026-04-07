@@ -84,7 +84,9 @@ export interface PhaseModelMappingConfig {
   /** 기본 모델 / Default model */
   readonly default: ModelReferenceConfig;
   /** 복잡도별 오버라이드 / Per-complexity overrides */
-  readonly byComplexity?: Readonly<Partial<Record<'low' | 'medium' | 'high', ModelReferenceConfig>>>;
+  readonly byComplexity?: Readonly<
+    Partial<Record<'low' | 'medium' | 'high', ModelReferenceConfig>>
+  >;
   /** Fallback 체인 / Fallback chain */
   readonly fallbacks?: readonly ModelReferenceConfig[];
 }
@@ -96,7 +98,9 @@ export interface ModelsConfig {
   /** 글로벌 fallback 체인 / Global fallback chain */
   readonly defaultFallbacks?: readonly ModelReferenceConfig[];
   /** Phase별 모델 매핑 / Per-phase model mappings */
-  readonly phases?: Readonly<Partial<Record<'DESIGN' | 'CODE' | 'TEST' | 'VERIFY', PhaseModelMappingConfig>>>;
+  readonly phases?: Readonly<
+    Partial<Record<'DESIGN' | 'CODE' | 'TEST' | 'VERIFY', PhaseModelMappingConfig>>
+  >;
   /** 최대 fallback 시도 횟수 / Max fallback attempts */
   readonly maxFallbackAttempts?: number;
 }

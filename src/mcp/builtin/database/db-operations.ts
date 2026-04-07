@@ -52,7 +52,10 @@ export const DATABASE_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        connectionString: { type: 'string', description: '데이터베이스 연결 문자열 / Database connection string' },
+        connectionString: {
+          type: 'string',
+          description: '데이터베이스 연결 문자열 / Database connection string',
+        },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
       required: ['connectionString'],
@@ -64,7 +67,10 @@ export const DATABASE_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        connectionString: { type: 'string', description: '데이터베이스 연결 문자열 / Database connection string' },
+        connectionString: {
+          type: 'string',
+          description: '데이터베이스 연결 문자열 / Database connection string',
+        },
         table: { type: 'string', description: '테이블 이름 / Table name' },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
@@ -77,7 +83,10 @@ export const DATABASE_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        connectionString: { type: 'string', description: '데이터베이스 연결 문자열 / Database connection string' },
+        connectionString: {
+          type: 'string',
+          description: '데이터베이스 연결 문자열 / Database connection string',
+        },
         query: { type: 'string', description: 'SELECT SQL 쿼리 / SELECT SQL query' },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
@@ -90,7 +99,10 @@ export const DATABASE_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        connectionString: { type: 'string', description: '데이터베이스 연결 문자열 / Database connection string' },
+        connectionString: {
+          type: 'string',
+          description: '데이터베이스 연결 문자열 / Database connection string',
+        },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
       required: ['connectionString'],
@@ -175,11 +187,7 @@ export class DatabaseExecutor {
         if (!input.connectionString) {
           return ok({ success: false, message: 'connectionString 필드 필수' });
         }
-        const result = await this.executeSql(
-          input.connectionString,
-          ".tables",
-          input.cwd,
-        );
+        const result = await this.executeSql(input.connectionString, '.tables', input.cwd);
         if (!result.ok) {
           return ok({ success: false, message: result.error.message });
         }

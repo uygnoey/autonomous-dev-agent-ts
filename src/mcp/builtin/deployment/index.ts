@@ -11,9 +11,9 @@ import type { ProcessExecutor } from 'core/process-executor.js';
 import type { Result } from 'core/types.js';
 import {
   DEPLOYMENT_TOOLS,
-  DeploymentExecutor,
   type DeployInput,
   type DeployOutput,
+  DeploymentExecutor,
 } from 'mcp/builtin/deployment/deploy-operations.js';
 import type { McpServerConfig, McpTool } from 'mcp/types.js';
 

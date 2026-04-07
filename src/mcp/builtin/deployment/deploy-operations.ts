@@ -56,7 +56,10 @@ export const DEPLOYMENT_TOOLS: readonly McpTool[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        container: { type: 'string', description: '컨테이너 이름/ID (미지정 시 전체) / Container name/ID (all if omitted)' },
+        container: {
+          type: 'string',
+          description: '컨테이너 이름/ID (미지정 시 전체) / Container name/ID (all if omitted)',
+        },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
     },
@@ -93,8 +96,14 @@ export const DEPLOYMENT_TOOLS: readonly McpTool[] = [
       type: 'object',
       properties: {
         service: { type: 'string', description: '서비스 이름 / Service name' },
-        imageTag: { type: 'string', description: '롤백 대상 이미지 태그 / Target image tag for rollback' },
-        composePath: { type: 'string', description: 'Docker Compose 파일 경로 / Docker Compose file path' },
+        imageTag: {
+          type: 'string',
+          description: '롤백 대상 이미지 태그 / Target image tag for rollback',
+        },
+        composePath: {
+          type: 'string',
+          description: 'Docker Compose 파일 경로 / Docker Compose file path',
+        },
         cwd: { type: 'string', description: '작업 디렉토리 / Working directory' },
       },
       required: ['service', 'imageTag'],
@@ -220,7 +229,10 @@ export class DeploymentExecutor {
           return ok({ success: false, message: result.error.message });
         }
         if (result.value.exitCode !== 0) {
-          return ok({ success: false, message: `롤백 실패: ${result.value.stderr || result.value.stdout}` });
+          return ok({
+            success: false,
+            message: `롤백 실패: ${result.value.stderr || result.value.stdout}`,
+          });
         }
         return ok({
           success: true,
