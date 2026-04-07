@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { $ } from 'bun';
 
 const SMOKE_ENABLED = process.env.ADEV_E2E_SMOKE === '1';
-const CLI_PATH = join(import.meta.dir, '../../dist/cli.js');
+const CLI_PATH = join(import.meta.dir, '../../dist/index.js');
 
 describe.skipIf(!SMOKE_ENABLED)('Smoke Test: init -> start -> verify', () => {
   let testDir: string;

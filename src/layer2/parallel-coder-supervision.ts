@@ -286,7 +286,7 @@ async function runSingleSupervision(
  * @param events - 수집된 이벤트 / Collected events
  * @returns 감독 판정 결과 / Supervision verdict
  */
-function analyzeSupervisionOutput(
+export function analyzeSupervisionOutput(
   agentName: 'architect' | 'reviewer',
   events: readonly AgentEvent[],
 ): SupervisionVerdict {

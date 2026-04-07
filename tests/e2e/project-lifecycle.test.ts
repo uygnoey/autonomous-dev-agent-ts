@@ -14,7 +14,7 @@ import { InitCommand } from 'cli/commands/init.js';
 import { ConfigCommand } from 'cli/commands/config.js';
 import { ProjectCommand } from 'cli/commands/project.js';
 import { StartCommand } from 'cli/commands/start.js';
-import { CommandRouter } from 'cli/main.js';
+import { CommandRouter } from 'cli/command-router.js';
 import { ConsoleLogger } from 'core/logger.js';
 import type { CliOptions } from 'cli/types.js';
 import { loadRegistry } from 'cli/commands/project.js';

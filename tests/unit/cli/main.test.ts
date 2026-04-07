@@ -11,7 +11,7 @@ import { AdevError } from 'core/errors.js';
 import { ConsoleLogger } from 'core/logger.js';
 import { ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
-import { CommandRouter } from 'cli/main.js';
+import { CommandRouter } from 'cli/command-router.js';
 import type { CliCommand, CliOptions } from 'cli/types.js';
 
 const logger = new ConsoleLogger('error');
