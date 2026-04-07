@@ -10,6 +10,7 @@
 
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { PerfTracker } from 'core/perf.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 
 /**
@@ -28,6 +29,7 @@ import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 export class AgentSpawner {
   private readonly logger: Logger;
   private readonly executor: AgentExecutor;
+  private readonly perf: PerfTracker;
 
   /**
    * @param executor - 에이전트 실행기 / Agent executor
@@ -36,6 +38,7 @@ export class AgentSpawner {
   constructor(executor: AgentExecutor, logger: Logger) {
     this.executor = executor;
     this.logger = logger.child({ module: 'agent-spawner' });
+    this.perf = new PerfTracker(this.logger);
   }
 
   /**
@@ -57,14 +60,27 @@ export class AgentSpawner {
     });
 
     try {
+      const spawnStart = performance.now();
+      let firstEventRecorded = false;
+
       for await (const event of this.executor.execute(config)) {
+        if (!firstEventRecorded) {
+          const ttfe = Math.round((performance.now() - spawnStart) * 100) / 100;
+          this.logger.info('에이전트 cold-start 측정 (spawn→첫 이벤트)', {
+            agent: config.name,
+            timeToFirstEventMs: ttfe,
+          });
+          firstEventRecorded = true;
+        }
         yield event;
       }
 
+      const totalMs = Math.round((performance.now() - spawnStart) * 100) / 100;
       this.logger.info('에이전트 실행 완료', {
         agent: config.name,
         phase: config.phase,
         featureId: config.featureId,
+        totalMs,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -87,6 +103,13 @@ export class AgentSpawner {
         },
       };
     }
+  }
+
+  /**
+   * 성능 측정 결과 반환 / Get performance profiling entries
+   */
+  getPerfEntries() {
+    return this.perf.getEntries();
   }
 
   /**

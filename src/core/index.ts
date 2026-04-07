@@ -125,3 +125,12 @@ export {
   SPLIT_CHUNK_SIZE_BYTES,
   splitLargeFile,
 } from 'core/file-size-guard.js';
+
+// ── 메트릭스 ────────────────────────────────────────────────────
+
+export {
+  createMetricsEvent,
+  JsonStdoutMetricsCollector,
+  NoOpMetricsCollector,
+} from 'core/metrics.js';
+export type { MetricsCollector, MetricsEvent, MetricsLabels } from 'core/metrics.js';

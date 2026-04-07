@@ -10,6 +10,7 @@
 
 import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { PerfTracker } from 'core/perf.js';
 import { err, ok } from 'core/types.js';
 import type { Result } from 'core/types.js';
 import type { EmbeddingProvider, EmbeddingTier } from 'rag/types.js';
@@ -30,6 +31,9 @@ const DEFAULT_DIMENSIONS = 384;
 
 /** 기본 모델 이름 / Default model name */
 const DEFAULT_MODEL = 'Xenova/all-MiniLM-L6-v2';
+
+/** 임베딩 캐시 최대 크기 / Max embedding cache entries */
+const EMBEDDING_CACHE_MAX_SIZE = 1024;
 
 // ── TransformersEmbeddingProvider ───────────────────────────────
 
@@ -59,13 +63,17 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
   readonly tier: EmbeddingTier = 'free';
   private pipeline: FeatureExtractionPipeline | null = null;
   private initialized = false;
+  private readonly perf: PerfTracker;
+  private readonly embeddingCache = new Map<string, Float32Array>();
 
   constructor(
     readonly name: string,
     private readonly modelName: string,
     readonly dimensions: number,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.perf = new PerfTracker(logger);
+  }
 
   /**
    * 모델 초기화 / Initialize the ML model
@@ -89,9 +97,17 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
 
       // WHY: dynamic import — initialize() 호출 시점에만 로드.
       //      모듈 로드 시점에 OOM이 발생하지 않도록 lazy 로드한다.
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline } = await this.perf.measureAsync(
+        'embedding.dynamicImport',
+        () => import('@huggingface/transformers'),
+        { warnThresholdMs: 1000, context: { model: this.modelName } },
+      );
       // WHY: pipeline('feature-extraction')은 텍스트를 고정 차원 벡터로 변환
-      this.pipeline = await pipeline('feature-extraction', this.modelName);
+      this.pipeline = await this.perf.measureAsync(
+        'embedding.pipelineLoad',
+        () => pipeline('feature-extraction', this.modelName),
+        { warnThresholdMs: 2000, context: { model: this.modelName } },
+      );
       this.initialized = true;
 
       this.logger.info('Transformers 모델 로딩 완료', {
@@ -130,10 +146,34 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
     }
 
     try {
+      // WHY: 캐시에서 이미 임베딩된 텍스트를 분리하여 중복 연산 방지
+      const uncachedTexts: string[] = [];
+      const uncachedIndices: number[] = [];
+      const results = new Array<Float32Array>(texts.length);
+
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i] as string;
+        const cached = this.embeddingCache.get(text);
+        if (cached !== undefined) {
+          results[i] = cached;
+        } else {
+          uncachedTexts.push(text);
+          uncachedIndices.push(i);
+        }
+      }
+
+      const cacheHits = texts.length - uncachedTexts.length;
       this.logger.debug('임베딩 배치 처리 시작', {
         count: texts.length,
+        cacheHits,
+        uncached: uncachedTexts.length,
         provider: this.name,
       });
+
+      // WHY: 모든 텍스트가 캐시 히트면 pipeline 호출 불필요
+      if (uncachedTexts.length === 0) {
+        return ok(results as Float32Array[]);
+      }
 
       // WHY: pipeline null 체크 — initialize()에서 보장하나 타입 안전성 확보
       if (this.pipeline === null) {
@@ -141,19 +181,45 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
       }
 
       // WHY: pipeline 호출 시 배치 처리 지원 — 한 번에 여러 텍스트 임베딩
-      const output = await this.pipeline(texts, { pooling: 'mean', normalize: true });
+      const output = await this.perf.measureAsync(
+        'embedding.inference',
+        () =>
+          (this.pipeline as FeatureExtractionPipeline)(uncachedTexts, {
+            pooling: 'mean',
+            normalize: true,
+          }),
+        { warnThresholdMs: 500, context: { batchSize: uncachedTexts.length } },
+      );
 
       // WHY: output.tolist()는 동기 반환 — 중첩 배열, 각 텍스트마다 벡터 1개
       const rawVectors = output.tolist();
 
       // WHY: Float32Array로 변환 — 메모리 효율 + LanceDB 호환성
-      const vectors = rawVectors.map((vec: number[]) => {
-        const float32 = new Float32Array(vec);
-        return normalizeVector(float32);
-      });
+      for (let j = 0; j < rawVectors.length; j++) {
+        const vec = rawVectors[j] as number[];
+        const normalized = normalizeVector(new Float32Array(vec));
+        const idx = uncachedIndices[j] as number;
+        results[idx] = normalized;
 
-      this.logger.debug('임베딩 배치 처리 완료', { count: vectors.length });
-      return ok(vectors);
+        // WHY: 캐시에 저장하여 동일 텍스트 재임베딩 방지
+        const text = uncachedTexts[j] as string;
+        this.embeddingCache.set(text, normalized);
+      }
+
+      // WHY: 캐시 크기 제한 — FIFO 방식으로 오래된 엔트리 삭제
+      if (this.embeddingCache.size > EMBEDDING_CACHE_MAX_SIZE) {
+        const excess = this.embeddingCache.size - EMBEDDING_CACHE_MAX_SIZE;
+        const keys = this.embeddingCache.keys();
+        for (let k = 0; k < excess; k++) {
+          const next = keys.next();
+          if (!next.done) {
+            this.embeddingCache.delete(next.value);
+          }
+        }
+      }
+
+      this.logger.debug('임베딩 배치 처리 완료', { count: results.length });
+      return ok(results as Float32Array[]);
     } catch (error: unknown) {
       this.logger.error('임베딩 배치 처리 실패', { error: String(error) });
       return err(new RagError('rag_embedding_error', `임베딩 실패: ${String(error)}`, error));
@@ -181,6 +247,20 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
     }
 
     return ok(vector);
+  }
+
+  /**
+   * 성능 측정 결과 반환 / Get performance profiling entries
+   */
+  getPerfEntries() {
+    return this.perf.getEntries();
+  }
+
+  /**
+   * 성능 측정 요약 로깅 / Log performance profiling summary
+   */
+  logPerfSummary(): void {
+    this.perf.summary();
   }
 }
 

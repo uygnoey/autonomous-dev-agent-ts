@@ -14,6 +14,7 @@
 
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { PerfTracker } from 'core/perf.js';
 import type { HandoffPackage } from 'layer1/types.js';
 import { extractModulesWithDependencyOrder } from 'layer2/parallel-coder-runner-helpers.js';
 import {
@@ -53,6 +54,7 @@ import type {
 export class ParallelCoderRunner {
   private readonly deps: ParallelCoderRunnerDeps;
   private readonly logger: Logger;
+  private readonly perf: PerfTracker;
 
   /**
    * @param deps - 의존성 / Dependencies
@@ -60,6 +62,7 @@ export class ParallelCoderRunner {
   constructor(deps: ParallelCoderRunnerDeps) {
     this.deps = deps;
     this.logger = deps.logger.child({ module: 'parallel-coder-runner' });
+    this.perf = new PerfTracker(this.logger);
   }
 
   /**
@@ -191,9 +194,12 @@ export class ParallelCoderRunner {
 
     for (let i = 0; i < allocations.length; i += maxWorkers) {
       const batch = allocations.slice(i, i + maxWorkers);
+      const batchIndex = Math.floor(i / maxWorkers);
       // WHY: 배치 내 Promise.all — 일부 실패해도 다른 Coder는 계속 진행
-      const batchResults = await Promise.all(
-        batch.map((allocation) => this.runOneCoder(allocation, handoffPackage)),
+      const batchResults = await this.perf.measureAsync(
+        `coderBatch[${batchIndex}]`,
+        () => Promise.all(batch.map((allocation) => this.runOneCoder(allocation, handoffPackage))),
+        { warnThresholdMs: 30000, context: { batchSize: batch.length, batchIndex } },
       );
       results.push(...batchResults);
     }
