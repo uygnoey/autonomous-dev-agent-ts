@@ -217,8 +217,21 @@ describe('core ↔ mcp 통합 / core ↔ mcp integration', () => {
     expect(globalOnly).toBeDefined();
   });
 
-  it('빌트인 서버 4개 자동 등록', () => {
-    expect(BUILTIN_SERVERS.length).toBe(4);
+  it('빌트인 서버 7개 자동 등록', () => {
+    // Canonical built-in set: os-control, browser, web-search, git, database, api-testing, deployment
+    expect(BUILTIN_SERVERS.length).toBe(7);
+
+    const expectedNames = [
+      'os-control',
+      'browser',
+      'web-search',
+      'git',
+      'database',
+      'api-testing',
+      'deployment',
+    ];
+    const actualNames = BUILTIN_SERVERS.map((s) => s.name);
+    expect(actualNames).toEqual(expectedNames);
 
     const registry = new McpRegistry(logger);
     for (const config of BUILTIN_SERVERS) {
@@ -227,7 +240,7 @@ describe('core ↔ mcp 통합 / core ↔ mcp integration', () => {
     }
 
     const servers = registry.listServers();
-    expect(servers.length).toBe(4);
+    expect(servers.length).toBe(7);
   });
 
   it('McpManager healthCheck로 모든 서버 상태 확인', async () => {
