@@ -54,7 +54,7 @@ import type { RagSearcher } from 'rag/search.js';
 /**
  * Layer2 부트스트랩 옵션 / Layer2 bootstrap options
  */
-export interface Layer2BootstrapOptions {
+interface Layer2BootstrapOptions {
   /** 인증 공급자 / Authentication provider */
   readonly authProvider: AuthProvider;
   /** 로거 인스턴스 / Logger instance */

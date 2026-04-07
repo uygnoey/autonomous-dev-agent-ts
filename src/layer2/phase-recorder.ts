@@ -26,7 +26,7 @@ import type { PhaseTransition } from 'layer2/types.js';
  * @param projectId - 프로젝트 ID / Project ID
  * @param featureId - 기능 ID / Feature ID
  */
-export interface PhaseRecorderOptions {
+interface PhaseRecorderOptions {
   readonly phaseEngine: IPhaseEngine;
   readonly logger: Logger;
   readonly designDecisionRepo?: VectorRepository<DesignDecision>;

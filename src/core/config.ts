@@ -16,12 +16,7 @@ import type { Result } from 'core/types.js';
 
 // ── re-export 분할 파일 / Re-export split files ──────────────
 
-export {
-  DEFAULT_CLAUDE_MODEL,
-  DEFAULT_CONFIG,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_VERIFIER_MODEL,
-} from 'core/config-schema.js';
+export { DEFAULT_CONFIG } from 'core/config-schema.js';
 export type {
   AuthMode,
   CleanEnvType,
@@ -107,7 +102,7 @@ export function isHeadless(): boolean {
  *
  * @returns VOYAGE_API_KEY 값 또는 null / VOYAGE_API_KEY value or null
  */
-export function getVoyageApiKey(): string | null {
+function getVoyageApiKey(): string | null {
   return process.env.VOYAGE_API_KEY ?? null;
 }
 

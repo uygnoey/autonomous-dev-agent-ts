@@ -25,7 +25,7 @@ import type { AgentEvent } from 'layer2/types.js';
  * KR: architect/reviewer의 감독 세션에서 생성된 판정 결과.
  * EN: Verdict produced by architect/reviewer supervision session.
  */
-export interface SupervisionVerdict {
+interface SupervisionVerdict {
   /** 감독 에이전트 이름 / Supervisor agent name */
   readonly agentName: 'architect' | 'reviewer';
   /** 합격 여부 / Whether passed */
@@ -43,7 +43,7 @@ export interface SupervisionVerdict {
  * KR: architect + reviewer 감독 결과를 집계한 최종 결과.
  * EN: Aggregated result from architect + reviewer supervision.
  */
-export interface SupervisionResult {
+interface SupervisionResult {
   /** 전체 합격 여부 (architect + reviewer 모두 통과해야 합격) / Overall pass */
   readonly passed: boolean;
   /** 개별 판정 결과 / Individual verdicts */
@@ -286,7 +286,7 @@ async function runSingleSupervision(
  * @param events - 수집된 이벤트 / Collected events
  * @returns 감독 판정 결과 / Supervision verdict
  */
-export function analyzeSupervisionOutput(
+function analyzeSupervisionOutput(
   agentName: 'architect' | 'reviewer',
   events: readonly AgentEvent[],
 ): SupervisionVerdict {

@@ -16,7 +16,6 @@ import { err } from 'core/types.js';
 import type { Result } from 'core/types.js';
 
 // ── re-export (기존 import 호환) ────────────────────────────────
-
 export { loadRegistry, saveRegistry } from 'cli/commands/project-registry.js';
 
 // ── ProjectCommand (Facade) ─────────────────────────────────────

@@ -104,7 +104,7 @@ export function analyzeContractImpact(
  * @param directlyAffected - 직접 영향받은 기능 ID 집합 / Directly affected feature ID set
  * @returns 간접 영향 기능 ID 목록 / Indirectly affected feature IDs
  */
-export function traceDependencyChain(
+function traceDependencyChain(
   features: readonly { readonly id: string; readonly dependencies: readonly string[] }[],
   directlyAffected: ReadonlySet<string>,
 ): readonly string[] {

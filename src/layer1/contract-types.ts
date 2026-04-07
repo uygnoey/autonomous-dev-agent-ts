@@ -114,7 +114,7 @@ export interface HandoffPackage {
  * EN: Spec defining requirements, acceptance criteria, test strategy, and constraints
  *     for a single feature.
  */
-export interface ContractSpec {
+interface ContractSpec {
   /** 기능 ID / Feature ID */
   readonly featureId: string;
   /** 기능 제목 / Feature title */

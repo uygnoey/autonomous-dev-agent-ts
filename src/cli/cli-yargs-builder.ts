@@ -13,7 +13,7 @@ import yargs from 'yargs';
 /**
  * CLI 버전 문자열 / CLI version string
  */
-export type CliVersion = string;
+type CliVersion = string;
 
 /**
  * yargs 파서를 생성하고 모든 명령어를 등록한다 / Build yargs parser with all commands registered

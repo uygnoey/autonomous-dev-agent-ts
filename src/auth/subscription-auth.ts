@@ -32,14 +32,14 @@ const ROLLING_WINDOW_MS = 5 * 60 * 60 * 1_000;
  * WHY: Anthropic은 구독 플랜별 정확한 한도를 API로 제공하지 않으므로
  *      공개된 추정치를 사용한다.
  */
-export const ESTIMATED_LIMITS = {
+const ESTIMATED_LIMITS = {
   pro: 45,
   max5x: 225,
   max20x: 900,
 } as const;
 
 /** 구독 플랜 타입 / Subscription plan type */
-export type SubscriptionPlan = keyof typeof ESTIMATED_LIMITS;
+type SubscriptionPlan = keyof typeof ESTIMATED_LIMITS;
 
 /** 기본 추정 한도 (Pro 플랜 기준) / Default estimated limit (Pro plan) */
 const DEFAULT_ESTIMATED_LIMIT = ESTIMATED_LIMITS.pro;

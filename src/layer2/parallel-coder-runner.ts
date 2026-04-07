@@ -24,11 +24,6 @@ import {
 import { createEvent } from 'layer2/team-leader-helpers.js';
 import type { AgentEvent, CoderAllocation } from 'layer2/types.js';
 
-export type {
-  CoderRunResult,
-  ParallelCoderRunnerDeps,
-} from 'layer2/parallel-coder-runner-types.js';
-
 import type {
   CoderRunResult,
   ParallelCoderRunnerDeps,

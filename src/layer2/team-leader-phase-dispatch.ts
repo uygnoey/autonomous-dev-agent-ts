@@ -21,7 +21,7 @@ import type { TeamLeaderDeps } from 'layer2/team-leader-types.js';
 import type { AgentEvent } from 'layer2/types.js';
 
 /** executeCurrentPhase에 필요한 deps 부분 집합 / Subset of deps needed by executeCurrentPhase */
-export interface PhaseDispatchDeps {
+interface PhaseDispatchDeps {
   readonly phaseEngine: TeamLeaderDeps['phaseEngine'];
   readonly tokenMonitor: TeamLeaderDeps['tokenMonitor'];
   readonly agentGenerator: TeamLeaderDeps['agentGenerator'];

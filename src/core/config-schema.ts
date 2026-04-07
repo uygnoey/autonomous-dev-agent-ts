@@ -66,7 +66,7 @@ export interface LogConfig {
 }
 
 /** 인증 설정 / Authentication configuration */
-export interface AuthConfig {
+interface AuthConfig {
   /** 구독 플랜 (PI-006 — §11.1 플랜별 추정 한도) / Subscription plan */
   readonly subscriptionPlan?: 'pro' | 'max5x' | 'max20x';
 }

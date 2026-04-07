@@ -184,16 +184,16 @@ export const cursorToLineStart = (): string => (_noColor ? '' : `${CSI}G`);
 export const clearLine = (): string => (_noColor ? '' : `${CSI}2K`);
 
 /** 줄 시작부터 커서까지 지우기 / Clear from line start to cursor */
-export const clearToLineStart = (): string => (_noColor ? '' : `${CSI}1K`);
+const clearToLineStart = (): string => (_noColor ? '' : `${CSI}1K`);
 
 /** 커서부터 줄 끝까지 지우기 / Clear from cursor to end of line */
-export const clearToLineEnd = (): string => (_noColor ? '' : `${CSI}0K`);
+const clearToLineEnd = (): string => (_noColor ? '' : `${CSI}0K`);
 
 /** 커서 N줄 위로 이동 / Move cursor N lines up */
-export const cursorUp = (n = 1): string => (_noColor ? '' : `${CSI}${n}A`);
+const cursorUp = (n = 1): string => (_noColor ? '' : `${CSI}${n}A`);
 
 /** 커서 N줄 아래로 이동 / Move cursor N lines down */
-export const cursorDown = (n = 1): string => (_noColor ? '' : `${CSI}${n}B`);
+const cursorDown = (n = 1): string => (_noColor ? '' : `${CSI}${n}B`);
 
 /** 커서 숨기기 / Hide cursor */
 export const hideCursor = (): string => (_noColor ? '' : `${ESC}[?25l`);
@@ -202,7 +202,7 @@ export const hideCursor = (): string => (_noColor ? '' : `${ESC}[?25l`);
 export const showCursor = (): string => (_noColor ? '' : `${ESC}[?25h`);
 
 /** 화면 지우기 / Clear screen */
-export const clearScreen = (): string => (_noColor ? '' : `${CSI}2J${CSI}H`);
+const clearScreen = (): string => (_noColor ? '' : `${CSI}2J${CSI}H`);
 
 /** 현재 줄 지우고 커서를 줄 시작으로 이동 / Clear line and move to start */
 export const clearAndReturn = (): string =>

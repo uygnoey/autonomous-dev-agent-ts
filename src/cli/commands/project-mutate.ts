@@ -19,7 +19,7 @@ import type { Result } from 'core/types.js';
 /**
  * 프로젝트 변경 핸들러 / Project mutation handler
  */
-export class ProjectMutateHandler {
+class ProjectMutateHandler {
   private readonly logger: Logger;
   private readonly registryDir: string;
 

@@ -29,8 +29,6 @@ import type { SDKSessionOptions } from 'layer2/v2-session-executor-types.js';
 import { mapSdkEvent, sdkResumeSession } from 'layer2/v2-session-factory.js';
 import type { RagSearcher } from 'rag/search.js';
 
-export type { SessionRestoreOrchestratorDeps } from 'layer2/session-restore-orchestrator-types.js';
-
 /**
  * 세션 복원 오케스트레이터 / Session restore orchestrator
  *

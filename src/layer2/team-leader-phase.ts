@@ -33,7 +33,7 @@ import type {
 /**
  * Phase 처리에 필요한 의존성 / Dependencies required for phase handling
  */
-export interface PhaseHandlerDeps {
+interface PhaseHandlerDeps {
   readonly phaseEngine: {
     readonly currentPhase: Phase;
     transition(phase: Phase, reason: string, actor: string): { ok: boolean };

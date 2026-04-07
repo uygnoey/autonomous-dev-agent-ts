@@ -25,7 +25,7 @@ import { err, ok } from 'core/types.js';
  * KR: NI-002 — §8.5 클라우드 환경 설정 인터페이스 (실제 연결은 추후 구현)
  * EN: NI-002 — §8.5 Cloud environment configuration interface (actual connection TBD)
  */
-export interface CloudEnvConfig {
+interface CloudEnvConfig {
   /** 클라우드 환경 유형 / Cloud environment type */
   readonly type: 'ssh' | 'docker' | 'github-actions' | 'custom';
   /** 원격 호스트 / Remote host */

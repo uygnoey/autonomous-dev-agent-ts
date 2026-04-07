@@ -24,7 +24,7 @@ import type { AgentEvent } from 'layer2/types.js';
  * @param event - documenter 이벤트 / Documenter event
  * @returns documenter에게 주입할 프롬프트 / Prompt to inject into the documenter
  */
-export function buildDocumenterPrompt(event: DocumenterEvent): string {
+function buildDocumenterPrompt(event: DocumenterEvent): string {
   const outputs = DOCUMENTER_OUTPUT_MAP[event.type];
   const outputList = outputs.map((o, i) => `${i + 1}. ${o}`).join('\n');
 

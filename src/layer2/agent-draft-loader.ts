@@ -19,7 +19,7 @@ import type { AgentDraftContent, IAgentDraftLoader } from 'layer2/agent-draft-lo
 /**
  * 7개 고정 에이전트 이름 목록 / All 7 fixed agent names
  */
-export const AGENT_NAMES: readonly AgentName[] = [
+const AGENT_NAMES: readonly AgentName[] = [
   'architect',
   'coder',
   'tester',
@@ -84,7 +84,7 @@ async function readFile(filePath: string): Promise<Result<string>> {
  *   const { content, source } = result.value;
  * }
  */
-export class AgentDraftLoader implements IAgentDraftLoader {
+class AgentDraftLoader implements IAgentDraftLoader {
   private readonly logger: Logger;
 
   /**

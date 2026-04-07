@@ -15,7 +15,7 @@ import type { HandoffPackage } from 'layer1/types.js';
 import type { Layer1Verifier } from 'layer1/verifier.js';
 
 /** layer1 검증 결과 / Layer1 verification result */
-export interface Layer1VerifyResult {
+interface Layer1VerifyResult {
   readonly passed: boolean;
   readonly feedback: string;
 }
@@ -23,7 +23,7 @@ export interface Layer1VerifyResult {
 /**
  * verifyWithLayer1에 필요한 최소 의존성 / Minimal deps needed by verifyWithLayer1
  */
-export interface Layer1VerifierDeps {
+interface Layer1VerifierDeps {
   readonly logger: Logger;
   readonly layer1Verifier?: Layer1Verifier;
 }
@@ -43,7 +43,7 @@ export interface Layer1VerifierDeps {
  * @param agentResults - 에이전트 실행 결과 맵 / Agent execution results map
  * @returns layer1 검증 결과 / Layer1 verification result
  */
-export async function verifyWithLayer1(
+async function verifyWithLayer1(
   deps: Layer1VerifierDeps,
   featureId: string,
   handoffPackage: HandoffPackage,

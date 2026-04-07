@@ -30,7 +30,7 @@ import type { RagSearcher } from 'rag/search.js';
  *     readonly ModifiedFiles와 달리 paths를 재할당할 수 있다.
  * EN: M-A2 — Updated with file list collected via git diff after CODE phase.
  */
-export interface MutableModifiedFiles {
+interface MutableModifiedFiles {
   paths: string[];
 }
 

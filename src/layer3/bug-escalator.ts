@@ -38,7 +38,6 @@ export type {
   TriggerLayer2Options,
 } from 'layer3/bug-escalator-types.js';
 
-export type { ArtifactSnapshot } from 'layer3/bug-escalator-snapshot.js';
 export type { OnLayer2RerunRequired } from 'layer3/bug-escalator-trigger.js';
 
 /** BugEscalator 구현 클래스 / BugEscalator implementation */

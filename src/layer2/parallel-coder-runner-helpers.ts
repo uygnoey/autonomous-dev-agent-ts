@@ -24,7 +24,7 @@ import type { AgentSpawner } from 'layer2/agent-spawner.js';
  * @param spec - 스펙 문서 / Spec document
  * @returns 모듈 목록 / Module list
  */
-export function extractModulesFromSpec(spec: string): string[] {
+function extractModulesFromSpec(spec: string): string[] {
   if (!spec || spec.trim() === '') return ['default'];
 
   const modules: string[] = [];

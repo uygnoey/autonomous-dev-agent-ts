@@ -18,7 +18,7 @@ import type {
 } from 'layer1/claude-api-types.js';
 
 /** 재시도 가능한 HTTP 상태 코드 / Retryable HTTP status codes */
-export const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
 /**
  * 재시도 로직 래퍼 / Retry logic wrapper
@@ -79,7 +79,7 @@ export async function withRetry<T>(
  * @param retryPolicy - 재시도 정책 / Retry policy
  * @returns 지연 시간 (밀리초) / Delay in milliseconds
  */
-export function calculateBackoffDelay(attempt: number, retryPolicy: RetryPolicy): number {
+function calculateBackoffDelay(attempt: number, retryPolicy: RetryPolicy): number {
   const delay = retryPolicy.baseDelay * retryPolicy.backoffFactor ** (attempt - 1);
   return Math.min(delay, retryPolicy.maxDelay);
 }
@@ -89,7 +89,7 @@ export function calculateBackoffDelay(attempt: number, retryPolicy: RetryPolicy)
  *
  * @param ms - 대기 시간 (밀리초) / Wait time in milliseconds
  */
-export function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -167,7 +167,7 @@ export function handleStreamEvent(
  * @param status - HTTP 상태 코드 / HTTP status code
  * @returns 에러 코드 / Error code
  */
-export function mapApiErrorToCode(status: number | undefined): string {
+function mapApiErrorToCode(status: number | undefined): string {
   if (status === undefined) {
     return 'agent_api_error';
   }

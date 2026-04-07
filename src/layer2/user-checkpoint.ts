@@ -16,10 +16,8 @@ import { formatTestReport } from 'layer2/user-checkpoint-formatter.js';
 export type {
   UserDecision,
   UserInputProvider,
-  IntegrationResultsSummary,
   TestReport,
   CheckpointData,
-  IssueSeverity,
   CriticalIssueResponse,
 } from 'layer2/user-checkpoint-types.js';
 

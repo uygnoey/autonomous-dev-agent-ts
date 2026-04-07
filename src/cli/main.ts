@@ -25,9 +25,6 @@ import { hideBin } from 'yargs/helpers';
 // WHY: package.json에서 버전을 동적으로 읽어 단일 소스 유지
 import packageJson from '../../package.json' with { type: 'json' };
 
-// WHY: 테스트 및 외부에서 main.ts를 통해 CommandRouter에 접근할 수 있도록 re-export
-export { CommandRouter } from 'cli/command-router.js';
-export type { ParsedArgs, RoutableCommand } from 'cli/command-router.js';
 export type { ICliApp } from 'cli/cli-app-types.js';
 
 /**

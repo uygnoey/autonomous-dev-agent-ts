@@ -25,7 +25,7 @@ const SETTLE_BACKOFF_FACTOR = 1.5;
  * @param memberNames - 팀에 속한 에이전트 이름 목록 / Agent names that belonged to the team
  * @returns 정리 성공 여부 / Whether cleanup succeeded
  */
-export type TeamConfigCleanupFn = (
+type TeamConfigCleanupFn = (
   teamName: string,
   memberNames: readonly string[],
 ) => Promise<Result<void>>;
@@ -33,7 +33,7 @@ export type TeamConfigCleanupFn = (
 /**
  * AgentCoordinator 생성 옵션 / AgentCoordinator constructor options
  */
-export interface AgentCoordinatorOptions {
+interface AgentCoordinatorOptions {
   readonly logger: Logger;
   /** 팀 삭제 시 config 정리 콜백 (선택) / Optional config cleanup callback on team deletion */
   readonly onTeamDeleted?: TeamConfigCleanupFn;

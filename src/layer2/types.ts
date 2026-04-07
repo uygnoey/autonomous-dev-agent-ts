@@ -39,20 +39,6 @@ export type {
 } from 'layer2/session-types.js';
 
 export type {
-  IpcEventType,
-  TeamMessageEvent,
-  TaskUpdateEvent,
-  IpcEvent,
-  IpcPollerCallback,
-  IpcPollerOptions,
-} from 'layer2/ipc-poller-types.js';
-
-export type {
-  PersistableSessionSnapshot,
-  FlatSessionSnapshot,
-} from 'layer2/session-snapshot-store-types.js';
-
-export type {
   DocumenterEventType,
   DocumenterEvent,
   FeatureCompleteContext,

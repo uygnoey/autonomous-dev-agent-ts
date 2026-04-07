@@ -30,12 +30,12 @@ export type CliCommandName =
 /**
  * 프로젝트 서브 명령어 타입 / Project sub-command type
  */
-export type ProjectSubCommand = 'add' | 'remove' | 'list' | 'switch' | 'update';
+type ProjectSubCommand = 'add' | 'remove' | 'list' | 'switch' | 'update';
 
 /**
  * 설정 서브 명령어 타입 / Config sub-command type
  */
-export type ConfigSubCommand = 'get' | 'set' | 'list' | 'reset';
+type ConfigSubCommand = 'get' | 'set' | 'list' | 'reset';
 
 /**
  * 플러그인 서브 명령어 타입 / Plugin sub-command type
@@ -153,7 +153,7 @@ export interface ProjectOptions extends GlobalCliOptions {
 /**
  * 프로젝트 상태 / Project status
  */
-export type ProjectStatus = 'active' | 'archived' | 'deleted';
+type ProjectStatus = 'active' | 'archived' | 'deleted';
 
 /**
  * 프로젝트 정보 / Project information
@@ -205,7 +205,7 @@ export type AuthMethod = 'api-key' | 'subscription';
  * KR: ~/.adev/config.json 또는 .adev/config.json에 저장되는 설정.
  * EN: Configuration stored in ~/.adev/config.json or .adev/config.json.
  */
-export interface AdevConfig {
+interface AdevConfig {
   /** 인증 방식 / Authentication method */
   readonly authMethod: AuthMethod;
   /** 기본 모델 (검증용, 기본: Opus 4.6) / Default model (default: Opus 4.6) */
@@ -271,7 +271,7 @@ export interface CliCommandHandler<T extends GlobalCliOptions = GlobalCliOptions
 /**
  * 기본 설정 / Default configuration
  */
-export const DEFAULT_CONFIG: AdevConfig = {
+const DEFAULT_CONFIG: AdevConfig = {
   authMethod: 'api-key',
   defaultModel: 'claude-opus-4-6',
   verificationModel: 'claude-opus-4-6',
@@ -294,12 +294,12 @@ export const EXIT_CODES = {
 /**
  * CLI 버전 / CLI version
  */
-export const CLI_VERSION = '1.0.0';
+const CLI_VERSION = '1.0.0';
 
 /**
  * 설정 파일 경로 / Config file paths
  */
-export const CONFIG_PATHS = {
+const CONFIG_PATHS = {
   GLOBAL_CONFIG: '~/.adev/config.json',
   GLOBAL_PROJECTS: '~/.adev/projects.json',
   PROJECT_CONFIG: '.adev/config.json',

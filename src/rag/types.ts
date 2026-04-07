@@ -160,7 +160,7 @@ export interface IndexDirectoryOptions {
  * KR: 벡터 upsert, 검색, 삭제, 연결 해제를 추상화하는 저수준 인터페이스.
  * EN: Low-level abstraction for vector upsert, search, delete, and connection teardown.
  */
-export interface VectorStore {
+interface VectorStore {
   /**
    * 벡터 upsert / Upsert a vector with metadata
    *
@@ -224,7 +224,7 @@ export interface VectorSearchResult {
  * EN: Bundles code chunks, design decisions, and failure history search results
  *     for injection into Claude prompts.
  */
-export interface RAGContext {
+interface RAGContext {
   /** 코드 청크 검색 결과 / Code chunk search results */
   readonly codeChunks: readonly VectorSearchResult[];
   /** 설계 결정 검색 결과 / Design decision search results */

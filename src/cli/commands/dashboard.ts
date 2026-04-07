@@ -30,7 +30,7 @@ import type { DashboardConfig } from 'dashboard/types.js';
  * KR: 실시간 모니터링 대시보드를 시작하고, SIGINT/SIGTERM으로 종료될 때까지 대기한다.
  * EN: Starts the real-time monitoring dashboard and waits until SIGINT/SIGTERM.
  */
-export class DashboardCommand {
+class DashboardCommand {
   readonly name = 'dashboard';
   readonly description = 'Start real-time monitoring dashboard / 실시간 모니터링 대시보드 시작';
   readonly aliases = ['dash'] as const;

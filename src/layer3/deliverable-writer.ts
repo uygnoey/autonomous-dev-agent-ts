@@ -176,7 +176,7 @@ export async function writeDeliverableToDir(
  * @param logger - 로거 인스턴스 / Logger instance
  * @returns 저장된 파일 경로 목록 / Saved file paths
  */
-export async function writeAllDeliverables(
+async function writeAllDeliverables(
   projectPath: string,
   metadata: DeliverableMetadata,
   types: readonly BusinessDeliverableType[],

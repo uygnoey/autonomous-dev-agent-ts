@@ -26,13 +26,8 @@ import type { RagSearcher } from 'rag/search.js';
 
 // WHY: Phase별 실행 로직은 300줄 제한 준수를 위해 별도 파일로 분리
 export { executeVerifyPhase } from 'layer2/team-leader-verify.js';
-export type { ExecuteVerifyPhaseDeps } from 'layer2/team-leader-verify.js';
 export { executeCodePhase } from 'layer2/team-leader-code-phase.js';
-export type { ExecuteCodePhaseDeps } from 'layer2/team-leader-code-phase.js';
 export { executeTestPhase } from 'layer2/team-leader-test-phase.js';
-export type { ExecuteTestPhaseDeps } from 'layer2/team-leader-test-phase.js';
-export { executeDesignPhaseWithMonitoring } from 'layer2/team-leader-design-phase.js';
-export type { ExecuteDesignPhaseDeps } from 'layer2/team-leader-design-phase.js';
 
 /** executePhase에 필요한 의존성 / Deps needed by executePhase */
 export interface ExecutePhaseDeps {
@@ -202,7 +197,7 @@ export async function* spawnDocumenter(
  * @param context - 추가 컨텍스트 / Additional context
  * @returns 트리거 프롬프트 / Trigger prompt
  */
-export function buildTriggerPrompt(
+function buildTriggerPrompt(
   trigger: DocumenterEventType,
   featureId: string,
   context?: Record<string, unknown>,

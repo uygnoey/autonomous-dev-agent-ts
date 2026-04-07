@@ -82,7 +82,7 @@ const MCP_TOOL_PATTERNS: Readonly<Record<AgentName, readonly string[]>> = {
  * const mcpTools = getMcpToolsForAgent('coder', mcpManager.listTools());
  * // ['mcp__context7__get-library-docs', 'mcp__morphllm__apply-pattern', ...]
  */
-export function getMcpToolsForAgent(
+function getMcpToolsForAgent(
   agentName: AgentName,
   availableMcpTools: readonly McpTool[],
 ): string[] {

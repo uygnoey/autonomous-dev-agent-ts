@@ -25,7 +25,7 @@ import type { AgentEvent } from 'layer2/types.js';
  * KR: 생성자 주입으로 받는 의존성 객체.
  * EN: Dependency object received via constructor injection.
  */
-export interface GitBranchManagerDeps {
+interface GitBranchManagerDeps {
   readonly processExecutor: ProcessExecutor;
   readonly logger: Logger;
   /** 작업 디렉토리 / Working directory (default: process.cwd()) */

@@ -22,7 +22,7 @@ import type { RagSearcher } from 'rag/search.js';
 /**
  * Layer2Bootstrap 생성에 필요한 설정 / Config needed for Layer2Bootstrap creation
  */
-export interface Layer2RunnerConfig {
+interface Layer2RunnerConfig {
   readonly authProvider: AuthProvider;
   readonly logger: Logger;
   readonly projectCwd: string;
@@ -76,6 +76,3 @@ export function createUserCheckpoint(logger: Logger): UserCheckpoint {
 
 // WHY: CLI 모듈에서 필요한 타입만 re-export
 export type { UserInputProvider } from 'layer2/user-checkpoint.js';
-export type { Layer2Bootstrap } from 'layer2/layer2-bootstrap.js';
-export type { IntegrationTester } from 'layer2/integration-tester.js';
-export type { UserCheckpoint } from 'layer2/user-checkpoint.js';

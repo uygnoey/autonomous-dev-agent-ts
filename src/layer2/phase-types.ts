@@ -19,7 +19,7 @@ import type { AgentName, Phase, Result } from 'core/types.js';
  * EN: Snapshot of the Phase finite state machine. Includes current/previous phase,
  *     transition timestamp, and failure count.
  */
-export interface PhaseState {
+interface PhaseState {
   /** 현재 Phase / Current phase */
   readonly current: Phase;
   /** 이전 Phase (최초 상태이면 null) / Previous phase (null if initial) */
@@ -38,7 +38,7 @@ export interface PhaseState {
  * EN: Abstraction for the phase finite state machine managing transitions,
  *     transition eligibility checks, and reset capability.
  */
-export interface PhaseFSM {
+interface PhaseFSM {
   /**
    * 현재 FSM 상태 반환 / Return current FSM state
    * @returns 현재 PhaseState 스냅샷 / Current PhaseState snapshot

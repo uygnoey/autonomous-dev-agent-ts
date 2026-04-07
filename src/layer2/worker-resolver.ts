@@ -62,7 +62,7 @@ export function resolveParallelWorkers(workers: number | 'auto', logger: Logger)
  * @param totalMemoryMb - 총 메모리 한도 MB (기본: ADEV_TOTAL_MEMORY_MB 환경변수 또는 4096) / Total memory limit in MB
  * @returns 축소된 워커 수 또는 원래 워커 수 / Reduced or original worker count
  */
-export function adjustWorkersForMemoryPressure(
+function adjustWorkersForMemoryPressure(
   currentWorkers: number,
   logger: Logger,
   totalMemoryMb?: number,

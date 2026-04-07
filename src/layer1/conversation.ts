@@ -64,7 +64,7 @@ function calculateAmbiguityScore(text: string): number {
  * @param phase - 현재 대화 Phase / Current conversation phase
  * @returns 구체화 질문 또는 null / Probing question or null
  */
-export function generateProbingQuestion(text: string, phase: string): string | null {
+function generateProbingQuestion(text: string, phase: string): string | null {
   if (calculateAmbiguityScore(text) < 0.5) {
     return null;
   }

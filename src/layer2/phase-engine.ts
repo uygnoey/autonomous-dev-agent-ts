@@ -22,7 +22,7 @@ import type { PhaseTransition } from 'layer2/types.js';
 /**
  * PhaseEngine이 발행하는 이벤트 맵 / Events emitted by PhaseEngine
  */
-export interface PhaseEngineEvents {
+interface PhaseEngineEvents {
   /** Phase 전환 완료 시 발행 / Emitted on successful phase transition */
   'phase:changed': [transition: PhaseTransition];
   /** Phase 초기화 시 발행 / Emitted on phase reset */
