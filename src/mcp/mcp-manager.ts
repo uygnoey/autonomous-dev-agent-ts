@@ -9,6 +9,8 @@
  */
 
 import type { Subprocess } from 'bun';
+import { CircuitBreaker, CircuitBreakerOpenError } from 'core/circuit-breaker.js';
+import type { CircuitBreakerConfig } from 'core/circuit-breaker.js';
 import { getSafeEnvForSubprocess } from 'core/config.js';
 import { McpError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
@@ -44,12 +46,29 @@ type PipedSubprocess = Subprocess<'pipe', 'pipe', 'ignore'>;
 export class McpManager {
   private readonly instances = new Map<string, McpServerInstance>();
   private readonly processes = new Map<string, PipedSubprocess>();
+  private readonly circuitBreakers = new Map<string, CircuitBreaker>();
+  private readonly circuitBreakerConfig: Partial<CircuitBreakerConfig>;
 
   constructor(
     private readonly registry: McpRegistry,
     private readonly loader: McpLoader,
     private readonly logger: Logger,
-  ) {}
+    circuitBreakerConfig?: Partial<CircuitBreakerConfig>,
+  ) {
+    this.circuitBreakerConfig = circuitBreakerConfig ?? {};
+  }
+
+  /**
+   * 서버별 circuit breaker를 가져오거나 생성한다 / Get or create per-server circuit breaker
+   */
+  private getCircuitBreaker(serverName: string): CircuitBreaker {
+    let cb = this.circuitBreakers.get(serverName);
+    if (!cb) {
+      cb = new CircuitBreaker(`mcp-${serverName}`, this.logger, this.circuitBreakerConfig);
+      this.circuitBreakers.set(serverName, cb);
+    }
+    return cb;
+  }
 
   /**
    * 설정을 로드하고 모든 서버를 레지스트리에 등록한다 / Load configs and register all servers
@@ -117,6 +136,18 @@ export class McpManager {
       );
     }
 
+    // WHY: circuit breaker가 open이면 서버 시작을 차단하여 반복 실패 방지
+    const cb = this.getCircuitBreaker(name);
+    if (cb.getState() === 'open') {
+      this.logger.warn('MCP 서버 circuit breaker open — 시작 차단', { server: name });
+      return err(
+        new McpError(
+          'mcp_circuit_open',
+          `MCP 서버 '${name}' circuit breaker가 열려 있습니다 — 시작이 차단되었습니다`,
+        ),
+      );
+    }
+
     // WHY: starting 상태로 먼저 등록하여 중복 시작 방지
     const instance: McpServerInstance = {
       config,
@@ -144,6 +175,14 @@ export class McpManager {
         this.killProcess(name);
         await new Promise((r) => setTimeout(r, 500));
       } else {
+        // WHY: 최종 실패 시 circuit breaker에 실패 기록
+        try {
+          await cb.execute(async () => {
+            throw spawnResult.error;
+          });
+        } catch {
+          // WHY: circuit breaker에 실패를 기록하기 위한 의도적 throw — 에러는 이미 처리됨
+        }
         return spawnResult;
       }
     }
@@ -306,6 +345,21 @@ export class McpManager {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<Result<unknown>> {
+    // WHY: circuit breaker가 open이면 해당 서버의 도구 호출을 즉시 차단
+    const cb = this.getCircuitBreaker(serverName);
+    if (cb.getState() === 'open') {
+      this.logger.warn('MCP 도구 호출 circuit breaker open — 차단', {
+        server: serverName,
+        tool: toolName,
+      });
+      return err(
+        new McpError(
+          'mcp_circuit_open',
+          `MCP 서버 '${serverName}' circuit breaker가 열려 있습니다 — 도구 호출 차단됨`,
+        ),
+      );
+    }
+
     const instance = this.instances.get(serverName);
     if (!instance || instance.status !== 'running') {
       return err(
@@ -382,10 +436,35 @@ export class McpManager {
         ),
       );
 
-      return await Promise.race([readResponse(), timeout]);
+      const result = await Promise.race([readResponse(), timeout]);
+      // WHY: 도구 호출 결과를 circuit breaker에 기록 — 실패 누적 시 open 전환
+      if (!result.ok) {
+        try {
+          await cb.execute(async () => {
+            throw result.error;
+          });
+        } catch {
+          // WHY: circuit breaker에 실패를 기록하기 위한 의도적 throw
+        }
+      } else {
+        try {
+          await cb.execute(async () => result.value);
+        } catch {
+          // WHY: 성공 기록 — 실패하면 무시
+        }
+      }
+      return result;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.error('MCP 도구 호출 실패', { serverName, toolName, error: msg });
+      // WHY: 예외도 circuit breaker에 실패로 기록
+      try {
+        await cb.execute(async () => {
+          throw error;
+        });
+      } catch {
+        // WHY: circuit breaker에 실패를 기록하기 위한 의도적 throw
+      }
       return err(
         new McpError(
           'mcp_tool_call_failed',
@@ -399,6 +478,18 @@ export class McpManager {
   }
 
   // ── 내부 메서드 / Private methods ────────────────────────────
+
+  /**
+   * 서버별 circuit breaker 상태 스냅샷 반환 / Get per-server circuit breaker snapshots
+   */
+  getCircuitBreakerSnapshots(): Record<string, { state: string; failureCount: number }> {
+    const snapshots: Record<string, { state: string; failureCount: number }> = {};
+    for (const [name, cb] of this.circuitBreakers) {
+      const snap = cb.getSnapshot();
+      snapshots[name] = { state: snap.state, failureCount: snap.failureCount };
+    }
+    return snapshots;
+  }
 
   /** 프로세스를 종료하고 맵에서 제거한다 / Kill process and remove from map */
   private killProcess(name: string): void {

@@ -15,6 +15,8 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages';
 import type { Message } from '@anthropic-ai/sdk/resources/messages';
 import type { AuthProvider } from 'auth/types.js';
+import { CircuitBreaker, CircuitBreakerOpenError } from 'core/circuit-breaker.js';
+import type { CircuitBreakerConfig } from 'core/circuit-breaker.js';
 import { DEFAULT_CLAUDE_MODEL, DEFAULT_MAX_TOKENS } from 'core/config-schema.js';
 import { AgentError, DEFAULT_RETRY_POLICY, type RetryPolicy } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
@@ -106,6 +108,7 @@ export class ClaudeApi implements IClaudeApi {
   private readonly logger: Logger;
   private readonly retryPolicy: RetryPolicy;
   private readonly client: Anthropic;
+  private readonly circuitBreaker: CircuitBreaker;
   // WHY: PI-015 — §6.1 Claude Opus 4.6 기본, config에서 변경 가능
   private readonly model: string;
   // WHY: PI-010 — 스펙 §1 'V2 Session API 단독 런타임' 준수
@@ -119,11 +122,13 @@ export class ClaudeApi implements IClaudeApi {
     retryPolicy: RetryPolicy = DEFAULT_RETRY_POLICY,
     model = DEFAULT_MODEL,
     useV2Session = false,
+    circuitBreakerConfig?: Partial<CircuitBreakerConfig>,
   ) {
     this.model = model;
     this.useV2Session = useV2Session;
     this.logger = logger.child({ module: 'claude-api' });
     this.retryPolicy = retryPolicy;
+    this.circuitBreaker = new CircuitBreaker('claude-api', logger, circuitBreakerConfig);
 
     // WHY: baseURL과 apiKey는 Anthropic SDK 초기화 시 필요하지만,
     //      실제 인증은 요청마다 authProvider.getAuthHeader()로 처리한다.
@@ -182,37 +187,39 @@ export class ClaudeApi implements IClaudeApi {
       ...(options.system ? { system: options.system } : {}),
     };
 
-    return withRetry(
-      async () => {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return this.executeWithCircuitBreaker(() =>
+      withRetry(
+        async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-          const response = await this.client.messages.create(params, {
-            signal: controller.signal,
-          });
+            const response = await this.client.messages.create(params, {
+              signal: controller.signal,
+            });
 
-          clearTimeout(timeoutId);
+            clearTimeout(timeoutId);
 
-          await this.updateRateLimitFromResponse(response);
+            await this.updateRateLimitFromResponse(response);
 
-          const content = extractTextContent(response);
-          const metadata = buildMetadata(response);
+            const content = extractTextContent(response);
+            const metadata = buildMetadata(response);
 
-          this.logger.info('메시지 생성 완료 / Message created', {
-            model: metadata.model,
-            inputTokens: metadata.inputTokens,
-            outputTokens: metadata.outputTokens,
-            stopReason: metadata.stopReason,
-          });
+            this.logger.info('메시지 생성 완료 / Message created', {
+              model: metadata.model,
+              inputTokens: metadata.inputTokens,
+              outputTokens: metadata.outputTokens,
+              stopReason: metadata.stopReason,
+            });
 
-          return ok({ content, metadata });
-        } catch (error: unknown) {
-          return handleApiError(error, 'createMessage', this.logger);
-        }
-      },
-      this.retryPolicy,
-      this.logger,
+            return ok({ content, metadata });
+          } catch (error: unknown) {
+            return handleApiError(error, 'createMessage', this.logger);
+          }
+        },
+        this.retryPolicy,
+        this.logger,
+      ),
     );
   }
 
@@ -254,41 +261,43 @@ export class ClaudeApi implements IClaudeApi {
       ...(options.system ? { system: options.system } : {}),
     };
 
-    return withRetry(
-      async () => {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return this.executeWithCircuitBreaker(() =>
+      withRetry(
+        async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-          const stream = await this.client.messages.create(params, {
-            signal: controller.signal,
-          });
-
-          let inputTokens = 0;
-          let outputTokens = 0;
-
-          for await (const event of stream) {
-            handleStreamEvent(event, onEvent, (input, output) => {
-              inputTokens = input;
-              outputTokens = output;
+            const stream = await this.client.messages.create(params, {
+              signal: controller.signal,
             });
+
+            let inputTokens = 0;
+            let outputTokens = 0;
+
+            for await (const event of stream) {
+              handleStreamEvent(event, onEvent, (input, output) => {
+                inputTokens = input;
+                outputTokens = output;
+              });
+            }
+
+            clearTimeout(timeoutId);
+
+            this.logger.info('스트리밍 완료 / Streaming completed', {
+              model,
+              inputTokens,
+              outputTokens,
+            });
+
+            return ok(undefined);
+          } catch (error: unknown) {
+            return handleApiError(error, 'streamMessage', this.logger);
           }
-
-          clearTimeout(timeoutId);
-
-          this.logger.info('스트리밍 완료 / Streaming completed', {
-            model,
-            inputTokens,
-            outputTokens,
-          });
-
-          return ok(undefined);
-        } catch (error: unknown) {
-          return handleApiError(error, 'streamMessage', this.logger);
-        }
-      },
-      this.retryPolicy,
-      this.logger,
+        },
+        this.retryPolicy,
+        this.logger,
+      ),
     );
   }
 
@@ -316,73 +325,121 @@ export class ClaudeApi implements IClaudeApi {
   ): Promise<Result<ClaudeApiResponse, AgentError>> {
     const model = options.model ?? this.model;
 
-    return withRetry(
-      async () => {
-        try {
-          // WHY: PI-010 — V2 Session API는 @anthropic-ai/claude-agent-sdk 에서 동적 import
-          const { unstable_v2_createSession } = await import('@anthropic-ai/claude-agent-sdk');
+    return this.executeWithCircuitBreaker(() =>
+      withRetry(
+        async () => {
+          try {
+            // WHY: PI-010 — V2 Session API는 @anthropic-ai/claude-agent-sdk 에서 동적 import
+            const { unstable_v2_createSession } = await import('@anthropic-ai/claude-agent-sdk');
 
-          // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
-          const sessionOptions = {
-            model,
-            settingSources: [] as string[],
-            ...(options.system ? { systemPrompt: options.system } : {}),
-          };
+            // WHY: NI-001 — §13 SDK 스펙: settingSources: [] — 파일시스템 설정 의존 없음
+            const sessionOptions = {
+              model,
+              settingSources: [] as string[],
+              ...(options.system ? { systemPrompt: options.system } : {}),
+            };
 
-          // WHY: V2Session 타입은 send() + stream()이 분리된 구조
-          const session = unstable_v2_createSession(sessionOptions) as unknown as {
-            send(message: string): Promise<void>;
-            stream(): AsyncGenerator<import('@anthropic-ai/claude-agent-sdk').SDKMessage, void>;
-            close(): void;
-          };
+            // WHY: V2Session 타입은 send() + stream()이 분리된 구조
+            const session = unstable_v2_createSession(sessionOptions) as unknown as {
+              send(message: string): Promise<void>;
+              stream(): AsyncGenerator<import('@anthropic-ai/claude-agent-sdk').SDKMessage, void>;
+              close(): void;
+            };
 
-          // WHY: 마지막 user 메시지를 프롬프트로 전송, 이전 메시지는 컨텍스트로 활용
-          const lastUserMessage = messages.filter((m) => m.role === 'user').at(-1);
-          const prompt = lastUserMessage?.content ?? '';
+            // WHY: 마지막 user 메시지를 프롬프트로 전송, 이전 메시지는 컨텍스트로 활용
+            const lastUserMessage = messages.filter((m) => m.role === 'user').at(-1);
+            const prompt = lastUserMessage?.content ?? '';
 
-          await session.send(prompt);
+            await session.send(prompt);
 
-          let responseContent = '';
+            let responseContent = '';
 
-          for await (const event of session.stream()) {
-            if (event.type === 'result') {
-              if (event.subtype === 'success') {
-                responseContent = event.result;
-              } else {
-                const errResult = event as { errors?: string[] };
-                session.close();
-                return err(
-                  new AgentError(
-                    'v2_session_failed',
-                    errResult.errors?.[0] ?? 'V2 Session execution failed',
-                  ),
-                );
+            for await (const event of session.stream()) {
+              if (event.type === 'result') {
+                if (event.subtype === 'success') {
+                  responseContent = event.result;
+                } else {
+                  const errResult = event as { errors?: string[] };
+                  session.close();
+                  return err(
+                    new AgentError(
+                      'v2_session_failed',
+                      errResult.errors?.[0] ?? 'V2 Session execution failed',
+                    ),
+                  );
+                }
               }
             }
-          }
 
-          session.close();
+            session.close();
 
-          this.logger.info('V2 Session 메시지 생성 완료 / V2 Session message created', {
-            model,
-          });
-
-          return ok({
-            content: responseContent,
-            metadata: {
+            this.logger.info('V2 Session 메시지 생성 완료 / V2 Session message created', {
               model,
-              inputTokens: 0,
-              outputTokens: 0,
-              stopReason: 'end_turn',
-            },
-          });
-        } catch (error: unknown) {
-          return handleApiError(error, 'createMessageViaV2Session', this.logger);
-        }
-      },
-      this.retryPolicy,
-      this.logger,
+            });
+
+            return ok({
+              content: responseContent,
+              metadata: {
+                model,
+                inputTokens: 0,
+                outputTokens: 0,
+                stopReason: 'end_turn',
+              },
+            });
+          } catch (error: unknown) {
+            return handleApiError(error, 'createMessageViaV2Session', this.logger);
+          }
+        },
+        this.retryPolicy,
+        this.logger,
+      ),
     );
+  }
+
+  /**
+   * Circuit breaker로 보호된 함수 실행 / Execute function protected by circuit breaker
+   *
+   * @description
+   * KR: circuit breaker가 open이면 즉시 AgentError("api_circuit_open") 반환.
+   *     retry 실패(Result.ok === false)도 circuit breaker 실패로 기록한다.
+   */
+  private async executeWithCircuitBreaker<T>(
+    fn: () => Promise<Result<T, AgentError>>,
+  ): Promise<Result<T, AgentError>> {
+    try {
+      return await this.circuitBreaker.execute(async () => {
+        const result = await fn();
+        if (!result.ok) {
+          // WHY: Result 실패도 circuit breaker에 실패로 기록하기 위해 throw
+          throw result.error;
+        }
+        return result;
+      });
+    } catch (error: unknown) {
+      if (error instanceof CircuitBreakerOpenError) {
+        this.logger.warn('Claude API circuit breaker open — 요청 차단', {
+          circuit: error.circuitName,
+        });
+        return err(
+          new AgentError(
+            'api_circuit_open',
+            'Claude API circuit breaker가 열려 있습니다 — 요청이 차단되었습니다',
+            error,
+          ),
+        );
+      }
+      if (error instanceof AgentError) {
+        return err(error);
+      }
+      return err(new AgentError('agent_unknown_error', String(error), error));
+    }
+  }
+
+  /**
+   * Circuit breaker 상태 스냅샷 반환 / Get circuit breaker snapshot
+   */
+  getCircuitBreakerSnapshot() {
+    return this.circuitBreaker.getSnapshot();
   }
 
   private async updateRateLimitFromResponse(response: Message): Promise<void> {

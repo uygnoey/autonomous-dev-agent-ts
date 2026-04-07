@@ -10,8 +10,11 @@
 
 import * as lancedb from '@lancedb/lancedb';
 import type { Table as LanceTable } from '@lancedb/lancedb';
+import { CircuitBreaker, CircuitBreakerOpenError } from 'core/circuit-breaker.js';
+import type { CircuitBreakerConfig } from 'core/circuit-breaker.js';
 import { RagError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import { PerfTracker } from 'core/perf.js';
 import { err, ok } from 'core/types.js';
 import type { CodeRecord, Result, VectorRepository } from 'core/types.js';
 import { buildWhereClause, escapeString } from 'rag/sql-utils.js';
@@ -43,11 +46,17 @@ const CODE_INDEX_TABLE = 'code_index';
 export class CodeVectorStore implements VectorRepository<CodeRecord> {
   private db: lancedb.Connection | null = null;
   private table: LanceTable | null = null;
+  private readonly circuitBreaker: CircuitBreaker;
+  private readonly perf: PerfTracker;
 
   constructor(
     private readonly dbPath: string,
     private readonly logger: Logger,
-  ) {}
+    circuitBreakerConfig?: Partial<CircuitBreakerConfig>,
+  ) {
+    this.circuitBreaker = new CircuitBreaker('lancedb', logger, circuitBreakerConfig);
+    this.perf = new PerfTracker(logger);
+  }
 
   /**
    * LanceDB 연결 해제 / Close LanceDB connection
@@ -79,11 +88,21 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
    */
   async initialize(): Promise<Result<void, RagError>> {
     try {
-      this.db = await lancedb.connect(this.dbPath);
-      const tableNames = await this.db.tableNames();
+      this.db = await this.perf.measureAsync(
+        'lancedb.connect',
+        () => lancedb.connect(this.dbPath),
+        { warnThresholdMs: 500 },
+      );
+      const tableNames = await this.perf.measureAsync('lancedb.tableNames', () =>
+        (this.db as lancedb.Connection).tableNames(),
+      );
 
       if (tableNames.includes(CODE_INDEX_TABLE)) {
-        this.table = await this.db.openTable(CODE_INDEX_TABLE);
+        this.table = await this.perf.measureAsync(
+          'lancedb.openTable',
+          () => (this.db as lancedb.Connection).openTable(CODE_INDEX_TABLE),
+          { warnThresholdMs: 200 },
+        );
       }
       // WHY: 테이블은 첫 insert 시 생성 — createEmptyTable은 Arrow 스키마가 필요하여 복잡도 증가
       return ok(undefined);
@@ -131,7 +150,7 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
     limit: number,
     filter?: Record<string, unknown>,
   ): Promise<Result<CodeRecord[]>> {
-    return this.safeExecute('search', async () => {
+    return this.safeSearch('search', async () => {
       if (this.table === null) return [];
 
       let queryBuilder = this.table.vectorSearch(Array.from(query));
@@ -161,7 +180,7 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
     limit: number,
     filter?: Record<string, unknown>,
   ): Promise<Result<SearchResult<CodeRecord>[]>> {
-    return this.safeExecute('searchWithScore', async () => {
+    return this.safeSearch('searchWithScore', async () => {
       if (this.table === null) return [];
 
       let queryBuilder = this.table.vectorSearch(Array.from(query));
@@ -251,21 +270,75 @@ export class CodeVectorStore implements VectorRepository<CodeRecord> {
   }
 
   /**
-   * 외부 라이브러리 호출을 try-catch → Result 패턴으로 래핑
-   * Wraps external library calls with try-catch → Result pattern
+   * Circuit breaker 상태 스냅샷 반환 / Get circuit breaker snapshot
+   */
+  getCircuitBreakerSnapshot() {
+    return this.circuitBreaker.getSnapshot();
+  }
+
+  /**
+   * 성능 측정 결과 반환 / Get performance profiling entries
+   */
+  getPerfEntries() {
+    return this.perf.getEntries();
+  }
+
+  /**
+   * 성능 측정 요약 로깅 / Log performance profiling summary
+   */
+  logPerfSummary(): void {
+    this.perf.summary();
+  }
+
+  /**
+   * 외부 라이브러리 호출을 circuit breaker + try-catch → Result 패턴으로 래핑
+   * Wraps external library calls with circuit breaker + try-catch → Result pattern
    */
   private async safeExecute<T>(
     operation: string,
     fn: () => Promise<T>,
   ): Promise<Result<T, RagError>> {
     try {
-      const value = await fn();
+      const value = await this.perf.measureAsync(
+        `vectorStore.${operation}`,
+        () => this.circuitBreaker.execute(fn),
+        { warnThresholdMs: 300, context: { operation } },
+      );
       return ok(value);
     } catch (error: unknown) {
+      if (error instanceof CircuitBreakerOpenError) {
+        this.logger.warn(
+          `CodeVectorStore.${operation} — circuit breaker open, graceful degradation`,
+          {
+            circuit: error.circuitName,
+          },
+        );
+        return err(
+          new RagError(
+            'rag_circuit_open',
+            `LanceDB circuit breaker가 열려 있습니다 — ${operation} 차단됨`,
+            error,
+          ),
+        );
+      }
       this.logger.error(`CodeVectorStore.${operation} 실패`, {
         error: String(error),
       });
       return err(new RagError('rag_db_error', `${operation} 실패: ${String(error)}`, error));
     }
+  }
+
+  /**
+   * Graceful degradation: circuit open 시 빈 배열 반환하는 검색 래퍼
+   * Search wrapper that returns empty array when circuit is open
+   */
+  private async safeSearch<T>(operation: string, fn: () => Promise<T[]>): Promise<Result<T[]>> {
+    const result = await this.safeExecute(operation, fn);
+    if (!result.ok && result.error.code === 'rag_circuit_open') {
+      // WHY: circuit open 시 빈 배열로 graceful degradation — 검색 실패가 전체 시스템을 멈추지 않도록
+      this.logger.warn(`${operation} — circuit open, 빈 배열 반환 (graceful degradation)`);
+      return ok([]);
+    }
+    return result;
   }
 }

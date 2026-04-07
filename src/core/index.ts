@@ -98,6 +98,24 @@ export type {
   TemplateLoadOptions,
 } from 'core/template-loader-types.js';
 
+// ── Circuit Breaker ──────────────────────────────────────────────
+
+export {
+  CircuitBreaker,
+  CircuitBreakerOpenError,
+  DEFAULT_CIRCUIT_BREAKER_CONFIG,
+} from 'core/circuit-breaker.js';
+export type {
+  CircuitBreakerConfig,
+  CircuitBreakerSnapshot,
+  CircuitBreakerState,
+} from 'core/circuit-breaker.js';
+
+// ── 성능 프로파일링 ──────────────────────────────────────────────
+
+export { PerfTracker } from 'core/perf.js';
+export type { PerfEntry, PerfOptions } from 'core/perf.js';
+
 // ── 파일 크기 가드 ─────────────────────────────────────────────
 
 export {
