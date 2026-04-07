@@ -72,7 +72,7 @@
   ],
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting",
+    "build": "bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting --external @lancedb/lancedb --external @huggingface/transformers",
     "build:types": "bunx tsc -p tsconfig.build.json",
     "postinstall": "echo '\\n[adev] 네이티브 바이너리 설치를 위해 bun install을 실행하세요. / Run bun install for native binaries.\\n'",
     "prepublishOnly": "bun run typecheck && bun run lint",

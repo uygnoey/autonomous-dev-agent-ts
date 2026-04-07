@@ -168,6 +168,9 @@ adev
 
 - **Bun runtime** (≥1.3.0) - Fast JavaScript/TypeScript runtime
 - **Anthropic API key** OR **Claude Pro/Max Subscription**
+- **OS**: macOS (x64/arm64) or Linux (x64/arm64) — Windows is not yet supported
+
+> **Native binary note:** `adev` depends on `@lancedb/lancedb` for its embedded vector database. LanceDB ships platform-specific native binaries (`.node` addons) via `optionalDependencies`. They are **not** bundled inside the npm tarball — `bun install` (or `npm install`) automatically fetches the correct binary for your OS and architecture. No manual setup is required.
 
 #### Install Bun
 

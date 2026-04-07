@@ -116,9 +116,27 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
-      - run: bun build src/index.ts --outdir ./dist --target bun
+      - run: bun run build
       - name: Verify dist output exists
         run: test -f dist/index.js
+      - name: Verify no native .node binaries in dist
+        run: |
+          COUNT=$(find dist/ -name "*.node" | wc -l)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "ERROR: found $COUNT native .node artifact(s) in dist/:"
+            find dist/ -name "*.node"
+            exit 1
+          fi
+          echo "OK: dist/ contains no .node artifacts"
+      - name: Verify npm pack includes no .node assets
+        run: |
+          npm pack --dry-run 2>&1 | tee pack-out.txt
+          if grep -q "\.node$" pack-out.txt; then
+            echo "ERROR: npm tarball contains .node files:"
+            grep "\.node$" pack-out.txt
+            exit 1
+          fi
+          echo "OK: npm pack tarball contains no .node assets"
 
   declarations:
     name: TypeScript Declarations
@@ -141,7 +159,7 @@ jobs:
       - name: Verify npm pack includes .d.ts
         run: |
           # Build JS artifacts first so pack doesn't fail on missing dist/
-          bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting
+          bun run build
           npm pack --dry-run 2>&1 | tee pack-output.txt
           grep -E "\.d\.ts" pack-output.txt | head -10
           # Ensure at least the root .d.ts is listed

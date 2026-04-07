@@ -21,5 +21,9 @@ README.ja.md
 README.ko.md
 
 # 네이티브 바이너리 제외 / Exclude native binaries from npm publish
-# WHY: lancedb .node 파일(~73MB)은 사용자가 bun install 시 자동 설치됨
+# WHY: @lancedb/lancedb and @huggingface/transformers install platform-specific
+# .node addons via their own optionalDependencies at `bun install` time.
+# bun build externalises both packages (--external) so .node files should never
+# appear in dist/, but this glob is a belt-and-suspenders guard.
 dist/*.node
+dist/**/*.node
