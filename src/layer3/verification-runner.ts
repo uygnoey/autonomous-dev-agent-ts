@@ -5,6 +5,8 @@
  */
 
 import type { Logger } from 'core/logger.js';
+import type { MetricsCollector } from 'core/metrics.js';
+import { createMetricsEvent } from 'core/metrics.js';
 import type { Result } from 'core/types.js';
 import { ok } from 'core/types.js';
 import type { IntegrationTester } from 'layer2/integration-tester.js';
@@ -84,11 +86,14 @@ export async function runStepwiseVerification(
   featureId: string,
   integrationTester: IntegrationTester | null,
   logger: Logger,
+  metrics?: MetricsCollector,
 ): Promise<Result<readonly StepwiseVerificationResult[]>> {
   logger.info('계단식 통합 검증 시작', { projectId, projectPath, featureId });
   const results: StepwiseVerificationResult[] = [];
+  const startTime = performance.now();
 
   for (const [step, iterations] of VERIFICATION_STEPS.slice(0, 3)) {
+    const stepStart = performance.now();
     const r = await runVerificationStep(
       step,
       projectId,
@@ -99,12 +104,27 @@ export async function runStepwiseVerification(
       logger,
     );
     results.push(r);
+
+    metrics?.emit(
+      createMetricsEvent(
+        'verification_retry',
+        Math.round((performance.now() - stepStart) * 100) / 100,
+        {
+          attempt: step,
+          max_attempts: 4,
+          passed: r.passed,
+        },
+      ),
+    );
+
     if (!r.passed) {
       logger.warn(`Step ${step} 실패 - 즉시 중단`, { step, failCount: r.failCount });
+      emitVerificationResult(metrics, results, startTime);
       return ok(results);
     }
   }
 
+  const stepStart = performance.now();
   const step4Result = await runVerificationStep(
     4,
     projectId,
@@ -115,11 +135,49 @@ export async function runStepwiseVerification(
     logger,
   );
   results.push(step4Result);
+
+  metrics?.emit(
+    createMetricsEvent(
+      'verification_retry',
+      Math.round((performance.now() - stepStart) * 100) / 100,
+      {
+        attempt: 4,
+        max_attempts: 4,
+        passed: step4Result.passed,
+      },
+    ),
+  );
+
   if (!step4Result.passed) {
     logger.warn('Step 4 실패 - 즉시 중단', { step: 4, failCount: step4Result.failCount });
+    emitVerificationResult(metrics, results, startTime);
     return ok(results);
   }
 
   logger.info('계단식 통합 검증 완료 - 모든 Step 통과', { totalSteps: results.length });
+  emitVerificationResult(metrics, results, startTime);
   return ok(results);
+}
+
+/**
+ * 검증 결과 메트릭스를 발행한다 / Emit verification result metrics
+ */
+function emitVerificationResult(
+  metrics: MetricsCollector | undefined,
+  results: readonly StepwiseVerificationResult[],
+  startTime: number,
+): void {
+  if (!metrics) return;
+
+  const pass = results.filter((r) => r.passed).length;
+  const fail = results.filter((r) => !r.passed).length;
+  const durationMs = Math.round((performance.now() - startTime) * 100) / 100;
+
+  metrics.emit(
+    createMetricsEvent('verification_result', durationMs, {
+      pass,
+      fail,
+      total: results.length,
+    }),
+  );
 }

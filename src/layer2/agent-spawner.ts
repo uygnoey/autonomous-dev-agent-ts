@@ -10,6 +10,8 @@
 
 import { AgentError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import type { MetricsCollector } from 'core/metrics.js';
+import { createMetricsEvent } from 'core/metrics.js';
 import { PerfTracker } from 'core/perf.js';
 import type { AgentConfig, AgentEvent, AgentExecutor } from 'layer2/types.js';
 
@@ -30,15 +32,18 @@ export class AgentSpawner {
   private readonly logger: Logger;
   private readonly executor: AgentExecutor;
   private readonly perf: PerfTracker;
+  private readonly metrics: MetricsCollector | null;
 
   /**
    * @param executor - 에이전트 실행기 / Agent executor
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param metrics - 메트릭스 수집기 (선택) / Metrics collector (optional)
    */
-  constructor(executor: AgentExecutor, logger: Logger) {
+  constructor(executor: AgentExecutor, logger: Logger, metrics?: MetricsCollector) {
     this.executor = executor;
     this.logger = logger.child({ module: 'agent-spawner' });
     this.perf = new PerfTracker(this.logger);
+    this.metrics = metrics ?? null;
   }
 
   /**
@@ -59,8 +64,16 @@ export class AgentSpawner {
       featureId: config.featureId,
     });
 
+    const spawnStart = performance.now();
+
+    this.metrics?.emit(
+      createMetricsEvent('agent_spawn', 1, {
+        agent_name: config.name,
+        phase: config.phase,
+      }),
+    );
+
     try {
-      const spawnStart = performance.now();
       let firstEventRecorded = false;
 
       for await (const event of this.executor.execute(config)) {
@@ -82,13 +95,28 @@ export class AgentSpawner {
         featureId: config.featureId,
         totalMs,
       });
+
+      this.metrics?.emit(
+        createMetricsEvent('agent_complete', totalMs, {
+          agent_name: config.name,
+          exit_code: 0,
+        }),
+      );
     } catch (error: unknown) {
+      const totalMs = Math.round((performance.now() - spawnStart) * 100) / 100;
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error('에이전트 실행 실패', {
         agent: config.name,
         phase: config.phase,
         error: message,
       });
+
+      this.metrics?.emit(
+        createMetricsEvent('agent_complete', totalMs, {
+          agent_name: config.name,
+          exit_code: 1,
+        }),
+      );
       // WHY: async generator에서 throw 대신 에러 이벤트를 yield하여 Result 패턴 철학 준수
       yield {
         type: 'error' as const,

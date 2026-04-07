@@ -11,6 +11,8 @@
 import type { AuthProvider, RateLimitStatus } from 'auth/types.js';
 import type { AuthMode } from 'core/config.js';
 import type { Logger } from 'core/logger.js';
+import type { MetricsCollector } from 'core/metrics.js';
+import { createMetricsEvent } from 'core/metrics.js';
 import type { Result } from 'core/types.js';
 import { ok } from 'core/types.js';
 
@@ -38,14 +40,17 @@ const PAUSE_THRESHOLD = 0.05;
 export class TokenMonitor {
   private readonly authProvider: AuthProvider;
   private readonly logger: Logger;
+  private readonly metrics: MetricsCollector | null;
 
   /**
    * @param authProvider - 인증 공급자 / Authentication provider
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param metrics - 메트릭스 수집기 (선택) / Metrics collector (optional)
    */
-  constructor(authProvider: AuthProvider, logger: Logger) {
+  constructor(authProvider: AuthProvider, logger: Logger, metrics?: MetricsCollector) {
     this.authProvider = authProvider;
     this.logger = logger.child({ module: 'token-monitor' });
+    this.metrics = metrics ?? null;
   }
 
   /**
@@ -59,6 +64,10 @@ export class TokenMonitor {
     const result = this.authProvider.updateFromResponse(headers, body);
     if (!result.ok) {
       this.logger.warn('레이트 리밋 갱신 실패', { error: result.error.message });
+    } else {
+      const status = this.getStatus();
+      const ratio = this.calculateRemainingRatio(status);
+      this.emitTokenUsage(status, ratio);
     }
     return ok(undefined);
   }
@@ -78,6 +87,8 @@ export class TokenMonitor {
 
     if (ratio !== null && ratio <= THROTTLE_THRESHOLD) {
       this.logger.warn('스폰 스로틀링 권장', { remainingRatio: ratio });
+      this.emitTokenUsage(status, ratio);
+      this.metrics?.emit(createMetricsEvent('token_throttle', 1, { remaining_pct: ratio * 100 }));
       return true;
     }
 
@@ -99,6 +110,8 @@ export class TokenMonitor {
 
     if (ratio !== null && ratio <= PAUSE_THRESHOLD) {
       this.logger.error('전체 일시 정지 권장', { remainingRatio: ratio });
+      this.emitTokenUsage(status, ratio);
+      this.metrics?.emit(createMetricsEvent('token_pause', 1, { remaining_pct: ratio * 100 }));
       return true;
     }
 
@@ -106,6 +119,12 @@ export class TokenMonitor {
       this.logger.error('429 발생 — 전체 일시 정지', {
         retryAfterSeconds: status.retryAfterSeconds,
       });
+      this.metrics?.emit(
+        createMetricsEvent('token_pause', 1, {
+          reason: '429',
+          retry_after_sec: status.retryAfterSeconds,
+        }),
+      );
       return true;
     }
 
@@ -158,6 +177,20 @@ export class TokenMonitor {
     }
 
     this.logger.info('토큰 리셋 완료 — 재개 가능');
+  }
+
+  /**
+   * 토큰 사용량 메트릭스를 발행한다 / Emit token usage metrics
+   */
+  private emitTokenUsage(status: RateLimitStatus, ratio: number | null): void {
+    if (!this.metrics) return;
+    this.metrics.emit(
+      createMetricsEvent('token_usage', 1, {
+        requests_remaining: status.requestsRemaining ?? -1,
+        requests_limit: status.requestsLimit ?? -1,
+        remaining_pct: ratio !== null ? Math.round(ratio * 10000) / 100 : -1,
+      }),
+    );
   }
 
   /**

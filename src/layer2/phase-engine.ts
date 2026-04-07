@@ -11,6 +11,8 @@
 import { EventEmitter } from 'node:events';
 import { PhaseError } from 'core/errors.js';
 import type { Logger } from 'core/logger.js';
+import type { MetricsCollector } from 'core/metrics.js';
+import { createMetricsEvent } from 'core/metrics.js';
 import type { AgentName, Phase, Result } from 'core/types.js';
 import { err, ok } from 'core/types.js';
 import type { PhaseTransition } from 'layer2/types.js';
@@ -158,13 +160,17 @@ export class PhaseEngine extends EventEmitter<PhaseEngineEvents> implements IPha
   private current: Phase = 'DESIGN';
   private readonly history: PhaseTransition[] = [];
   private readonly logger: Logger;
+  private readonly metrics: MetricsCollector | null;
+  private lastTransitionAt: number = performance.now();
 
   /**
    * @param logger - 로거 인스턴스 / Logger instance
+   * @param metrics - 메트릭스 수집기 (선택) / Metrics collector (optional)
    */
-  constructor(logger: Logger) {
+  constructor(logger: Logger, metrics?: MetricsCollector) {
     super();
     this.logger = logger.child({ module: 'phase-engine' });
+    this.metrics = metrics ?? null;
   }
 
   /**
@@ -194,6 +200,13 @@ export class PhaseEngine extends EventEmitter<PhaseEngineEvents> implements IPha
     triggeredBy: AgentName | 'adev',
   ): Result<PhaseTransition, PhaseError> {
     if (!this.canTransition(to)) {
+      this.metrics?.emit(
+        createMetricsEvent('phase_error', 1, {
+          phase: this.current,
+          error_code: 'phase_invalid_transition',
+          target: to,
+        }),
+      );
       return err(
         new PhaseError(
           'phase_invalid_transition',
@@ -201,6 +214,9 @@ export class PhaseEngine extends EventEmitter<PhaseEngineEvents> implements IPha
         ),
       );
     }
+
+    const now = performance.now();
+    const durationMs = Math.round((now - this.lastTransitionAt) * 100) / 100;
 
     const transition: PhaseTransition = {
       from: this.current,
@@ -219,6 +235,15 @@ export class PhaseEngine extends EventEmitter<PhaseEngineEvents> implements IPha
 
     this.current = to;
     this.history.push(transition);
+    this.lastTransitionAt = now;
+
+    this.metrics?.emit(
+      createMetricsEvent('phase_transition', durationMs, {
+        from: transition.from,
+        to: transition.to,
+        triggered_by: triggeredBy,
+      }),
+    );
 
     // WHY: Phase 전환을 외부 리스너에 통지하여 이벤트 기반 연동을 지원 (스펙 §: 'phase:changed')
     this.emit('phase:changed', transition);
