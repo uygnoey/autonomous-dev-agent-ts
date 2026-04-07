@@ -119,3 +119,62 @@ jobs:
       - run: bun build src/index.ts --outdir ./dist --target bun
       - name: Verify dist output exists
         run: test -f dist/index.js
+
+  declarations:
+    name: TypeScript Declarations
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Build declarations
+        run: bun run build:types
+      - name: Verify .d.ts files for all public entrypoints
+        run: |
+          for f in dist/index.d.ts dist/core/index.d.ts dist/rag/index.d.ts dist/layer1/index.d.ts dist/layer2/index.d.ts dist/layer3/index.d.ts; do
+            test -f "$f" || { echo "MISSING: $f"; exit 1; }
+            echo "OK: $f"
+          done
+      - name: Verify npm pack includes .d.ts
+        run: |
+          # Build JS artifacts first so pack doesn't fail on missing dist/
+          bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting
+          npm pack --dry-run 2>&1 | tee pack-output.txt
+          grep -E "\.d\.ts" pack-output.txt | head -10
+          # Ensure at least the root .d.ts is listed
+          grep "dist/index.d.ts" pack-output.txt || { echo "dist/index.d.ts not found in npm pack output"; exit 1; }
+      - name: Consumer type-check (simulate TS import)
+        run: |
+          mkdir -p /tmp/ts-consumer
+          cat > /tmp/ts-consumer/tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "strict": true,
+              "moduleResolution": "bundler",
+              "module": "ESNext",
+              "noEmit": true,
+              "paths": {
+                "autonomous-dev-agent": ["${{ github.workspace }}/dist/index.d.ts"],
+                "autonomous-dev-agent/core": ["${{ github.workspace }}/dist/core/index.d.ts"],
+                "autonomous-dev-agent/rag": ["${{ github.workspace }}/dist/rag/index.d.ts"],
+                "autonomous-dev-agent/layer1": ["${{ github.workspace }}/dist/layer1/index.d.ts"],
+                "autonomous-dev-agent/layer2": ["${{ github.workspace }}/dist/layer2/index.d.ts"],
+                "autonomous-dev-agent/layer3": ["${{ github.workspace }}/dist/layer3/index.d.ts"]
+              }
+            },
+            "include": ["consumer.ts"]
+          }
+          EOF
+          cat > /tmp/ts-consumer/consumer.ts <<'EOF'
+          // Verify all public subpath exports resolve without TS errors
+          import type {} from "autonomous-dev-agent";
+          import type {} from "autonomous-dev-agent/core";
+          import type {} from "autonomous-dev-agent/rag";
+          import type {} from "autonomous-dev-agent/layer1";
+          import type {} from "autonomous-dev-agent/layer2";
+          import type {} from "autonomous-dev-agent/layer3";
+          EOF
+          cd /tmp/ts-consumer && bunx tsc --noEmit

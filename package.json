@@ -4,28 +4,35 @@
   "description": "Claude Code Skills + RAG autonomous development agent",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./core": {
+      "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js",
       "default": "./dist/core/index.js"
     },
     "./rag": {
+      "types": "./dist/rag/index.d.ts",
       "import": "./dist/rag/index.js",
       "default": "./dist/rag/index.js"
     },
     "./layer1": {
+      "types": "./dist/layer1/index.d.ts",
       "import": "./dist/layer1/index.js",
       "default": "./dist/layer1/index.js"
     },
     "./layer2": {
+      "types": "./dist/layer2/index.d.ts",
       "import": "./dist/layer2/index.js",
       "default": "./dist/layer2/index.js"
     },
     "./layer3": {
+      "types": "./dist/layer3/index.d.ts",
       "import": "./dist/layer3/index.js",
       "default": "./dist/layer3/index.js"
     }
@@ -66,6 +73,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build src/index.ts src/core/index.ts src/rag/index.ts src/layer1/index.ts src/layer2/index.ts src/layer3/index.ts --outdir ./dist --target bun --splitting",
+    "build:types": "bunx tsc -p tsconfig.build.json",
     "postinstall": "echo '\\n[adev] 네이티브 바이너리 설치를 위해 bun install을 실행하세요. / Run bun install for native binaries.\\n'",
     "prepublishOnly": "bun run typecheck && bun run lint",
     "test": "bun run test:unit && bun run test:module && bun run test:e2e",
