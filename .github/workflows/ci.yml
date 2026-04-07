@@ -45,6 +45,41 @@ jobs:
       - run: bun test tests/unit/
         timeout-minutes: 10
 
+  coverage:
+    name: Coverage Gate
+    runs-on: ubuntu-latest
+    needs: [typecheck, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Run coverage and capture output
+        run: bun run test:coverage 2>&1 | tee coverage-output.txt || true
+        timeout-minutes: 10
+      - name: Check coverage threshold (soft gate, warn <70%)
+        run: |
+          # Parse "All files | XX.XX |" line from bun's text coverage output
+          PCT=$(grep -E "^All files\s*\|" coverage-output.txt | awk -F'|' '{gsub(/ /,"",$2); print int($2)}' || echo "")
+          if [ -n "$PCT" ] && [ "$PCT" -ge 0 ] 2>/dev/null; then
+            echo "Line coverage: ${PCT}%"
+            if [ "$PCT" -lt 70 ]; then
+              echo "::warning::Coverage ${PCT}% is below the 70% soft gate. Please add more tests."
+            else
+              echo "Coverage ${PCT}% meets the 70% threshold."
+            fi
+          else
+            echo "::warning::Could not determine coverage percentage. Check coverage-output.txt artifact."
+          fi
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage-output.txt
+          retention-days: 30
+
   test-module:
     name: Module Tests
     runs-on: ubuntu-latest

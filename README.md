@@ -288,8 +288,8 @@ bun run build
 # Full test suite
 bun test
 
-# With coverage report
-bun test --coverage
+# With coverage report (LCOV + JSON summary → coverage/)
+bun run test:coverage
 ```
 
 ### Test by Category
@@ -304,6 +304,12 @@ bun run test:module
 # End-to-end tests
 bun run test:e2e
 ```
+
+### Coverage
+
+`bun run test:coverage` runs unit tests with coverage enabled and prints a text summary to stdout.
+
+CI enforces a **soft gate of 70% line coverage** — below threshold the build warns but does not fail. The coverage output is uploaded as an artifact and retained for 30 days.
 
 ### Fail-Fast Testing Strategy
 
