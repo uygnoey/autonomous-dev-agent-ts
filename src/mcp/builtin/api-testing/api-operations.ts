@@ -150,7 +150,7 @@ export class ApiTestingExecutor {
     if (input.body) {
       args.push('-d', input.body);
       // WHY: body가 있으면 JSON Content-Type 자동 추가 (명시 헤더 없을 때)
-      if (!input.headers?.['Content-Type'] && !input.headers?.['content-type']) {
+      if (!(input.headers?.['Content-Type'] || input.headers?.['content-type'])) {
         args.push('-H', 'Content-Type: application/json');
       }
     }
