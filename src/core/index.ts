@@ -55,6 +55,9 @@ export type {
   EmbeddingConfig,
   EnvironmentVars,
   LogConfig,
+  ModelReferenceConfig,
+  ModelsConfig,
+  PhaseModelMappingConfig,
   TestingConfig,
   VerificationConfig,
 } from 'core/config.js';
@@ -185,3 +188,14 @@ export type {
 
 export { LlmRegistry } from 'core/llm-registry.js';
 export type { ILlmRegistry, LlmProviderFactory } from 'core/llm-registry.js';
+
+// ── Model Router ────────────────────────────────────────────────
+
+export { DEFAULT_MODEL_ROUTING_CONFIG, ModelRouter } from 'core/model-router.js';
+export type {
+  ComplexityLevel,
+  ModelReference,
+  ModelRoutingConfig,
+  PhaseModelMapping,
+  RoutingDecision,
+} from 'core/model-router.js';

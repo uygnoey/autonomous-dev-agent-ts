@@ -71,6 +71,36 @@ export interface AuthConfig {
   readonly subscriptionPlan?: 'pro' | 'max5x' | 'max20x';
 }
 
+/** 모델 참조 (설정용) / Model reference for config */
+export interface ModelReferenceConfig {
+  /** LLM 제공자 이름 / LLM provider name (e.g., 'claude', 'openai') */
+  readonly provider: string;
+  /** 모델 ID / Model ID (e.g., 'claude-opus-4-6') */
+  readonly model: string;
+}
+
+/** Phase별 모델 매핑 (설정용) / Phase model mapping for config */
+export interface PhaseModelMappingConfig {
+  /** 기본 모델 / Default model */
+  readonly default: ModelReferenceConfig;
+  /** 복잡도별 오버라이드 / Per-complexity overrides */
+  readonly byComplexity?: Readonly<Partial<Record<'low' | 'medium' | 'high', ModelReferenceConfig>>>;
+  /** Fallback 체인 / Fallback chain */
+  readonly fallbacks?: readonly ModelReferenceConfig[];
+}
+
+/** 모델 라우팅 설정 / Model routing configuration */
+export interface ModelsConfig {
+  /** 글로벌 기본 모델 / Global default model */
+  readonly defaultModel: ModelReferenceConfig;
+  /** 글로벌 fallback 체인 / Global fallback chain */
+  readonly defaultFallbacks?: readonly ModelReferenceConfig[];
+  /** Phase별 모델 매핑 / Per-phase model mappings */
+  readonly phases?: Readonly<Partial<Record<'DESIGN' | 'CODE' | 'TEST' | 'VERIFY', PhaseModelMappingConfig>>>;
+  /** 최대 fallback 시도 횟수 / Max fallback attempts */
+  readonly maxFallbackAttempts?: number;
+}
+
 /** 전체 설정 스키마 / Full configuration schema */
 export interface ConfigSchema {
   readonly embedding: EmbeddingConfig;
@@ -78,6 +108,7 @@ export interface ConfigSchema {
   readonly verification: VerificationConfig;
   readonly log: LogConfig;
   readonly auth?: AuthConfig;
+  readonly models?: ModelsConfig;
 }
 
 /** 깊은 Partial 타입 / Deep partial type */

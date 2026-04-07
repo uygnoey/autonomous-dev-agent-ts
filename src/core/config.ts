@@ -30,6 +30,9 @@ export type {
   EmbeddingConfig,
   EnvironmentVars,
   LogConfig,
+  ModelReferenceConfig,
+  ModelsConfig,
+  PhaseModelMappingConfig,
   TestingConfig,
   VerificationConfig,
 } from 'core/config-schema.js';
